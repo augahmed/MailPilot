@@ -9,6 +9,123 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CategoryRequest {
+    pub operation: String,
+    pub account_id: String,
+    pub offset: u32,
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub enabled: Option<bool>,
+}
+impl CategoryRequest {
+    fn valid(&self) -> bool {
+        if self.account_id.len() > 100 || self.id.len() > 100 || self.offset > 1_000_000 {
+            return false;
+        }
+        match self.operation.as_str() {
+            "list" => {
+                self.id.is_empty()
+                    && self.name.is_empty()
+                    && self.description.is_empty()
+                    && self.enabled.is_none()
+            }
+            "save" => {
+                !self.account_id.is_empty()
+                    && self.offset == 0
+                    && self.enabled.is_some()
+                    && !self.name.trim().is_empty()
+                    && self.name.len() <= 100
+                    && !self.description.trim().is_empty()
+                    && self.description.len() <= 1000
+            }
+            "delete" => {
+                !self.account_id.is_empty()
+                    && !self.id.is_empty()
+                    && self.offset == 0
+                    && self.name.is_empty()
+                    && self.description.is_empty()
+                    && self.enabled.is_none()
+            }
+            _ => false,
+        }
+    }
+}
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Category {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CategoryPage {
+    pub account_id: String,
+    pub rows: Vec<Category>,
+    pub has_more: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClassificationRequest {
+    pub operation: String,
+    pub account_id: String,
+    pub offset: u32,
+}
+impl ClassificationRequest {
+    fn valid(&self) -> bool {
+        self.account_id.len() <= 100
+            && self.offset <= 1_000_000
+            && (self.operation == "list"
+                || (self.operation == "run" && !self.account_id.is_empty()))
+    }
+}
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClassificationPrediction {
+    pub email_id: String,
+    pub category_id: String,
+    pub category_name: String,
+    pub confidence: f64,
+    pub classifier_name: String,
+    pub classifier_version: String,
+    pub reasons: Vec<String>,
+    pub timestamp: i64,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClassificationRow {
+    pub email_id: String,
+    pub sender: String,
+    pub subject: String,
+    #[serde(rename = "bodyState")]
+    pub body_state: String,
+    pub state: String,
+    pub predictions: Vec<ClassificationPrediction>,
+    pub timestamp: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClassificationPage {
+    pub account_id: String,
+    pub rows: Vec<ClassificationRow>,
+    pub has_more: bool,
+    pub processed: u32,
+    pub errors: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+
 const MAX_FRAME: u64 = 64 * 1024;
 const PROTOCOL_VERSION: u32 = 1;
 
@@ -23,6 +140,79 @@ pub struct Health {
     pub schema_version: u32,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuthStatus {
+    pub state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AuthBegin {
+    status: AuthStatus,
+    authorization_url: Option<String>,
+}
+
+fn validate_authorization_url(value: &str) -> Result<tauri::Url, String> {
+    let url = tauri::Url::parse(value).map_err(|_| "Invalid authorization URL")?;
+    if value.len() > 8192
+        || url.scheme() != "https"
+        || url.host_str() != Some("accounts.google.com")
+        || url.path() != "/o/oauth2/v2/auth"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("Invalid authorization URL".into());
+    }
+    Ok(url)
+}
+
+// Fixed system-browser launch. No arbitrary URLs, frontend arguments, or shell.
+fn open_authorization(value: &str) -> Result<(), String> {
+    let url = validate_authorization_url(value)?;
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("/usr/bin/open");
+    #[cfg(target_os = "linux")]
+    let mut command = Command::new("xdg-open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut c = Command::new("rundll32.exe");
+        c.arg("url.dll,FileProtocolHandler");
+        c
+    };
+    let mut child = command
+        .arg(url.as_str())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "Cannot open system browser")?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if let Some(status) = child.try_wait().map_err(|_| "Cannot open system browser")? {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err("Cannot open system browser".into())
+            };
+        }
+        if Instant::now() >= deadline {
+            // Some Linux launchers stay alive with the browser. Reap separately;
+            // authentication still requires a valid callback, never launch success.
+            thread::spawn(move || {
+                let _ = child.wait();
+            });
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Response {
@@ -30,6 +220,39 @@ struct Response {
     id: String,
     result: Option<Value>,
     error: Option<Value>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SyncProgress {
+    pub state: String,
+    pub account_id: String,
+    pub limit: u32,
+    pub discovered: u32,
+    pub imported: u32,
+    pub updated: u32,
+    pub errors: u32,
+    pub capped: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailboxRow {
+    pub id: String,
+    pub sender: String,
+    pub subject: String,
+    pub received_at: i64,
+    pub body_state: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailboxPage {
+    pub account_id: String,
+    pub rows: Vec<MailboxRow>,
+    pub has_more: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 pub struct Bridge {
@@ -135,6 +358,67 @@ impl Bridge {
         outcome.map_err(str::to_owned)
     }
 
+    pub fn auth_status(&mut self, method: &str) -> Result<AuthStatus, String> {
+        if ![
+            "auth.status",
+            "auth.check",
+            "auth.disconnect",
+            "auth.cancel",
+        ]
+        .contains(&method)
+        {
+            return Err("Invalid authentication command".into());
+        }
+        serde_json::from_value(self.request(method, json!({}))?)
+            .map_err(|_| "Invalid authentication status".into())
+    }
+    pub fn auth_begin(&mut self) -> Result<AuthStatus, String> {
+        let begin: AuthBegin = serde_json::from_value(self.request("auth.begin", json!({}))?)
+            .map_err(|_| "Invalid authentication response")?;
+        if let Some(url) = begin.authorization_url {
+            if open_authorization(&url).is_err() {
+                let _ = self.auth_status("auth.cancel");
+                return Err("Cannot open system browser".into());
+            }
+        }
+        Ok(begin.status)
+    }
+
+    pub fn sync(&mut self, start: bool) -> Result<SyncProgress, String> {
+        let method = if start { "sync.start" } else { "sync.status" };
+        serde_json::from_value(self.request(method, json!({}))?)
+            .map_err(|_| "Invalid sync response".into())
+    }
+    pub fn classifications(
+        &mut self,
+        request: ClassificationRequest,
+    ) -> Result<ClassificationPage, String> {
+        if !request.valid() {
+            return Err("Invalid classification request".into());
+        }
+        serde_json::from_value(self.request(
+            "classification.review",
+            serde_json::to_value(request).map_err(|_| "Invalid classification request")?,
+        )?)
+        .map_err(|_| "Invalid classification response".into())
+    }
+    pub fn categories(&mut self, request: CategoryRequest) -> Result<CategoryPage, String> {
+        if !request.valid() {
+            return Err("Invalid category request".into());
+        }
+        serde_json::from_value(self.request(
+            "categories.manage",
+            serde_json::to_value(request).map_err(|_| "Invalid category request")?,
+        )?)
+        .map_err(|_| "Invalid category response".into())
+    }
+    pub fn mailbox(&mut self, offset: u32) -> Result<MailboxPage, String> {
+        if offset > 1_000_000 {
+            return Err("Invalid mailbox page".into());
+        }
+        serde_json::from_value(self.request("mail.list", json!({"offset":offset}))?)
+            .map_err(|_| "Invalid mailbox response".into())
+    }
     pub fn health(&mut self) -> Result<Health, String> {
         let value = self.request("health", json!({}))?;
         let health: Health =
@@ -173,6 +457,33 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
+    fn browser_is_restricted_to_google_authorization() {
+        assert!(validate_authorization_url(
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=test"
+        )
+        .is_ok());
+        for url in [
+            "http://accounts.google.com/o/oauth2/v2/auth",
+            "https://accounts.google.com.evil.test/o/oauth2/v2/auth",
+            "https://evil.test/o/oauth2/v2/auth",
+            "https://user@accounts.google.com/o/oauth2/v2/auth",
+            "https://accounts.google.com:1234/o/oauth2/v2/auth",
+            "https://accounts.google.com/other",
+            "file:///tmp/test",
+        ] {
+            assert!(validate_authorization_url(url).is_err());
+        }
+    }
+
+    #[test]
+    fn authentication_dto_rejects_token_fields() {
+        assert!(serde_json::from_value::<AuthStatus>(
+            json!({"state":"connected","accessToken":"synthetic"})
+        )
+        .is_err());
+    }
+
+    #[test]
     fn frames_handle_fragmented_reads_and_eof() {
         let mut reader = BufReader::with_capacity(2, Cursor::new(b"{\"x\":1}\n{}\n"));
         assert_eq!(read_frame(&mut reader).unwrap().unwrap(), b"{\"x\":1}\n");
@@ -184,5 +495,57 @@ mod tests {
     fn oversized_or_unterminated_frames_are_rejected() {
         assert!(read_frame(&mut Cursor::new(vec![b'x'; MAX_FRAME as usize + 1])).is_err());
         assert!(read_frame(&mut Cursor::new(b"{}")).is_err());
+    }
+}
+
+#[cfg(test)]
+mod category_tests {
+    use super::*;
+    #[test]
+    fn category_contract_and_validation() {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../contracts/categories-v1.json")).unwrap();
+        let mut request: CategoryRequest =
+            serde_json::from_value(fixture["request"].clone()).unwrap();
+        assert!(request.valid());
+        let response: CategoryPage = serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(response.rows.len(), 1);
+        request.operation = "classify".into();
+        assert!(!request.valid());
+        request.operation = "save".into();
+        request.enabled = None;
+        assert!(!request.valid());
+        let mut malformed = fixture["request"].clone();
+        malformed["unexpected"] = json!(true);
+        assert!(serde_json::from_value::<CategoryRequest>(malformed).is_err());
+    }
+}
+
+#[cfg(test)]
+mod classification_tests {
+    use super::*;
+    #[test]
+    fn classification_contract_and_strict_requests() {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../contracts/classification-v1.json")).unwrap();
+        let mut request: ClassificationRequest =
+            serde_json::from_value(fixture["request"].clone()).unwrap();
+        assert!(request.valid());
+        let response: ClassificationPage =
+            serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(response.rows.len(), 2);
+        assert_eq!(response.rows[0].predictions[0].reasons.len(), 3);
+        request.account_id.clear();
+        assert!(!request.valid());
+        request.operation = "list".into();
+        assert!(request.valid());
+        request.operation = "apply".into();
+        assert!(!request.valid());
+        let mut bad = fixture["request"].clone();
+        bad["body"] = json!("not allowed");
+        assert!(serde_json::from_value::<ClassificationRequest>(bad).is_err());
+        bad = fixture["request"].clone();
+        bad["offset"] = json!(-1);
+        assert!(serde_json::from_value::<ClassificationRequest>(bad).is_err());
     }
 }

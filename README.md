@@ -13,11 +13,11 @@ Backend connected
 Database connected
 ```
 
-Gmail, OAuth, credential storage, mailbox import, organization, phishing analysis, search, and AI are intentionally not implemented yet. No account, password, API key, or external service is needed. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
+Gmail OAuth, OS-secure refresh-token storage, and connection controls are implemented. Follow [Gmail development setup](docs/GMAIL_SETUP.md) to connect a dedicated test account. Bounded manual Inbox import and a cached mailbox summary are implemented. Organization, phishing analysis, search, and AI remain unimplemented. The local application works without an account or external service. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
 
 ## Prerequisites
 
-- Go **1.26+** (verified with 1.27.1).
+- Go **1.27.2+** (the patched version required by `backend/go.mod`; Go may download it automatically).
 - Node.js **24.13.1+** and npm (verified with Node 24.13.1 / npm 11.8.0).
 - Rust **1.99+**, Cargo, rustfmt and Clippy (verified with Rust 1.99.0).
 - Native platform prerequisites from [Tauri](https://v2.tauri.app/start/prerequisites/). On macOS, install Xcode Command Line Tools with `xcode-select --install` if missing. Windows requires MSVC build tools and WebView2; Linux requires the documented WebKitGTK and system development packages.
@@ -73,7 +73,7 @@ The packaged macOS executable is `src-tauri/target/release/bundle/macos/MailPilo
 
 ## Configuration and local storage
 
-Configuration is non-secret. No `.env` file is loaded and no credential is accepted or stored. Defaults come from the OS application data directory; the native host passes that default to Go. Standalone core startup resolves the corresponding platform directory itself.
+No `.env` file is loaded. OAuth client configuration comes from `MAILPILOT_GOOGLE_CLIENT_ID` and `MAILPILOT_GOOGLE_CLIENT_SECRET` at runtime, never frontend build configuration. User access/refresh tokens are never read from environment variables; refresh tokens use the OS keyring. See [setup instructions](docs/GMAIL_SETUP.md). Defaults come from the OS application data directory; the native host passes that default to Go. Standalone core startup resolves the corresponding platform directory itself.
 
 | Setting        | Default                                                 | Override                                                                      |
 | -------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -88,7 +88,7 @@ Default desktop locations:
 - Windows: `%APPDATA%\com.mailpilot.desktop\mailpilot.db`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/com.mailpilot.desktop/mailpilot.db`
 
-SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Version 1 creates the migration ledger and non-secret settings; version 2 adds normalized email storage, accounts, labels, local categories, analysis results and a journal for future reversible actions. SQL-free repositories support transactional idempotent writes and account-scoped retrieval; Gmail synchronization remains unimplemented. SQLite files are not encrypted.
+SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Version 1 creates the migration ledger and non-secret settings; version 2 adds normalized email storage, accounts, labels, local categories, analysis results and a journal for future reversible actions. SQL-free repositories support transactional idempotent writes and account-scoped retrieval; version 3 adds cached body completeness and provider content identity for bounded Gmail imports. Version 4 adds category metadata/defaults, and version 5 adds structured rule evidence and complete classification assessments, including unclassified results. SQLite files are not encrypted.
 
 Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to private IPC. Logs omit secrets, message content and filesystem paths. This phase has no persistent log files or telemetry.
 
@@ -116,9 +116,9 @@ npm run test:desktop
 
 Use `npm run format` to apply formatting. On Windows/Linux, replace the macOS-specific build command with `npm run build`; native smoke tests on those platforms still need qualification. Run native tests in a graphical desktop session. Close other MailPilot windows before running the smoke test because the app enforces a single instance.
 
-The native smoke test launches the packaged application with `--smoke-test` and a temporary data directory. It requires a real frontend invocation to traverse WebView → Tauri → Go → SQLite, then automatically exits and verifies clean core shutdown. It does not inspect pixels; React tests separately verify the status text and failure display. The temporary test database is removed afterward.
+The native smoke test launches the packaged application with `--smoke-test` and a temporary data directory. It requires a real frontend invocation to traverse WebView → Tauri → Go → SQLite, then automatically exits and verifies clean core shutdown. It does not inspect pixels; React tests separately verify the status text and failure display. The native smoke test also verifies the category and classification commands reject access without an account. The temporary test database is removed afterward.
 
-Go tests cover configuration precedence/validation, private database creation, persisted settings, SQLite pragmas and FTS availability, migration checksum/future-schema rejection, transactional rollback, corrupt databases, health failure reporting, protocol initialization and method/frame validation. Frontend tests cover health response validation and real success/error display behavior. Rust tests cover bounded pipe framing with fragmented reads and truncated/oversized messages.
+Go tests cover configuration precedence/validation, private database creation, persisted settings, SQLite pragmas and FTS availability, migration checksum/future-schema rejection, transactional rollback, corrupt databases, health failure reporting, protocol initialization and method/frame validation. Frontend tests cover health response validation and real success/error display behavior. Rust tests cover bounded pipe framing, strict auth DTOs, and Google browser-URL restrictions. OAuth tests cover state/PKCE, denial, callback shutdown, refresh/rotation, restart, disconnect races, scope checks, and secret redaction. Native Google consent remains an explicit manual test with a developer-owned client.
 
 To exercise the Go core without Tauri, from `backend/`:
 
@@ -140,14 +140,17 @@ backend/
   internal/
     app/ config/ domain/ ipc/ logging/ repository/
     store/sqlite/migrations/   SQLite initialization and tests
-    actions/ ai/ auth/ credentials/ mail/ organize/
-    provider/gmail/ risk/ search/ sync/   Documented future boundaries only
+    auth/ credentials/ provider/gmail/   OAuth lifecycle, keyring, Google adapter
+    mail/ sync/                    MIME normalization and bounded imports
+    classification/                    Local rule engine and starter configuration
+    actions/ ai/ organize/ risk/ search/   Future feature boundaries
 frontend/
   src/app/                     Status screen, styles and UI tests
-  src/lib/ipc/                 Validated typed health client
+  src/features/accounts/       Gmail connection controls
+  src/lib/ipc/                 Validated typed health/authentication client
 src-tauri/
   src/                         Native lifecycle and private pipe bridge
-  capabilities/                Main-window health permission only
+  capabilities/                Main-window health and Gmail connection permissions
   icons/source.svg             Icon source; raster assets generated at build
 contracts/                     Versioned bootstrap IPC examples
 scripts/                       Sidecar build and native smoke test
@@ -155,6 +158,30 @@ docs/ARCHITECTURE.md            Overall design and implementation status
 AGENTS.md                      Engineering rules
 ```
 
-Go owns business behavior and persistence. Rust only starts the fixed packaged binary, validates a bounded protocol, and handles native lifecycle; it uses `std::process` rather than installing a shell plugin. The frontend cannot run shell commands, access arbitrary files/SQL, select executables, or invoke arbitrary Go methods. A versioned handshake precedes database initialization; the only frontend capability is `health`.
+Go owns business behavior and persistence. Rust only starts the fixed packaged binary, validates a bounded protocol, and handles native lifecycle; it uses `std::process` rather than installing a shell plugin. The frontend cannot run shell commands, access arbitrary files/SQL, select executables, or invoke arbitrary Go methods. A versioned handshake precedes database initialization; frontend capabilities allow health, Gmail connection, sync, cached-mail, category management and classification review commands. The host alone opens a validated Google authorization URL in the system browser.
 
-The architecture's dependency recommendations are adopted only as needed: modernc SQLite avoids a Go C toolchain, React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. TanStack Query, email/OAuth/keyring SDKs and AI/vector dependencies are intentionally deferred. Dependency purposes and official documentation are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
+The architecture's dependency recommendations are adopted only as needed: modernc SQLite avoids a Go C toolchain, React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. TanStack Query, the full Gmail SDK and AI/vector dependencies remain deferred. Dependency purposes and official documentation are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
+
+## Inbox synchronization
+
+Connect Gmail, then select **Sync inbox**. The screen reports messages discovered, imported, updated and errors, and lists cached sender, subject and received time. Configure the per-run maximum before launching:
+
+```sh
+MAILPILOT_SYNC_LIMIT=1000 npm run dev
+```
+
+The default is 500; accepted values are 1–10,000. Repeated runs refresh the same bounded Inbox subset without duplicate rows and use metadata-only requests for already-complete cached bodies. Updated counts include unchanged snapshots. This is not full-mailbox or history-based incremental sync. Interrupted/partial runs retain successful imports; rerun to retry. Sync does not modify labels, classify mail or send messages. Manual classification is available separately below. Attachments are not downloaded; separately stored or unsupported/oversized bodies are reported rather than silently treated as complete. The cache is sensitive, unencrypted local data and persists after disconnect. A disconnected account's cache is hidden until that account reconnects.
+
+Automated sync tests use synthetic JSON fixtures and local HTTP servers with temporary databases; they never access a live Gmail account. To test manually with a dedicated account, connect, sync twice, verify the second run reports updates rather than duplicate imports, and disconnect during a run. Native smoke tests run without Google configuration.
+
+## User-defined categories
+
+Connect an account and use **Refresh categories** to manage its local definitions. Seven descriptive defaults are created once per account. Create/edit a name and meaningful description, enable or disable a category, or confirm deletion. A category referenced by cached email assignments or stored analysis cannot be deleted; disable it instead. Definition changes persist in SQLite migration 4 and remain local. Changing categories does not run classification or change email assignments. Manual review uses the starter rule engine described below.
+
+## Local classification review
+
+After connecting and syncing an account, open **Classification review** and choose **Classify this page**. MailPilot reviews up to five cached emails, saves the results, and shows each email’s predicted category, confidence and reasons. Use the previous/next review-page controls to cover more downloaded messages. **Refresh reviews** loads saved assessments without running the classifier. Reading results uses local SQLite and requires no AI provider/key.
+
+Conservative starter rules cover Job Applications, Job Interviews, Receipts and Newsletters. They require multiple signals and use confidence scores of 55–65%; these scores are heuristic strengths rather than measured probabilities. Weak, conflicting or incomplete evidence can leave mail unclassified. Renamed, disabled or custom categories have no starter mapping; rule configuration is centralized in [starter_rules.json](backend/internal/classification/starter_rules.json) and can be supplied through validated Go configuration. Changes to that configuration require a new classifier version.
+
+Category definitions and label changes can make previous predictions stale; rerun the page to refresh them. Partial storage failures report successful saves and row errors separately. Classification saves suggestions only: it does not assign categories, modify Gmail, use an LLM or create embeddings. The existing account session is required to access retained cached mail; reconnect and refresh after disconnect. Automated tests use synthetic mail and temporary databases.

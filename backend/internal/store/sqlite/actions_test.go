@@ -306,3 +306,18 @@ func TestActionValidationRejectsContradictoryPlans(t *testing.T) {
 		t.Fatal("invalid plans persisted")
 	}
 }
+
+func TestUnencodableActionCannotCreateDigest(t *testing.T) {
+	s := testStore(t)
+	a := account(t, s, "encoding")
+	e := sampleEmail(a, "message")
+	id := saveEmail(t, s, e)
+	plan := actionPlan(a, id, e.ProviderID)
+	plan.ExpiresAt = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := s.MailboxActions().Create(context.Background(), plan); !errors.Is(err, repository.ErrInvalid) {
+		t.Fatal("unencodable plan accepted")
+	}
+	if count(t, s, "mailbox_actions") != 0 {
+		t.Fatal("invalid plan persisted")
+	}
+}

@@ -14,7 +14,12 @@ const dataDir = await mkdtemp(join(tmpdir(), "mailpilot-smoke-"));
 let diagnostics = "";
 try {
   const child = spawn(executable, ["--smoke-test"], {
-    env: { ...process.env, MAILPILOT_DATA_DIR: dataDir },
+    env: {
+      ...process.env,
+      MAILPILOT_DATA_DIR: dataDir,
+      MAILPILOT_GOOGLE_CLIENT_ID: "",
+      MAILPILOT_GOOGLE_CLIENT_SECRET: "",
+    },
     stdio: ["ignore", "ignore", "pipe"],
   });
   const deadline = setTimeout(() => {
@@ -31,6 +36,10 @@ try {
     if (
       code !== 0 ||
       !diagnostics.includes('"event":"frontend_health_ok"') ||
+      !diagnostics.includes('"event":"frontend_auth_ok"') ||
+      !diagnostics.includes('"event":"frontend_mailbox_ok"') ||
+      !diagnostics.includes('"event":"frontend_categories_ok"') ||
+      !diagnostics.includes('"event":"frontend_classification_ok"') ||
       !diagnostics.includes('"msg":"core stopped"')
     ) {
       throw new Error(
@@ -38,7 +47,7 @@ try {
       );
     }
     console.log(
-      "Native WebView → Tauri → Go → SQLite health check passed; core shut down cleanly.",
+      "Native WebView → Tauri → Go → SQLite health, Gmail status, mailbox, category and classification authorization checks passed; core shut down cleanly.",
     );
   } finally {
     clearTimeout(deadline);

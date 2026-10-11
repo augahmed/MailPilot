@@ -1,0 +1,48 @@
+{
+  "request": {
+    "operation": "run",
+    "accountId": "fixture-account",
+    "offset": 0
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "rows": [
+      {
+        "email_id": "fixture-receipt",
+        "sender": "store@example.test",
+        "subject": "Your receipt",
+        "bodyState": "complete",
+        "state": "classified",
+        "predictions": [
+          {
+            "email_id": "fixture-receipt",
+            "category_id": "fixture-receipts",
+            "category_name": "Receipts",
+            "confidence": 0.6,
+            "classifier_name": "RuleBasedClassifier",
+            "classifier_version": "starter-1",
+            "reasons": [
+              "The subject identifies a receipt or purchase/payment confirmation.",
+              "The body explicitly states that payment was completed.",
+              "The body contains an order, transaction, receipt, or invoice reference."
+            ],
+            "timestamp": 1791676800000
+          }
+        ],
+        "timestamp": 1791676800000
+      },
+      {
+        "email_id": "fixture-personal",
+        "sender": "friend@example.test",
+        "subject": "Saturday plans",
+        "bodyState": "complete",
+        "state": "unclassified",
+        "predictions": [],
+        "timestamp": 1791676800000
+      }
+    ],
+    "hasMore": false,
+    "processed": 2,
+    "errors": 0
+  }
+}

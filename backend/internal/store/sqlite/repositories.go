@@ -14,11 +14,15 @@ import (
 type emailRepository struct{ store *Store }
 type accountRepository struct{ store *Store }
 type categoryRepository struct{ store *Store }
+type classificationRepository struct{ store *Store }
 type actionRepository struct{ store *Store }
 
-func (s *Store) Emails() repository.EmailRepository                 { return &emailRepository{s} }
-func (s *Store) Accounts() repository.AccountRepository             { return &accountRepository{s} }
-func (s *Store) Categories() repository.CategoryRepository          { return &categoryRepository{s} }
+func (s *Store) Emails() repository.EmailRepository        { return &emailRepository{s} }
+func (s *Store) Accounts() repository.AccountRepository    { return &accountRepository{s} }
+func (s *Store) Categories() repository.CategoryRepository { return &categoryRepository{s} }
+func (s *Store) Classifications() repository.ClassificationRepository {
+	return &classificationRepository{s}
+}
 func (s *Store) MailboxActions() repository.MailboxActionRepository { return &actionRepository{s} }
 
 func newID() string              { return rand.Text() }

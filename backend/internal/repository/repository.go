@@ -40,6 +40,7 @@ type AccountRepository interface {
 	Get(context.Context, domain.AccountID) (domain.Account, error)
 }
 type EmailRepository interface {
+	ListSummaries(context.Context, domain.AccountID, Page) ([]EmailSummary, error)
 	// Upsert replaces a complete normalized provider snapshot. It preserves local
 	// categories (Email.Categories is read-only here); use CategoryRepository.Assign.
 	// An empty ID is allocated once. Replays preserve IDs and do not duplicate children.
@@ -53,14 +54,21 @@ type EmailRepository interface {
 	GetPhishingResult(context.Context, domain.AccountID, domain.EmailID) (domain.PhishingResult, error)
 }
 type CategoryRepository interface {
+	Delete(context.Context, domain.AccountID, domain.CategoryID) error
 	Save(context.Context, domain.AccountID, domain.EmailCategory) (domain.CategoryID, error)
 	Get(context.Context, domain.AccountID, domain.CategoryID) (domain.EmailCategory, error)
 	List(context.Context, domain.AccountID) ([]domain.EmailCategory, error)
 	Assign(context.Context, domain.AccountID, domain.EmailID, domain.CategoryID) error
 	Unassign(context.Context, domain.AccountID, domain.EmailID, domain.CategoryID) error
-	SaveClassification(context.Context, domain.ClassificationResult) error
-	ListClassifications(context.Context, domain.AccountID, domain.EmailID) ([]domain.ClassificationResult, error)
 }
+
+// ClassificationRepository atomically replaces a complete assessment, including
+// an empty prediction set, only while its email/category fingerprint is current.
+type ClassificationRepository interface {
+	Replace(context.Context, domain.ClassificationRun) error
+	Get(context.Context, domain.AccountID, domain.EmailID) (domain.ClassificationRun, error)
+}
+
 type ActionItemUpdate struct {
 	EmailID       domain.EmailID
 	State         domain.ActionItemState
@@ -77,4 +85,12 @@ type MailboxActionRepository interface {
 	// Revision checks prevent competing workers from overwriting outcomes.
 	Transition(context.Context, domain.AccountID, domain.ActionID, int64, domain.ActionStatus) error
 	UpdateItem(context.Context, domain.AccountID, domain.ActionID, int64, ActionItemUpdate) error
+}
+
+type EmailSummary struct {
+	ID         domain.EmailID
+	Sender     domain.EmailAddress
+	Subject    string
+	ReceivedAt time.Time
+	BodyState  string
 }

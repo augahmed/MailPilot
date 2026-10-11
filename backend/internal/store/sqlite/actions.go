@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"reflect"
 	"slices"
 
 	"mailpilot.local/core/internal/domain"
@@ -40,7 +39,13 @@ func normalizeDelta(delta domain.LabelDelta) (domain.LabelDelta, error) {
 	}
 	return delta, nil
 }
-func encode(value any) string { data, _ := json.Marshal(value); return string(data) }
+func encode(value any) (string, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "", repository.ErrInvalid
+	}
+	return string(data), nil
+}
 
 func (r *actionRepository) Create(ctx context.Context, a domain.MailboxAction) (domain.ActionID, error) {
 	now := nowMillis()
@@ -96,9 +101,13 @@ func (r *actionRepository) Create(ctx context.Context, a domain.MailboxAction) (
 	a.CompletedAt = nil
 	a.Revision = 0
 	a.PlanDigest = ""
-	sum := sha256.Sum256([]byte(encode(a)))
+	plan, err := encode(a)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(plan))
 	a.PlanDigest = hex.EncodeToString(sum[:])
-	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
+	err = r.store.transaction(ctx, func(tx *sql.Tx) error {
 		if a.ReversesActionID != nil {
 			if *a.ReversesActionID == a.ID {
 				return repository.ErrInvalid
@@ -126,7 +135,15 @@ func (r *actionRepository) Create(ctx context.Context, a domain.MailboxAction) (
 					}
 				}
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO mailbox_action_items(action_id,account_id,email_id,provider_message_id,requested_delta_json,before_labels_json,state,updated_at) VALUES(?,?,?,?,?,?,?,?)`, a.ID, a.AccountID, item.EmailID, item.ProviderMessageID, encode(item.RequestedDelta), encode(item.BeforeLabels), domain.ItemPending, now); err != nil {
+			requested, err := encode(item.RequestedDelta)
+			if err != nil {
+				return err
+			}
+			before, err := encode(item.BeforeLabels)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO mailbox_action_items(action_id,account_id,email_id,provider_message_id,requested_delta_json,before_labels_json,state,updated_at) VALUES(?,?,?,?,?,?,?,?)`, a.ID, a.AccountID, item.EmailID, item.ProviderMessageID, requested, before, domain.ItemPending, now); err != nil {
 				return err
 			}
 		}
@@ -375,7 +392,7 @@ func validateOutcome(item domain.MailboxActionItem, update repository.ActionItem
 			derived.Remove = append(derived.Remove, id)
 		}
 	}
-	if !slices.Equal(desired, after) || !reflect.DeepEqual(derived, actual) {
+	if !slices.Equal(desired, after) || (!slices.Equal(derived.Add, actual.Add) || !slices.Equal(derived.Remove, actual.Remove)) {
 		return nil, nil, repository.ErrInvalid
 	}
 	return &actual, &after, nil
@@ -414,10 +431,16 @@ func (r *actionRepository) UpdateItem(ctx context.Context, a domain.AccountID, i
 		}
 		var actualJSON, afterJSON any
 		if actual != nil {
-			actualJSON = encode(actual)
+			actualJSON, err = encode(actual)
+			if err != nil {
+				return err
+			}
 		}
 		if after != nil {
-			afterJSON = encode(after)
+			afterJSON, err = encode(after)
+			if err != nil {
+				return err
+			}
 		}
 		attempts := item.AttemptCount
 		if u.State == domain.ItemInFlight {

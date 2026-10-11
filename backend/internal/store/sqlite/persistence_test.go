@@ -72,7 +72,7 @@ func TestCleanDatabaseRunsAllMigrations(t *testing.T) {
 			t.Fatalf("new table %s not empty", table)
 		}
 	}
-	if count(t, s, "schema_migrations") != 2 {
+	if count(t, s, "schema_migrations") != 5 {
 		t.Fatal("missing migration")
 	}
 	rows, err := s.db.Query("PRAGMA foreign_key_check")
@@ -126,7 +126,7 @@ func TestUpgradeVersionOnePreservesSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SchemaVersion() != 2 || count(t, s, "settings") != 1 {
+	if s.SchemaVersion() != 5 || count(t, s, "settings") != 1 {
 		t.Fatal("upgrade lost data")
 	}
 	_ = s.Close()
@@ -135,7 +135,7 @@ func TestUpgradeVersionOnePreservesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if count(t, s, "schema_migrations") != 2 {
+	if count(t, s, "schema_migrations") != 5 {
 		t.Fatal("migrations repeated")
 	}
 }
@@ -371,15 +371,15 @@ func TestCategoryAssignmentsAreLocalAndAccountScoped(t *testing.T) {
 	b := account(t, s, "b")
 	e := sampleEmail(a, "mail")
 	id := saveEmail(t, s, e)
-	category, err := s.Categories().Save(ctx, a, domain.EmailCategory{Name: "Follow up"})
+	category, err := s.Categories().Save(ctx, a, domain.EmailCategory{Description: "Synthetic category description", Enabled: true, Name: "Follow up"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	replay, err := s.Categories().Save(ctx, a, domain.EmailCategory{Name: "Follow up"})
-	if err != nil || replay != category {
+	replay, err := s.Categories().Save(ctx, a, domain.EmailCategory{Description: "Synthetic category description", Enabled: true, Name: "Follow up"})
+	if !errors.Is(err, repository.ErrConflict) || replay != "" {
 		t.Fatal("category duplicated", err)
 	}
-	foreign, err := s.Categories().Save(ctx, b, domain.EmailCategory{Name: "Follow up"})
+	foreign, err := s.Categories().Save(ctx, b, domain.EmailCategory{Description: "Synthetic category description", Enabled: true, Name: "Follow up"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,17 +399,17 @@ func TestCategoryAssignmentsAreLocalAndAccountScoped(t *testing.T) {
 	if err != nil || len(got.Email.Categories) != 1 || got.Email.Categories[0].ID != category {
 		t.Fatal("sync erased local category", err)
 	}
-	if _, err := s.Categories().Save(ctx, b, domain.EmailCategory{ID: category, Name: "takeover"}); !errors.Is(err, repository.ErrConflict) {
+	if _, err := s.Categories().Save(ctx, b, domain.EmailCategory{Description: "Synthetic category description", Enabled: true, ID: category, Name: "takeover"}); !errors.Is(err, repository.ErrConflict) {
 		t.Fatal("category reassigned", err)
 	}
 	if _, err := s.Categories().Get(ctx, b, category); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatal("foreign category read", err)
 	}
-	if _, err := s.Categories().Save(ctx, a, domain.EmailCategory{ID: category, Name: "Renamed"}); err != nil {
+	if _, err := s.Categories().Save(ctx, a, domain.EmailCategory{Description: "Synthetic category description", Enabled: true, ID: category, Name: "Renamed"}); err != nil {
 		t.Fatal(err)
 	}
 	listed, err := s.Categories().List(ctx, a)
-	if err != nil || len(listed) != 1 || listed[0].Name != "Renamed" {
+	if err != nil || len(listed) != 8 || listed[6].Name != "Renamed" {
 		t.Fatal("category listing incorrect", err)
 	}
 	for i := 0; i < 2; i++ {
@@ -433,15 +433,16 @@ func TestAnalysisResultsAndContentInvalidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	category, err := s.Categories().Save(ctx, a, domain.EmailCategory{Name: "Invoices"})
+	category, err := s.Categories().Save(ctx, a, domain.EmailCategory{Description: "Synthetic category description", Enabled: true, Name: "Invoices"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	assessed := time.Now().UTC().Truncate(time.Millisecond)
-	classification := domain.ClassificationResult{AccountID: a, EmailID: id, CategoryID: category, Confidence: .8, ClassifierVersion: "rules/1", InputHash: stored.ContentHash, Explanation: "Invoice subject", AssessedAt: assessed}
+	classification := assessment(t, s, a, id, category).Results[0]
+	classification.Timestamp = assessed
 	phishing := domain.PhishingResult{AccountID: a, EmailID: id, Score: 65, AnalyzerVersion: "rules/1", InputHash: stored.ContentHash, Findings: []domain.PhishingFinding{{Code: "link_mismatch", Explanation: "Different link target", Evidence: "example.test"}}, AssessedAt: assessed}
 	for i := 0; i < 2; i++ {
-		if err := s.Categories().SaveClassification(ctx, classification); err != nil {
+		if err := s.Classifications().Replace(ctx, runWithResult(classification)); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.Emails().SavePhishingResult(ctx, phishing); err != nil {
@@ -455,18 +456,19 @@ func TestAnalysisResultsAndContentInvalidation(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, phishing) {
 		t.Fatal("phishing result lost", err)
 	}
-	classes, err := s.Categories().ListClassifications(ctx, a, id)
+	run, err := s.Classifications().Get(ctx, a, id)
+	classes := run.Results
 	if err != nil || len(classes) != 1 || !reflect.DeepEqual(classes[0], classification) {
 		t.Fatal("classification result lost", err)
 	}
 	if _, err := s.Emails().GetPhishingResult(ctx, b, id); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatal("foreign result returned", err)
 	}
-	if classes, err := s.Categories().ListClassifications(ctx, b, id); err != nil || len(classes) != 0 {
+	if _, err := s.Classifications().Get(ctx, b, id); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatal("foreign classifications returned", err)
 	}
 	classification.Confidence = math.NaN()
-	if err := s.Categories().SaveClassification(ctx, classification); !errors.Is(err, repository.ErrInvalid) {
+	if err := s.Classifications().Replace(ctx, runWithResult(classification)); !errors.Is(err, repository.ErrInvalid) {
 		t.Fatal("NaN confidence accepted")
 	}
 	classification.Confidence = .8
@@ -493,7 +495,7 @@ func TestAnalysisResultsAndContentInvalidation(t *testing.T) {
 	if err := s.Emails().SavePhishingResult(ctx, phishing); !errors.Is(err, repository.ErrConflict) {
 		t.Fatal("stale analyzer result accepted")
 	}
-	if err := s.Categories().SaveClassification(ctx, classification); !errors.Is(err, repository.ErrConflict) {
+	if err := s.Classifications().Replace(ctx, runWithResult(classification)); !errors.Is(err, repository.ErrConflict) {
 		t.Fatal("stale classifier result accepted")
 	}
 }
@@ -509,7 +511,7 @@ func TestDatabaseConstraintsPreventCrossAccountLinks(t *testing.T) {
 	if err := s.db.QueryRow("SELECT id FROM labels WHERE account_id=? LIMIT 1", b).Scan(&foreignLabel); err != nil {
 		t.Fatal(err)
 	}
-	category, err := s.Categories().Save(ctx, b, domain.EmailCategory{Name: "Other"})
+	category, err := s.Categories().Save(ctx, b, domain.EmailCategory{Description: "Synthetic category description", Enabled: true, Name: "Other"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,11 +521,67 @@ func TestDatabaseConstraintsPreventCrossAccountLinks(t *testing.T) {
 	}{
 		{"INSERT INTO email_labels VALUES(?,?,?)", []any{a, id, foreignLabel}},
 		{"INSERT INTO email_categories VALUES(?,?,?)", []any{a, id, category}},
-		{"INSERT INTO classification_results VALUES(?,?,?,.5,'v1','hash','explanation',0)", []any{a, id, category}},
+		{"INSERT INTO classification_results(account_id,email_id,category_id,confidence,classifier_version,input_hash,explanation,assessed_at) VALUES(?,?,?,.5,'v1','hash','explanation',0)", []any{a, id, category}},
 		{"INSERT INTO phishing_results VALUES(?,?,50,'v1','hash','[]',0)", []any{b, id}},
 	} {
 		if _, err := s.db.Exec(q.sql, q.args...); err == nil {
 			t.Fatal("foreign key constraint missing")
 		}
+	}
+}
+
+func TestUnencodableEmailRollsBackBatch(t *testing.T) {
+	s := testStore(t)
+	a := account(t, s, "encoding")
+	good := sampleEmail(a, "good")
+	invalid := sampleEmail(a, "invalid")
+	invalid.ReceivedAt = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := s.Emails().UpsertBatch(context.Background(), a, []domain.Email{good, invalid}); !errors.Is(err, repository.ErrInvalid) {
+		t.Fatal("unencodable content was hashed and accepted")
+	}
+	if count(t, s, "emails") != 0 || count(t, s, "email_addresses") != 0 {
+		t.Fatal("failed hash left partial batch data")
+	}
+}
+
+func TestVersionTwoUpgradePreservesExistingMail(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "mailpilot.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,checksum TEXT NOT NULL,applied_at INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	for i, name := range []string{"001_settings.sql", "002_mail_storage.sql"} {
+
+		body, e := migrations.ReadFile("migrations/" + name)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = db.Exec(string(body)); e != nil {
+			t.Fatal(e)
+		}
+		if _, e = db.Exec("INSERT INTO schema_migrations VALUES(?,?,0)", i+1, fmt.Sprintf("%x", sha256.Sum256(body))); e != nil {
+			t.Fatal(e)
+		}
+	}
+	if _, err = db.Exec(`INSERT INTO accounts(id,provider,provider_account_id,address,display_name,credential_ref,created_at,updated_at) VALUES('a','fixture','a','a@example.test','','',0,0)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO emails(id,account_id,provider_message_id,provider_thread_id,subject,body_text,received_at,headers_json,attachments_json,content_hash,created_at,updated_at) VALUES('mail','a','remote','thread','Subject','Preserved',1,'[]','[]','hash',0,0)`); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got, err := s.Emails().GetByProviderID(context.Background(), "a", "remote")
+	if err != nil || got.Email.BodyText != "Preserved" || got.Email.BodyState != "" || got.Email.ContentRevision != "" {
+		t.Fatal("upgrade corrupted legacy mail", err)
 	}
 }

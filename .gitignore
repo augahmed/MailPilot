@@ -35,3 +35,6 @@ client_secret*.json
 .local/
 .cache/
 
+# Downloaded Google desktop OAuth client configuration
+*oauth-client*.json
+*oauth_client*.json

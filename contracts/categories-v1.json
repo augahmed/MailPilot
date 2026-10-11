@@ -1,0 +1,25 @@
+{
+  "request": {
+    "operation": "save",
+    "accountId": "fixture-account",
+    "offset": 0,
+    "id": "",
+    "name": "Travel",
+    "description": "Reservations, tickets, and itineraries for personal trips.",
+    "enabled": true
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "rows": [
+      {
+        "id": "fixture-category",
+        "name": "Travel",
+        "description": "Reservations, tickets, and itineraries for personal trips.",
+        "enabled": true,
+        "created_at": 1791676800000,
+        "updated_at": 1791676800000
+      }
+    ],
+    "hasMore": false
+  }
+}

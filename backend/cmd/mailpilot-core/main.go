@@ -9,10 +9,16 @@ import (
 	"runtime"
 
 	"mailpilot.local/core/internal/app"
+	"mailpilot.local/core/internal/auth"
+	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/config"
+	"mailpilot.local/core/internal/credentials"
+	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/ipc"
 	"mailpilot.local/core/internal/logging"
+	"mailpilot.local/core/internal/provider/gmail"
 	"mailpilot.local/core/internal/store/sqlite"
+	mailsync "mailpilot.local/core/internal/sync"
 )
 
 // Set by the sidecar build script from the desktop package version.
@@ -47,7 +53,15 @@ func run() int {
 	defer stop()
 	go func() { <-ctx.Done(); _ = os.Stdin.Close() }()
 	var store *sqlite.Store
+	var authentication *auth.Manager
+	var synchronization *mailsync.Service
 	defer func() {
+		if synchronization != nil {
+			synchronization.Clear()
+		}
+		if authentication != nil {
+			authentication.Close()
+		}
 		if store != nil {
 			if err := store.Close(); err != nil {
 				logger.Error("database close failed", "code", "database_close")
@@ -55,6 +69,7 @@ func run() int {
 		}
 	}()
 	logger.Info("core started", "version", version)
+	ctxRoot := ctx
 	err = ipc.Serve(ctx, os.Stdin, os.Stdout, func(ctx context.Context) (ipc.HealthService, error) {
 		var err error
 		store, err = sqlite.Open(ctx, cfg.DataDir)
@@ -63,7 +78,21 @@ func run() int {
 			return nil, err
 		}
 		logger.Info("database initialized", "schema_version", store.SchemaVersion())
-		return app.New(store, version), nil
+		tokenStore := credentials.NewKeyring(cfg.DataDir, cfg.GoogleClientID)
+		authentication = auth.NewManager(ctxRoot, gmail.NewOAuth(cfg.GoogleClientID, cfg.GoogleClientSecret), tokenStore, store.Accounts(), tokenStore.Reference())
+		authentication.Check()
+		application := app.New(store, version)
+		application.Auth = authentication
+		synchronization = mailsync.New(ctxRoot, authentication.Session, func(account domain.AccountID) mailsync.Reader { return gmail.NewProvider(account, authentication) }, store.Emails(), cfg.InitialSyncLimit)
+		application.Sync = synchronization
+		application.Emails = store.Emails()
+		application.Categories = store.Categories()
+		engine, err := classification.NewRuleBasedClassifier(classification.StarterConfig())
+		if err != nil {
+			return nil, err
+		}
+		application.Classification = app.NewClassificationReview(authentication.Session, engine, store.Emails(), store.Categories(), store.Classifications())
+		return application, nil
 	})
 	if err != nil && ctx.Err() == nil {
 		logger.Error("protocol stopped", "code", "ipc_failure")

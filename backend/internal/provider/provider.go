@@ -14,6 +14,9 @@ import (
 )
 
 var (
+	ErrUnavailable            = errors.New("provider unavailable")
+	ErrMalformed              = errors.New("invalid provider message")
+	ErrRateLimited            = errors.New("provider rate limited")
 	ErrUnsupported            = errors.New("provider operation unsupported")
 	ErrNotFound               = errors.New("provider resource not found")
 	ErrAuthenticationRequired = errors.New("provider authentication required")
@@ -171,4 +174,16 @@ type EmailProvider interface {
 	LabelManager
 	DraftCreator
 	Capabilities() Capabilities
+}
+
+// MetadataReader allows cached bodies to be reused when the provider guarantees
+// ContentRevision is unchanged. Empty revision always requires a full fetch.
+type MessageMetadata struct {
+	ProviderID       domain.ProviderMessageID
+	ProviderThreadID domain.ProviderThreadID
+	ContentRevision  string
+	Labels           []domain.EmailLabel
+}
+type MetadataReader interface {
+	FetchMessageMetadata(context.Context, domain.ProviderMessageID) (MessageMetadata, error)
 }

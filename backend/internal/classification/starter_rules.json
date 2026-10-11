@@ -1,0 +1,290 @@
+{
+  "name": "RuleBasedClassifier",
+  "version": "starter-1",
+  "ambiguity_margin": 0.15,
+  "exclude_subject_prefixes": ["re:", "fw:", "fwd:"],
+  "rules": [
+    {
+      "id": "application-acknowledgment",
+      "category_name": "Job Applications",
+      "confidence": 0.6,
+      "all": [
+        {
+          "field": "subject",
+          "any_of": [
+            "application received",
+            "application confirmation",
+            "thank you for applying",
+            "we received your application",
+            "application status"
+          ],
+          "reason": "The subject contains a specific application acknowledgment or status phrase."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "your application for",
+            "your application to",
+            "thank you for applying",
+            "we received your application"
+          ],
+          "reason": "The body addresses an application submitted by the recipient."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "position",
+            "job",
+            "hiring team",
+            "employment",
+            "recruiter"
+          ],
+          "reason": "The body includes employment or hiring context."
+        }
+      ],
+      "unless": [
+        {
+          "field": "subject",
+          "any_of": [
+            "application tips",
+            "application template",
+            "how to apply",
+            "college application",
+            "loan application"
+          ]
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "loan application",
+            "credit application",
+            "mortgage application",
+            "application fee",
+            "college application",
+            "university application",
+            "admissions",
+            "newsletter",
+            "unsubscribe",
+            "not received your application",
+            "did not receive your application"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hiring-interview-invitation",
+      "category_name": "Job Interviews",
+      "confidence": 0.65,
+      "all": [
+        {
+          "field": "subject",
+          "any_of": [
+            "interview invitation",
+            "interview scheduled",
+            "schedule your interview",
+            "interview confirmation",
+            "interview with",
+            "invitation to interview"
+          ],
+          "reason": "The subject explicitly invites or schedules an interview."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "hiring team",
+            "recruiter",
+            "hiring manager",
+            "candidate",
+            "your application"
+          ],
+          "reason": "The body provides hiring or candidate context."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "availability",
+            "calendar",
+            "schedule",
+            "meeting link",
+            "interview time",
+            "join the interview"
+          ],
+          "reason": "The body includes interview scheduling or joining details."
+        }
+      ],
+      "unless": [
+        {
+          "field": "subject",
+          "any_of": [
+            "interview tips",
+            "interview guide",
+            "interview questions",
+            "research interview",
+            "podcast",
+            "press interview",
+            "mock interview"
+          ]
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "newsletter",
+            "unsubscribe",
+            "not an interview invitation",
+            "mock interview",
+            "research interview"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "completed-purchase-receipt",
+      "category_name": "Receipts",
+      "confidence": 0.6,
+      "all": [
+        {
+          "field": "subject",
+          "any_of": [
+            "payment receipt",
+            "your receipt",
+            "receipt for",
+            "order confirmation",
+            "payment confirmation"
+          ],
+          "reason": "The subject identifies a receipt or purchase/payment confirmation."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "amount paid",
+            "total paid",
+            "payment received",
+            "payment successful",
+            "paid with",
+            "card was charged"
+          ],
+          "reason": "The body explicitly states that payment was completed."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "order number",
+            "transaction id",
+            "receipt number",
+            "invoice number",
+            "order total"
+          ],
+          "reason": "The body contains an order, transaction, receipt, or invoice reference."
+        }
+      ],
+      "unless": [
+        {
+          "field": "subject",
+          "any_of": [
+            "payment failed",
+            "payment overdue",
+            "payment reminder",
+            "order cancelled",
+            "receipt template",
+            "receipt tips"
+          ]
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "payment was declined",
+            "payment has failed",
+            "not a receipt",
+            "sample receipt",
+            "example receipt",
+            "this is an estimate",
+            "awaiting payment",
+            "payment is pending"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "recurring-newsletter",
+      "category_name": "Newsletters",
+      "confidence": 0.55,
+      "all": [
+        {
+          "field": "subject",
+          "any_of": [
+            "newsletter",
+            "weekly digest",
+            "monthly digest",
+            "weekly roundup",
+            "monthly roundup"
+          ],
+          "reason": "The subject names a newsletter or recurring digest/roundup."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "unsubscribe",
+            "manage your subscription",
+            "manage preferences"
+          ],
+          "reason": "The body provides a subscription or unsubscribe control."
+        }
+      ],
+      "unless": [
+        {
+          "field": "subject",
+          "any_of": [
+            "newsletter template",
+            "newsletter design",
+            "newsletter invoice",
+            "newsletter receipt",
+            "newsletter feedback"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "labeled-newsletter",
+      "category_name": "Newsletters",
+      "confidence": 0.6,
+      "all": [
+        {
+          "field": "label",
+          "any_of": ["Newsletters"],
+          "reason": "An existing mailbox label is named Newsletters."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "in this issue",
+            "this week in",
+            "weekly digest",
+            "monthly digest"
+          ],
+          "reason": "The body contains recurring editorial or digest language."
+        },
+        {
+          "field": "body",
+          "any_of": [
+            "unsubscribe",
+            "manage your subscription",
+            "manage preferences"
+          ],
+          "reason": "The body provides a subscription or unsubscribe control."
+        }
+      ],
+      "unless": [
+        {
+          "field": "subject",
+          "any_of": [
+            "newsletter template",
+            "newsletter design",
+            "newsletter invoice",
+            "newsletter receipt",
+            "newsletter feedback"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,10 @@ package app
 
 import (
 	"context"
+	"mailpilot.local/core/internal/auth"
 	"mailpilot.local/core/internal/domain"
+	"mailpilot.local/core/internal/repository"
+	mailsync "mailpilot.local/core/internal/sync"
 )
 
 type Database interface {
@@ -12,8 +15,13 @@ type Database interface {
 }
 
 type App struct {
-	db      Database
-	version string
+	Auth           *auth.Manager
+	Sync           *mailsync.Service
+	Emails         repository.EmailRepository
+	Categories     repository.CategoryRepository
+	Classification *ClassificationReview
+	db             Database
+	version        string
 }
 
 func New(db Database, version string) *App { return &App{db: db, version: version} }
@@ -25,3 +33,20 @@ func (a *App) Health(ctx context.Context) domain.Health {
 	}
 	return domain.Health{Name: "MailPilot", Version: a.version, ProtocolVersion: domain.ProtocolVersion, Backend: "connected", Database: status, SchemaVersion: a.db.SchemaVersion()}
 }
+
+func (a *App) AuthStatus() auth.Status { return a.Auth.Status() }
+func (a *App) AuthBegin() auth.BeginResult {
+	if a.Sync != nil {
+		a.Sync.Clear()
+	}
+	return a.Auth.Begin()
+}
+func (a *App) AuthCheck() auth.Status { return a.Auth.Check() }
+func (a *App) AuthDisconnect() auth.Status {
+	if a.Sync != nil {
+		a.Sync.Clear()
+	}
+	return a.Auth.Disconnect()
+}
+
+func (a *App) AuthCancel() auth.Status { return a.Auth.Cancel() }

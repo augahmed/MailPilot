@@ -65,8 +65,12 @@ type EmailLabel struct {
 // EmailCategory is a local application classification. Its ID/name do not map
 // automatically to provider labels or provider-specific inbox categories.
 type EmailCategory struct {
-	ID   CategoryID
-	Name string
+	ID          CategoryID
+	Name        string
+	Description string
+	Enabled     bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // Email is normalized mail data, independent of any provider SDK or transport.
@@ -76,6 +80,8 @@ type EmailCategory struct {
 // Bodies are untrusted; carrying HTML does not authorize rendering or fetching it.
 // These values are internal Go models, not public IPC DTOs or SQL records.
 type Email struct {
+	ContentRevision  string // Opaque provider content identity; excludes label-only changes.
+	BodyState        string // Empty = unknown; complete or unavailable after normalization.
 	ID               EmailID
 	AccountID        AccountID
 	ProviderID       ProviderMessageID
@@ -109,6 +115,9 @@ func (e Email) HeaderValues(name string) []string {
 // Blank subjects/bodies/recipient lists and malformed inbound senders are valid
 // representations. Adapters must not discard suspicious mail for these reasons.
 func (e Email) Validate() error {
+	if e.BodyState != "" && e.BodyState != "complete" && e.BodyState != "unavailable" {
+		return errors.New("invalid body state")
+	}
 	if e.AccountID == "" {
 		return errors.New("email account ID is required")
 	}

@@ -18,10 +18,23 @@ type ClassificationResult struct {
 	EmailID           EmailID
 	CategoryID        CategoryID
 	Confidence        float64
+	ClassifierName    string
 	ClassifierVersion string
 	InputHash         string
-	Explanation       string
-	AssessedAt        time.Time
+	Reasons           []string
+	Timestamp         time.Time
+}
+
+// ClassificationRun persists abstention as well as predictions. Results are
+// suggestions; they never imply local category assignment or provider writes.
+type ClassificationRun struct {
+	AccountID         AccountID
+	EmailID           EmailID
+	ClassifierName    string
+	ClassifierVersion string
+	InputHash         string
+	Timestamp         time.Time
+	Results           []ClassificationResult
 }
 
 type PhishingFinding struct {

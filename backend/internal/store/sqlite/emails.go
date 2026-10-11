@@ -12,12 +12,13 @@ import (
 	"mailpilot.local/core/internal/repository"
 )
 
-func contentHash(e domain.Email) string {
+func contentHash(e domain.Email) (string, error) {
 	// IDs, provider label membership and local categories are not analysis inputs.
 	e.ID = ""
 	e.AccountID = ""
 	e.ProviderID = ""
 	e.ProviderThreadID = ""
+	e.ContentRevision = ""
 	e.Labels = nil
 	e.Categories = nil
 	e.ReceivedAt = instant(e.ReceivedAt.UnixMilli())
@@ -25,9 +26,12 @@ func contentHash(e domain.Email) string {
 	e.CCRecipients = append([]domain.EmailAddress{}, e.CCRecipients...)
 	e.Headers = append([]domain.EmailHeader{}, e.Headers...)
 	e.Attachments = append([]domain.AttachmentMetadata{}, e.Attachments...)
-	data, _ := json.Marshal(e)
+	data, err := json.Marshal(e)
+	if err != nil {
+		return "", repository.ErrInvalid
+	}
 	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func (r *emailRepository) Upsert(ctx context.Context, e domain.Email) (domain.EmailID, error) {
@@ -81,15 +85,18 @@ func upsertEmail(ctx context.Context, tx *sql.Tx, e domain.Email) (domain.EmailI
 	if e.ID != "" && e.ID != id {
 		return "", repository.ErrConflict
 	}
-	hash := contentHash(e)
+	hash, err := contentHash(e)
+	if err != nil {
+		return "", err
+	}
 	headers, _ := json.Marshal(append([]domain.EmailHeader{}, e.Headers...))
 	attachments, _ := json.Marshal(append([]domain.AttachmentMetadata{}, e.Attachments...))
 	now := nowMillis()
-	_, err = tx.ExecContext(ctx, `INSERT INTO emails(id,account_id,provider_message_id,provider_thread_id,subject,body_text,body_html,received_at,headers_json,attachments_json,content_hash,created_at,updated_at)
- VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,provider_message_id) DO UPDATE SET
- provider_thread_id=excluded.provider_thread_id,subject=excluded.subject,body_text=excluded.body_text,body_html=excluded.body_html,
+	_, err = tx.ExecContext(ctx, `INSERT INTO emails(id,account_id,provider_message_id,provider_thread_id,subject,body_text,body_html,received_at,headers_json,attachments_json,content_hash,created_at,updated_at,content_revision,body_state)
+ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,provider_message_id) DO UPDATE SET
+ content_revision=excluded.content_revision,body_state=excluded.body_state,provider_thread_id=excluded.provider_thread_id,subject=excluded.subject,body_text=excluded.body_text,body_html=excluded.body_html,
  received_at=excluded.received_at,headers_json=excluded.headers_json,attachments_json=excluded.attachments_json,content_hash=excluded.content_hash,updated_at=excluded.updated_at`,
-		id, e.AccountID, e.ProviderID, e.ProviderThreadID, e.Subject, e.BodyText, e.BodyHTML, e.ReceivedAt.UnixMilli(), string(headers), string(attachments), hash, now, now)
+		id, e.AccountID, e.ProviderID, e.ProviderThreadID, e.Subject, e.BodyText, e.BodyHTML, e.ReceivedAt.UnixMilli(), string(headers), string(attachments), hash, now, now, e.ContentRevision, e.BodyState)
 	if err != nil {
 		return "", err
 	}
@@ -116,7 +123,7 @@ func upsertEmail(ctx context.Context, tx *sql.Tx, e domain.Email) (domain.EmailI
 		}
 	}
 	if oldHash != "" && oldHash != hash {
-		for _, table := range []string{"classification_results", "phishing_results"} {
+		for _, table := range []string{"classification_results", "classification_runs", "phishing_results"} {
 			if _, err = tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE account_id=? AND email_id=?", e.AccountID, id); err != nil {
 				return "", err
 			}
@@ -143,7 +150,7 @@ func upsertLabel(ctx context.Context, tx *sql.Tx, l domain.EmailLabel) (domain.L
 	return id, err
 }
 
-const emailColumns = "id,account_id,provider_message_id,provider_thread_id,subject,body_text,body_html,received_at,headers_json,attachments_json,content_hash,created_at,updated_at"
+const emailColumns = "id,account_id,provider_message_id,provider_thread_id,subject,body_text,body_html,received_at,headers_json,attachments_json,content_hash,created_at,updated_at,content_revision,body_state"
 
 type scanner interface{ Scan(...any) error }
 
@@ -153,7 +160,7 @@ func scanEmail(row scanner) (repository.StoredEmail, error) {
 	var html sql.NullString
 	var received, created, updated int64
 	var headers, attachments string
-	err := row.Scan(&e.ID, &e.AccountID, &e.ProviderID, &e.ProviderThreadID, &e.Subject, &e.BodyText, &html, &received, &headers, &attachments, &result.ContentHash, &created, &updated)
+	err := row.Scan(&e.ID, &e.AccountID, &e.ProviderID, &e.ProviderThreadID, &e.Subject, &e.BodyText, &html, &received, &headers, &attachments, &result.ContentHash, &created, &updated, &e.ContentRevision, &e.BodyState)
 	if err != nil {
 		return result, err
 	}
@@ -215,14 +222,14 @@ func loadEmailRelations(ctx context.Context, tx *sql.Tx, e *domain.Email) error 
 	if err != nil {
 		return err
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT c.id,c.name FROM categories c JOIN email_categories ec ON ec.account_id=c.account_id AND ec.category_id=c.id WHERE ec.account_id=? AND ec.email_id=? ORDER BY c.name,c.id`, e.AccountID, e.ID)
+	rows, err = tx.QueryContext(ctx, `SELECT c.id,c.name,c.description,c.enabled,c.created_at,c.updated_at FROM categories c JOIN email_categories ec ON ec.account_id=c.account_id AND ec.category_id=c.id WHERE ec.account_id=? AND ec.email_id=? ORDER BY c.name,c.id`, e.AccountID, e.ID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var c domain.EmailCategory
-		if err := rows.Scan(&c.ID, &c.Name); err != nil {
+		c, err := scanCategory(rows)
+		if err != nil {
 			return err
 		}
 		e.Categories = append(e.Categories, c)
@@ -330,4 +337,27 @@ func (r *emailRepository) GetPhishingResult(ctx context.Context, a domain.Accoun
 	}
 	p.AssessedAt = instant(assessed)
 	return p, nil
+}
+
+// ListSummaries avoids loading cached bodies into the mailbox list or IPC.
+func (r *emailRepository) ListSummaries(ctx context.Context, a domain.AccountID, page repository.Page) ([]repository.EmailSummary, error) {
+	if a == "" || page.Validate() != nil {
+		return nil, repository.ErrInvalid
+	}
+	rows, err := r.store.db.QueryContext(ctx, `SELECT e.id,COALESCE(a.name,''),COALESCE(a.address,''),e.subject,e.received_at,e.body_state FROM emails e LEFT JOIN email_addresses a ON a.email_id=e.id AND a.role='sender' WHERE e.account_id=? ORDER BY e.received_at DESC,e.id DESC LIMIT ? OFFSET ?`, a, page.Limit, page.Offset)
+	if err != nil {
+		return nil, storageError(err)
+	}
+	defer rows.Close()
+	result := []repository.EmailSummary{}
+	for rows.Next() {
+		var row repository.EmailSummary
+		var ms int64
+		if err := rows.Scan(&row.ID, &row.Sender.Name, &row.Sender.Address, &row.Subject, &ms, &row.BodyState); err != nil {
+			return nil, storageError(err)
+		}
+		row.ReceivedAt = instant(ms)
+		result = append(result, row)
+	}
+	return result, storageError(rows.Err())
 }

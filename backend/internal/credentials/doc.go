@@ -1,3 +1,2 @@
-// Package credentials reserves the boundary for OS-secure credential storage.
-// No feature behavior is implemented in the desktop bootstrap.
+// Package credentials provides redacting secret values and OS-keyring token storage.
 package credentials

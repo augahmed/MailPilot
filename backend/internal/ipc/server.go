@@ -10,13 +10,34 @@ import (
 	"io"
 	"time"
 
+	"mailpilot.local/core/internal/app"
+	"mailpilot.local/core/internal/auth"
 	"mailpilot.local/core/internal/domain"
+	mailsync "mailpilot.local/core/internal/sync"
 )
 
 const MaxFrameBytes = 64 * 1024
 
 type HealthService interface {
 	Health(context.Context) domain.Health
+}
+type AuthService interface {
+	AuthCancel() auth.Status
+	AuthStatus() auth.Status
+	AuthBegin() auth.BeginResult
+	AuthCheck() auth.Status
+	AuthDisconnect() auth.Status
+}
+type MailService interface {
+	SyncStart() mailsync.Progress
+	SyncStatus() mailsync.Progress
+	Mailbox(context.Context, int) app.MailboxPage
+}
+type CategoryService interface {
+	ManageCategories(context.Context, app.CategoryRequest) app.CategoryPage
+}
+type ClassificationService interface {
+	ReviewClassifications(context.Context, app.ClassificationRequest) app.ClassificationPage
 }
 type Factory func(context.Context) (HealthService, error)
 
@@ -50,7 +71,7 @@ func strictDecode(data []byte, dst any) error {
 }
 
 // Serve handles one bounded request at a time. EOF is a clean host shutdown.
-// Bootstrap has no long-running jobs or mutation/cancellation API.
+// Authentication methods start background work and return immediately.
 func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Factory) error {
 	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, 4096), MaxFrameBytes)
@@ -84,6 +105,68 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 						fail(-32603, "Backend initialization failed")
 					} else {
 						reply.Result = map[string]int{"protocolVersion": domain.ProtocolVersion}
+					}
+				}
+			case "classification.review":
+				review, ok := service.(ClassificationService)
+				var params app.ClassificationRequest
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Classification unavailable")
+				} else {
+					reply.Result = review.ReviewClassifications(callCtx, params)
+				}
+			case "categories.manage":
+				categories, ok := service.(CategoryService)
+				var params app.CategoryRequest
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Categories unavailable")
+				} else {
+					reply.Result = categories.ManageCategories(callCtx, params)
+				}
+			case "sync.start", "sync.status", "mail.list":
+				mailbox, ok := service.(MailService)
+				if !ok {
+					fail(-32001, "Mailbox unavailable")
+					break
+				}
+				if req.Method == "mail.list" {
+					var params struct {
+						Offset int `json:"offset"`
+					}
+					if strictDecode(req.Params, &params) != nil || params.Offset < 0 || params.Offset > 1000000 {
+						fail(-32602, "Invalid parameters")
+					} else {
+						reply.Result = mailbox.Mailbox(callCtx, params.Offset)
+					}
+				} else if len(req.Params) > 0 && string(req.Params) != "{}" {
+					fail(-32602, "Invalid parameters")
+				} else if req.Method == "sync.start" {
+					reply.Result = mailbox.SyncStart()
+				} else {
+					reply.Result = mailbox.SyncStatus()
+				}
+			case "auth.status", "auth.begin", "auth.check", "auth.disconnect", "auth.cancel":
+				account, ok := service.(AuthService)
+				if len(req.Params) > 0 && string(req.Params) != "{}" {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Authentication unavailable")
+				} else {
+					switch req.Method {
+					case "auth.cancel":
+						reply.Result = account.AuthCancel()
+					case "auth.status":
+						reply.Result = account.AuthStatus()
+					case "auth.begin":
+						reply.Result = account.AuthBegin()
+					case "auth.check":
+						reply.Result = account.AuthCheck()
+					case "auth.disconnect":
+						reply.Result = account.AuthDisconnect()
 					}
 				}
 			case "health", "shutdown":

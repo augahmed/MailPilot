@@ -1,0 +1,59 @@
+{
+  "id": "m1",
+  "threadId": "t1",
+  "internalDate": "1700000000123",
+  "labelIds": ["INBOX", "Label_work"],
+  "payload": {
+    "mimeType": "multipart/mixed",
+    "headers": [
+      {
+        "name": "From",
+        "value": "Example <sender@example.test>"
+      },
+      {
+        "name": "To",
+        "value": "one@example.test, two@example.test"
+      },
+      {
+        "name": "Cc",
+        "value": "cc@example.test"
+      },
+      {
+        "name": "Subject",
+        "value": "=?UTF-8?B?SGVsbG8=?="
+      },
+      {
+        "name": "Authentication-Results",
+        "value": "example.test; dkim=pass"
+      }
+    ],
+    "parts": [
+      {
+        "mimeType": "multipart/alternative",
+        "parts": [
+          {
+            "mimeType": "text/plain",
+            "body": {
+              "data": "UGxhaW4gYm9keQ0KU2Vjb25kIGxpbmU"
+            }
+          },
+          {
+            "mimeType": "text/html",
+            "body": {
+              "data": "PHA-SFRNTCBhbHRlcm5hdGl2ZTwvcD4"
+            }
+          }
+        ]
+      },
+      {
+        "partId": "2",
+        "mimeType": "application/pdf",
+        "filename": "report.pdf",
+        "body": {
+          "attachmentId": "att1",
+          "size": 123
+        }
+      }
+    ]
+  }
+}

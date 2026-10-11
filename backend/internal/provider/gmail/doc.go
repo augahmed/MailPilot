@@ -1,3 +1,2 @@
-// Package gmail reserves the boundary for Gmail API translation.
-// No feature behavior is implemented in the desktop bootstrap.
+// Package gmail implements Google OAuth and bounded read-only Gmail imports.
 package gmail

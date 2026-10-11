@@ -2,7 +2,10 @@
 
 mod bridge;
 
-use bridge::{Bridge, Health};
+use bridge::{
+    AuthStatus, Bridge, CategoryPage, CategoryRequest, ClassificationPage, ClassificationRequest,
+    Health, MailboxPage, SyncProgress,
+};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -14,6 +17,20 @@ type Backend = Arc<Mutex<Result<Bridge, String>>>;
 struct SmokeTest {
     enabled: bool,
     completed: AtomicBool,
+    auth_completed: AtomicBool,
+    mailbox_completed: AtomicBool,
+    categories_completed: AtomicBool,
+    classification_completed: AtomicBool,
+}
+
+impl SmokeTest {
+    fn complete(&self) -> bool {
+        self.completed.load(Ordering::SeqCst)
+            && self.auth_completed.load(Ordering::SeqCst)
+            && self.mailbox_completed.load(Ordering::SeqCst)
+            && self.categories_completed.load(Ordering::SeqCst)
+            && self.classification_completed.load(Ordering::SeqCst)
+    }
 }
 
 #[tauri::command]
@@ -23,7 +40,7 @@ async fn health(
 ) -> Result<Health, String> {
     let backend = backend.inner().clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let mut guard = backend.try_lock().map_err(|_| "Backend is busy")?;
+        let mut guard = backend.lock().map_err(|_| "Backend is busy")?;
         match guard.as_mut() {
             Ok(bridge) => bridge.health(),
             Err(message) => Err(message.clone()),
@@ -41,8 +58,175 @@ async fn health(
         );
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(750));
-            app.exit(0);
+            if app.state::<SmokeTest>().complete() {
+                app.exit(0);
+            }
         });
+    }
+    Ok(result)
+}
+
+async fn account_command(
+    backend: tauri::State<'_, Backend>,
+    method: &'static str,
+) -> Result<AuthStatus, String> {
+    let backend = backend.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) if method == "auth.begin" => bridge.auth_begin(),
+            Ok(bridge) => bridge.auth_status(method),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())?
+}
+#[tauri::command]
+async fn gmail_status(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+) -> Result<AuthStatus, String> {
+    let result = account_command(backend, "auth.status").await?;
+    let smoke = app.state::<SmokeTest>();
+    if smoke.enabled
+        && result.state == "unconfigured"
+        && !smoke.auth_completed.swap(true, Ordering::SeqCst)
+    {
+        eprintln!(
+            "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_auth_ok\"}}"
+        );
+        if smoke.complete() {
+            app.exit(0);
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+async fn gmail_connect(backend: tauri::State<'_, Backend>) -> Result<AuthStatus, String> {
+    account_command(backend, "auth.begin").await
+}
+#[tauri::command]
+async fn gmail_check(backend: tauri::State<'_, Backend>) -> Result<AuthStatus, String> {
+    account_command(backend, "auth.check").await
+}
+#[tauri::command]
+async fn gmail_disconnect(backend: tauri::State<'_, Backend>) -> Result<AuthStatus, String> {
+    account_command(backend, "auth.disconnect").await
+}
+
+#[tauri::command]
+async fn categories_manage(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+    request: CategoryRequest,
+) -> Result<CategoryPage, String> {
+    let backend = backend.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.categories(request),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())??;
+    let smoke = app.state::<SmokeTest>();
+    if smoke.enabled
+        && result.code.as_deref() == Some("unauthorized")
+        && result.rows.is_empty()
+        && !smoke.categories_completed.swap(true, Ordering::SeqCst)
+    {
+        eprintln!(
+            "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_categories_ok\"}}"
+        );
+        if smoke.complete() {
+            app.exit(0);
+        }
+    }
+    Ok(result)
+}
+#[tauri::command]
+async fn classification_review(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+    request: ClassificationRequest,
+) -> Result<ClassificationPage, String> {
+    let backend = backend.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.classifications(request),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())??;
+    let smoke = app.state::<SmokeTest>();
+    if smoke.enabled
+        && result.code.as_deref() == Some("unauthorized")
+        && result.rows.is_empty()
+        && !smoke.classification_completed.swap(true, Ordering::SeqCst)
+    {
+        eprintln!("{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_classification_ok\"}}");
+        if smoke.complete() {
+            app.exit(0);
+        }
+    }
+    Ok(result)
+}
+async fn sync_command(
+    backend: tauri::State<'_, Backend>,
+    start: bool,
+) -> Result<SyncProgress, String> {
+    let backend = backend.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.sync(start),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())?
+}
+#[tauri::command]
+async fn sync_start(backend: tauri::State<'_, Backend>) -> Result<SyncProgress, String> {
+    sync_command(backend, true).await
+}
+#[tauri::command]
+async fn sync_status(backend: tauri::State<'_, Backend>) -> Result<SyncProgress, String> {
+    sync_command(backend, false).await
+}
+#[tauri::command]
+async fn mailbox_list(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+    offset: u32,
+) -> Result<MailboxPage, String> {
+    let backend = backend.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.mailbox(offset),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())??;
+    let smoke = app.state::<SmokeTest>();
+    if smoke.enabled
+        && result.account_id.is_empty()
+        && result.rows.is_empty()
+        && !smoke.mailbox_completed.swap(true, Ordering::SeqCst)
+    {
+        eprintln!(
+            "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_mailbox_ok\"}}"
+        );
+        if smoke.complete() {
+            app.exit(0);
+        }
     }
     Ok(result)
 }
@@ -57,12 +241,12 @@ fn main() {
         }))
         .setup(|app| {
             let smoke_test = std::env::args().any(|arg| arg == "--smoke-test");
-            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false) });
+            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false) });
             if smoke_test {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(20));
-                    if !handle.state::<SmokeTest>().completed.load(Ordering::SeqCst) {
+                    if !handle.state::<SmokeTest>().complete() {
                         eprintln!("{{\"level\":\"ERROR\",\"component\":\"desktop\",\"code\":\"smoke_timeout\"}}");
                         handle.exit(1);
                     }
@@ -76,7 +260,7 @@ fn main() {
             app.manage(Arc::new(Mutex::new(backend)) as Backend);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![health])
+        .invoke_handler(tauri::generate_handler![health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, mailbox_list, categories_manage, classification_review])
         .build(tauri::generate_context!())
         .expect("failed to build MailPilot desktop application");
 

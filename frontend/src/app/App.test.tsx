@@ -1,12 +1,56 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { getHealth } from "../lib/ipc/client";
+import {
+  reviewClassifications,
+  manageCategories,
+  gmailCommand,
+  getHealth,
+  syncCommand,
+  getMailbox,
+} from "../lib/ipc/client";
 
-vi.mock("../lib/ipc/client", () => ({ getHealth: vi.fn() }));
+vi.mock("../lib/ipc/client", () => ({
+  reviewClassifications: vi.fn(),
+  manageCategories: vi.fn(),
+  getHealth: vi.fn(),
+  gmailCommand: vi.fn(),
+  syncCommand: vi.fn(),
+  getMailbox: vi.fn(),
+}));
 describe("desktop status", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(reviewClassifications).mockResolvedValue({
+      accountId: "",
+      rows: [],
+      hasMore: false,
+      processed: 0,
+      errors: 0,
+      code: "unauthorized",
+    });
+    vi.mocked(manageCategories).mockResolvedValue({
+      accountId: "",
+      rows: [],
+      hasMore: false,
+      code: "unauthorized",
+    });
+    vi.mocked(syncCommand).mockResolvedValue({
+      state: "idle",
+      accountId: "",
+      limit: 500,
+      discovered: 0,
+      imported: 0,
+      updated: 0,
+      errors: 0,
+      capped: false,
+    });
+    vi.mocked(getMailbox).mockResolvedValue({
+      accountId: "",
+      rows: [],
+      hasMore: false,
+    });
+    vi.mocked(gmailCommand).mockResolvedValue({ state: "disconnected" });
   });
   it("shows confirmed backend and database status", async () => {
     vi.mocked(getHealth).mockResolvedValue({

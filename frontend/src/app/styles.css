@@ -89,3 +89,107 @@ footer {
   color: #536c64;
   line-height: 1.6;
 }
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+button {
+  padding: 10px 14px;
+  font: inherit;
+  border: 1px solid #176348;
+  border-radius: 8px;
+  background: #176348;
+  color: white;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:focus-visible {
+  outline: 3px solid #b37415;
+  outline-offset: 3px;
+}
+
+main {
+  max-width: 1000px;
+}
+.sync-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.sync-counts dt {
+  font-size: 13px;
+}
+.sync-counts dd {
+  margin: 5px 0;
+  font-weight: 700;
+}
+.mail-table {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+th,
+td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #d8e1d8;
+  overflow-wrap: anywhere;
+}
+td small {
+  display: block;
+  color: #735337;
+}
+.mailbox h2 {
+  margin-top: 20px;
+}
+
+.category-list {
+  padding-left: 1.25rem;
+}
+.category-list li {
+  margin-block: 1rem;
+  overflow-wrap: anywhere;
+}
+form label {
+  display: block;
+  margin-block: 0.75rem;
+}
+form input:not([type="checkbox"]),
+form textarea {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  font: inherit;
+  box-sizing: border-box;
+}
+form textarea {
+  min-height: 6rem;
+}
+button {
+  margin: 0.25rem;
+}
+
+.classification-review caption {
+  text-align: left;
+  margin: 1rem 0;
+  font-weight: 600;
+}
+.classification-review td {
+  vertical-align: top;
+}
+.classification-review td ul {
+  padding-left: 1.25rem;
+  margin-top: 0;
+}
+.classification-review td li {
+  margin-bottom: 0.5rem;
+}

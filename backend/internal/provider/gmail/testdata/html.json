@@ -1,0 +1,12 @@
+{
+  "id": "m1",
+  "threadId": "t1",
+  "internalDate": "1700000000123",
+  "labelIds": ["INBOX", "Label_work"],
+  "payload": {
+    "mimeType": "text/html",
+    "body": {
+      "data": "PGhlYWQ-PHRpdGxlPkhpZGRlbjwvdGl0bGU-PC9oZWFkPjxwPkhlbGxvICZhbXA7IHdlbGNvbWU8L3A-PHNjcmlwdD5zZWNyZXQoKTwvc2NyaXB0PjxpbWcgc3JjPSJodHRwczovL2V4YW1wbGUudGVzdC90cmFja2VyIj48cD5TZWNvbmQgPGI-bGluZTwvYj48L3A-"
+    }
+  }
+}

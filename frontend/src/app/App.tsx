@@ -1,7 +1,12 @@
+import { ClassificationReview } from "../features/classification/ClassificationReview";
+import { Categories } from "../features/categories/Categories";
+import { Mailbox } from "../features/mailbox/Mailbox";
+import { GmailConnection } from "../features/accounts/GmailConnection";
 import { useEffect, useState } from "react";
 import { getHealth, type Health } from "../lib/ipc/client";
 
 export function App() {
+  const [connectionRevision, setConnectionRevision] = useState(0);
   const [health, setHealth] = useState<Health | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -79,6 +84,15 @@ export function App() {
           </p>
         )}
       </section>
+      <GmailConnection
+        onDisconnect={() => setConnectionRevision((value) => value + 1)}
+      />
+      <Mailbox
+        key={connectionRevision}
+        connectionRevision={connectionRevision}
+      />
+      <Categories key={`categories-${connectionRevision}`} />
+      <ClassificationReview key={`classification-${connectionRevision}`} />
       <footer>
         {health
           ? `Version ${health.version} · ${health.database === "connected" ? "Local storage ready" : "Database unavailable"}`
