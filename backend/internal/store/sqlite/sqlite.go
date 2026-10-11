@@ -98,12 +98,15 @@ func migrate(ctx context.Context, db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	var latest int
-	if err = tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0) FROM schema_migrations").Scan(&latest); err != nil {
+	var latest, count int
+	if err = tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0),COUNT(*) FROM schema_migrations").Scan(&latest, &count); err != nil {
 		return 0, err
 	}
 	if latest > len(entries) {
 		return 0, errors.New("database schema is newer than this application")
+	}
+	if latest < 0 || count != latest {
+		return 0, errors.New("migration history is incomplete")
 	}
 	for index, entry := range entries {
 		version, err := strconv.Atoi(strings.SplitN(entry.Name(), "_", 2)[0])

@@ -88,7 +88,7 @@ Default desktop locations:
 - Windows: `%APPDATA%\com.mailpilot.desktop\mailpilot.db`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/com.mailpilot.desktop/mailpilot.db`
 
-SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Version 1 contains only `schema_migrations` and non-secret `settings`. The full email schema in the architecture remains future work. SQLite files are not encrypted.
+SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Version 1 creates the migration ledger and non-secret settings; version 2 adds normalized email storage, accounts, labels, local categories, analysis results and a journal for future reversible actions. SQL-free repositories support transactional idempotent writes and account-scoped retrieval; Gmail synchronization remains unimplemented. SQLite files are not encrypted.
 
 Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to private IPC. Logs omit secrets, message content and filesystem paths. This phase has no persistent log files or telemetry.
 
@@ -138,7 +138,7 @@ This uses the normal local data directory. Supply `--data-dir /absolute/path/to/
 backend/
   cmd/mailpilot-core/           Go entry point and composition
   internal/
-    app/ config/ domain/ ipc/ logging/
+    app/ config/ domain/ ipc/ logging/ repository/
     store/sqlite/migrations/   SQLite initialization and tests
     actions/ ai/ auth/ credentials/ mail/ organize/
     provider/gmail/ risk/ search/ sync/   Documented future boundaries only

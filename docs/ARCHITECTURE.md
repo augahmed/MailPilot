@@ -8,7 +8,7 @@ The current code implements the Go entry point, requested internal package bound
 
 The subsequent domain phase implements provider-neutral email values and an account-bound `EmailProvider` contract with validation and tests (section 4). Concrete adapters and mailbox behavior remain unimplemented.
 
-Schema migration 1 creates only the migration ledger and non-secret settings table. The full mailbox schema in section 6 remains a plan for the local-data phase; it is not installed prematurely. Database health is a real query. The frontend rechecks health periodically and exposes failures.
+Schema migration 1 creates the ledger/settings foundation. Migration 2 now adds the local mail, category, analysis and action-journal schema described in section 6. Repository implementations and temporary-database tests are in place; provider synchronization is not. Database health is a real query, and the frontend exposes connection failures.
 
 The thin Rust host uses `std::process` for its fixed bundled sidecar, avoiding a shell plugin entirely. Only the main window's `health` command is permitted. A single-instance plugin controls desktop ownership; standalone Go runs are development tools and should use a separate data directory when running beside the desktop app. The bounded bootstrap protocol is sequential and does not yet implement jobs, streaming notifications or cancellation APIs. See `contracts/README.md` for the versioned wire contract.
 
@@ -74,6 +74,7 @@ MailPilot/
 │       ├── provider/           # Neutral account-bound provider contracts
 │       │   └── gmail/          # Gmail SDK translation (not implemented yet)
 │       ├── sync/               # Import, delta sync, retries and checkpoints
+│       ├── repository/         # SQL-free local persistence contracts
 │       ├── store/sqlite/       # Explicit SQL, transactions, embedded migrations
 │       │   └── migrations/
 │       ├── mail/               # MIME decoding and bounded normalization
@@ -138,7 +139,7 @@ Capabilities distinguish support for thread fetching, label creation/modificatio
 
 Label application/removal is state-idempotent, but must eventually run through preview/confirmation/journaling/undo in the application layer. Label creation and draft creation are interface contracts only and remain outside the MVP runtime. Draft input is separate from incoming email, allows incomplete drafts, and validates recipient mailbox fields and subject against header injection. The authenticated account determines its sender. Draft creation is a remote write, never sending, and cannot be blindly retried after ambiguous failures. Attachment uploads and reply/thread association are not promised by the initial draft contract. No send, delete, move or arbitrary-provider-request method exists.
 
-There is no concrete provider implementation, OAuth flow, mailbox write, new database migration or frontend command in this phase. Gmail API types may only exist in `internal/provider/gmail`; an import-boundary test enforces that rule. Synthetic adapter tests demonstrate interface substitution, neutral errors and cancellation without claiming to validate a real Gmail integration.
+The domain phase added no concrete provider implementation, OAuth flow, remote mailbox write or frontend command. Local persistence is now implemented separately in section 6. Gmail API types may only exist in `internal/provider/gmail`; an import-boundary test enforces that rule. Synthetic adapter tests demonstrate interface substitution, neutral errors and cancellation without claiming to validate a real Gmail integration.
 
 ### Planned supporting contracts
 
@@ -219,170 +220,66 @@ No database transaction stays open across network calls. Record the attempt, cal
 
 Undo reverses only label membership actually changed by that action: remove labels newly added, restore labels actually removed, and leave unrelated labels alone. Recheck affected labels against the recorded after-state and skip conflicting or deleted messages/labels. Show an undo preview and keep item-level results. Gmail lacks compare-and-swap for this workflow, so an external change between read and write cannot be completely prevented. Even matching state cannot reveal another client's identical intent. Explain this limitation instead of promising perfect restoration. Keep action history for 30 days by default, make expiration visible, and do not purge unresolved operations.
 
-## 6. Initial SQLite schema
+## 6. Implemented SQLite persistence
 
-The following is the intended first schema, documented here rather than installed as a migration. Use one database per application profile, account-scoped rows, UUID strings generated in Go, UTC epoch milliseconds, opaque text provider IDs, and checked JSON for small structured values. Credentials and raw attachments are absent. Account identity uses the provider account key returned by the adapter (Gmail profile address initially); it is distinct from editable display text.
+The local persistence layer is implemented independently of Gmail synchronization. The exact, executable DDL is maintained in [001_settings.sql](../backend/internal/store/sqlite/migrations/001_settings.sql) and [002_mail_storage.sql](../backend/internal/store/sqlite/migrations/002_mail_storage.sql). This schema supersedes the original proposed `messages`, `message_labels`, `risk_assessments`, `actions`, and `action_items` names with the requested `emails`, `email_labels`, `phishing_results`, `mailbox_actions`, and `mailbox_action_items` names. The old mailbox schema was documentation only and was never released as a migration.
 
-```sql
-PRAGMA foreign_keys = ON;
+### Migrations and storage conventions
 
-CREATE TABLE schema_migrations (
-  version INTEGER PRIMARY KEY,
-  checksum TEXT NOT NULL,
-  applied_at INTEGER NOT NULL
-);
-CREATE TABLE accounts (
-  id TEXT PRIMARY KEY,
-  provider TEXT NOT NULL,
-  provider_account_key TEXT NOT NULL,
-  email TEXT NOT NULL,
-  display_name TEXT NOT NULL DEFAULT '',
-  credential_ref TEXT NOT NULL UNIQUE,
-  granted_scopes_json TEXT NOT NULL CHECK(json_valid(granted_scopes_json)),
-  status TEXT NOT NULL CHECK(status IN ('connected','reauth_required','disconnecting','disconnected')),
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  UNIQUE(provider, provider_account_key)
-);
-CREATE TABLE sync_state (
-  account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-  cursor TEXT,
-  bootstrap_cursor TEXT,
-  page_token TEXT,
-  scope_json TEXT NOT NULL CHECK(json_valid(scope_json)),
-  phase TEXT NOT NULL CHECK(phase IN ('idle','bootstrap','delta','reconcile','error')),
-  scan_generation INTEGER NOT NULL DEFAULT 0,
-  scope_complete INTEGER NOT NULL DEFAULT 0 CHECK(scope_complete IN (0,1)),
-  last_success_at INTEGER,
-  last_error_code TEXT,
-  retry_after_at INTEGER
-);
-CREATE TABLE messages (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  provider_message_id TEXT NOT NULL,
-  provider_thread_id TEXT,
-  internet_message_id TEXT,
-  subject TEXT NOT NULL DEFAULT '',
-  sender_text TEXT NOT NULL DEFAULT '',
-  recipients_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(recipients_json)),
-  snippet TEXT NOT NULL DEFAULT '',
-  received_at INTEGER NOT NULL,
-  sent_at INTEGER,
-  size_bytes INTEGER CHECK(size_bytes >= 0),
-  cache_state TEXT NOT NULL CHECK(cache_state IN ('metadata','complete','truncated','malformed','missing')),
-  seen_generation INTEGER NOT NULL DEFAULT 0,
-  remote_deleted_at INTEGER,
-  updated_at INTEGER NOT NULL,
-  UNIQUE(account_id, provider_message_id),
-  UNIQUE(account_id, id)
-);
-CREATE TABLE message_contents (
-  message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-  body_text TEXT NOT NULL,
-  evidence_headers_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(evidence_headers_json)),
-  links_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(links_json)),
-  content_hash TEXT NOT NULL,
-  parser_version TEXT NOT NULL,
-  fetched_at INTEGER NOT NULL
-);
-CREATE TABLE attachments (
-  id TEXT PRIMARY KEY,
-  message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-  provider_attachment_id TEXT,
-  part_key TEXT NOT NULL,
-  filename TEXT NOT NULL DEFAULT '',
-  mime_type TEXT NOT NULL,
-  size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
-  inline INTEGER NOT NULL DEFAULT 0 CHECK(inline IN (0,1)),
-  UNIQUE(message_id, part_key)
-);
-CREATE TABLE labels (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  provider_label_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK(kind IN ('system','user')),
-  remote_deleted_at INTEGER,
-  UNIQUE(account_id, provider_label_id),
-  UNIQUE(account_id, id)
-);
-CREATE TABLE message_labels (
-  account_id TEXT NOT NULL,
-  message_id TEXT NOT NULL,
-  label_id TEXT NOT NULL,
-  PRIMARY KEY(message_id, label_id),
-  FOREIGN KEY(account_id, message_id) REFERENCES messages(account_id, id) ON DELETE CASCADE,
-  FOREIGN KEY(account_id, label_id) REFERENCES labels(account_id, id) ON DELETE CASCADE
-);
-CREATE TABLE risk_assessments (
-  message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-  score INTEGER NOT NULL CHECK(score BETWEEN 0 AND 100),
-  analyzer_version TEXT NOT NULL,
-  input_hash TEXT NOT NULL,
-  findings_json TEXT NOT NULL CHECK(json_valid(findings_json)),
-  assessed_at INTEGER NOT NULL
-);
-CREATE TABLE actions (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL CHECK(kind IN ('label_delta','undo')),
-  reverses_action_id TEXT,
-  status TEXT NOT NULL CHECK(status IN ('preview','applying','applied','partial','failed','cancelled','uncertain','expired')),
-  plan_digest TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  confirmed_at INTEGER,
-  completed_at INTEGER,
-  UNIQUE(account_id, id),
-  FOREIGN KEY(account_id, reverses_action_id) REFERENCES actions(account_id, id)
-);
-CREATE TABLE action_items (
-  action_id TEXT NOT NULL,
-  account_id TEXT NOT NULL,
-  message_id TEXT NOT NULL,
-  provider_message_id TEXT NOT NULL,
-  requested_delta_json TEXT NOT NULL CHECK(json_valid(requested_delta_json)),
-  before_labels_json TEXT NOT NULL CHECK(json_valid(before_labels_json)),
-  actual_delta_json TEXT CHECK(actual_delta_json IS NULL OR json_valid(actual_delta_json)),
-  after_labels_json TEXT CHECK(after_labels_json IS NULL OR json_valid(after_labels_json)),
-  state TEXT NOT NULL CHECK(state IN ('pending','in_flight','applied','failed','uncertain','conflict','skipped')),
-  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
-  last_error_code TEXT,
-  updated_at INTEGER NOT NULL,
-  PRIMARY KEY(action_id, message_id),
-  FOREIGN KEY(account_id, action_id) REFERENCES actions(account_id, id) ON DELETE CASCADE,
-  FOREIGN KEY(account_id, message_id) REFERENCES messages(account_id, id)
-);
-CREATE TABLE settings (
-  key TEXT PRIMARY KEY,
-  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
-  updated_at INTEGER NOT NULL
-);
-CREATE INDEX messages_account_received ON messages(account_id, received_at DESC, id);
-CREATE INDEX messages_account_thread ON messages(account_id, provider_thread_id);
-CREATE INDEX labels_account_name ON labels(account_id, name);
-CREATE INDEX message_labels_by_label ON message_labels(account_id, label_id, message_id);
-CREATE INDEX actions_account_created ON actions(account_id, created_at DESC);
-CREATE INDEX action_items_recovery ON action_items(state, updated_at);
-CREATE VIRTUAL TABLE message_fts USING fts5(
-  message_id UNINDEXED,
-  subject,
-  sender,
-  body,
-  tokenize = 'unicode61'
-);
-```
+- Migration 1 remains unchanged. Migration 2 adds mail persistence. On open, the embedded migration runner checks the complete sequential version history and SHA-256 checksums, rejects future/altered/incomplete histories, and applies pending migrations transactionally. Fresh databases and existing version-1 settings databases both upgrade to version 2. Failures roll back the pending DDL and ledger updates together.
+- `schema_migrations(version PK, checksum, applied_at)` and `settings(key PK, value_json, updated_at)` retain their original structure. The repository layer does not offer an arbitrary settings/secret write API.
+- All timestamps are integer UTC epoch **milliseconds**. Domain values return as UTC `time.Time`, with sub-millisecond precision intentionally truncated. This includes received, created, updated, assessed, expiration, confirmation and completion times. Optional times are SQL NULL, not sentinel dates.
+- Local IDs are opaque cryptographically random strings allocated by Go's standard library, or explicit stable IDs supplied by a trusted caller. Provider identifiers remain opaque text. `(account_id, provider_message_id)` uniquely identifies a remote email; identical provider IDs in different accounts remain independent. An existing identity cannot be rebound to a different local ID.
+- SQLite uses one pooled connection, foreign keys configured on every connection, WAL, a five-second busy timeout and FULL synchronization. All multi-table writes and multi-query email/action reads use transactions. No transaction crosses a network call. SQL and driver objects remain private to `internal/store/sqlite`.
+- Credentials never appear in database columns: accounts contain only an optional OS credential-store reference. Cached mail, HTML, headers, explanations and action history are sensitive local data. SQLite is **not encrypted**. Restrictive app-data/file permissions and full-disk encryption remain the baseline; WAL and backups need the same protection. Copying a live DB without its WAL is not a valid backup strategy.
 
-FTS is a rebuildable derived index, with exactly one row per indexed message enforced by the repository's delete-then-insert operation in the same transaction as content changes. Account isolation comes from joining `message_fts.message_id` to `messages.id` and always filtering `messages.account_id`, including snippets and counts. Never expose an unscoped FTS query. Remove FTS rows transactionally on cache purge or account deletion; virtual tables do not provide the foreign keys above. Escape user input into a bounded literal token query; advanced raw FTS syntax is not an MVP feature. [SQLite FTS5 documentation](https://sqlite.org/fts5.html).
+### Tables and relationships
 
-JSON holds bounded recipient lists, evidence, and immutable action snapshots, not unqueryable replacement tables. Validate JSON shapes and same-account label membership in Go; `json_valid` only checks syntax. Settings use an allowlist of non-secret keys. Labels are retained as tombstones while actions reference their provider IDs. Soft-delete remote messages until dependent action history expires. During full local account removal, delete action items and actions (clear reversal links), FTS rows, then account data in one transaction; credential cleanup is separately recoverable.
+| Table | Stored fields and constraints |
+| --- | --- |
+| `accounts` | `id` PK; provider, opaque provider-account ID, address, display name, nullable credential reference, created/updated times. Unique `(provider, provider_account_id)`. No password or token columns. |
+| `emails` | `id` PK; account FK; provider message/thread IDs; subject; plain-text body; nullable HTML body; received time; ordered headers JSON; attachment metadata JSON; SHA-256 content hash; created/updated times. Unique `(account_id, provider_message_id)` and `(account_id, id)`. Indexes support account/date and account/thread retrieval. |
+| `email_addresses` | Email FK, role (`sender`, `to`, `cc`), position, display name and mailbox. PK `(email_id, role, position)` preserves recipient ordering/duplicates; sender position must be zero. Addresses are message snapshots, not a global contact directory that could collapse differing names or malformed evidence. |
+| `labels` | `id` PK; account FK; provider label ID, display name, `user`/`system` kind. Unique `(account_id, provider_label_id)` and `(account_id, id)`. Label records survive removal from an individual message. |
+| `email_labels` | Account, email and label IDs; PK `(email_id, label_id)`; composite FKs enforce that both parents belong to the same account. Label lookup index supports later organization queries. |
+| `categories` | `id` PK; account FK; nonblank application category name. Unique case-sensitive `(account_id, name)` and `(account_id, id)`. Names are trimmed by the repository. |
+| `email_categories` | Local category assignments. PK `(email_id, category_id)` and composite account FKs. Independent of provider labels and analysis suggestions. |
+| `classification_results` | Account/email/category references; confidence from 0 to 1; classifier version; input hash; explanation; assessed time. PK `(email_id, category_id)` keeps the latest result for each category. Composite FKs prevent cross-account results. |
+| `phishing_results` | One latest result per email: account/email reference; score 0–100; analyzer version; input hash; structured findings JSON; assessed time. Composite account/email FK. Findings are data, not instructions or proof that mail is safe. |
+| `mailbox_actions` | `id` PK; account FK; `label_delta`/`undo` kind; optional same-account reversal reference; status; immutable plan digest; optimistic revision; created/expiration/confirmation/completion times. The reversal reference is required only for undo. Expiration must follow creation. Account/history and recovery indexes. |
+| `mailbox_action_items` | Account/action/email references; preserved provider message ID; requested label delta; before labels; nullable actual delta and after labels; per-message state; attempt count; safe error code; updated time. PK `(action_id, email_id)` and composite account FKs. Referenced emails cannot be hard-deleted while journal items exist. |
 
-Use `database/sql`, explicit SQL and embedded numbered migrations. Enable foreign keys on every connection, WAL, a busy timeout and durable synchronization; initially use one connection to simplify write ordering. Never hold SQL transactions during network or AI work. Migrations run before jobs start, record checksums, and reject a newer unsupported schema. Use SQLite's backup API or a quiescent checkpointed backup, not a live copy of only the database file. Backups are private and carry the same sensitive-data policy.
+JSON columns preserve bounded structured values that are read as a unit: ordered duplicate headers, attachment metadata with nullable sizes, risk explanations, and immutable label snapshots. SQL checks JSON syntax; domain/repository methods validate structure. Empty HTML remains distinct from absent HTML. There are no attachment bytes, raw SDK objects, token payloads, or filesystem attachment paths in these tables.
 
-SQLite is not encrypted by default. OS keyring storage protects credentials, not cached messages, FTS, WAL files, or backups. Store all application data in the per-user OS app-data directory with restrictive permissions; recommend full-disk encryption and document the unlocked-device threat. SQLCipher is deferred pending distribution and key-recovery requirements; do not claim encrypted mail storage. Local deletion cannot guarantee forensic erasure on SSDs or prior backups.
+`EmailCategory` remains a neutral `{ID, Name}` value; repository methods carry the account explicitly. Category IDs cannot be reassigned across accounts. `Email.Categories` is populated by reads; provider snapshot upserts do not write that field. Use `CategoryRepository.Assign`/`Unassign` for intentional local categorization.
 
-No threads table yet: group by account and provider thread ID. No vector, AI history, rules DSL, general task queue, or analytics tables yet. Add migrations only when those features require them.
+### Repository contracts and consistency
+
+`internal/repository` contains SQL-free `EmailRepository`, `CategoryRepository`, `MailboxActionRepository`, and a small supporting `AccountRepository`. Obtain implementations from `Store.Emails()`, `Store.Categories()`, `Store.MailboxActions()`, and `Store.Accounts()`. All operations accept a context; reads and writes carry an account ID. Business logic does not receive a database handle. Errors are safe, recognizable sentinels (`ErrNotFound`, `ErrConflict`, `ErrInvalid`, `ErrStorage`) or context cancellation/deadline errors; raw driver messages/SQL values are not exposed.
+
+- **Accounts:** Upsert identity/contact/reference data without changing the existing local ID or creation time; retrieve by local ID. Account upsert is a complete identity snapshot, so callers must retain an existing credential reference if they want to keep it.
+- **Emails:** Upsert one complete normalized provider snapshot or an atomic batch of at most 100 in one account. The transaction writes the email, replaces its ordered addresses and label membership, and upserts label definitions. Repeated imports reuse email/label IDs and never duplicate relationships. Existing creation times and local category assignments survive; updated time records the latest cache write. A later failure in a batch rolls back every earlier message and child change. An empty batch is a no-op for an existing account.
+- **Retrieval:** Get by local or provider ID, or list a bounded page (1–100 records) ordered by received time descending and ID descending. Reads hydrate bodies, sender/recipients, headers, metadata, labels and local categories without provider calls. Pagination uses offset for local browsing, not as a remote sync checkpoint; a concurrent import can shift later pages. Each call sees one transactional snapshot. Threads can later query the existing account/thread index without a separate threads table.
+- **Categories:** Save/rename, get/list, assign/unassign idempotently, and save/list classification results. Category names are unique within an account; the same name in another account is independent. Analysis suggestions do not automatically assign a category or change Gmail labels.
+- **Analysis:** Compute a stable content hash over normalized sender, To/CC, subject, bodies, received instant, headers and attachment metadata. Hashing excludes identity, thread grouping, provider label membership and local categories. Results must refer to the currently stored hash; stale asynchronous results are rejected. Changed input invalidates prior classification/phishing results in the same email transaction. Label-only updates preserve them. Older assessment timestamps cannot overwrite newer results. Future analyzers must either use these hashed inputs or extend the hash/versioning contract.
+
+Snapshot upsert is not a partial-patch API: callers must provide the normalized cached content they intend to retain. Metadata-only sync, cache completeness states, deletion reconciliation and durable remote cursors will be designed with the sync implementation. No sync jobs or Gmail calls are introduced here.
+
+### Journal design for future undo
+
+`Create` persists a preview and all items atomically, checks same-account email identity, and permits requested mutations only on known user labels. It computes a digest over the canonical initial plan, normalizes label sets, and rejects contradictory/duplicate items. A repeated action ID conflicts rather than overwriting history. Before-label snapshots are evidence supplied by the future preview workflow; creating a local plan does not establish that Gmail is unchanged.
+
+Parent states are `preview`, `applying`, `applied`, `partial`, `failed`, `cancelled`, `uncertain`, `expired`. Item states are `pending`, `in_flight`, `applied`, `failed`, `uncertain`, `conflict`, `skipped`. Starting a nonexpired preview records confirmation time. Each transition/item update requires the expected parent revision and increments it atomically, preventing competing workers from silently overwriting outcomes. In-flight attempts are counted before future provider calls. Recoverable listings include applying/uncertain actions and preserve in-flight items across restarts; they never execute or retry them.
+
+Applied item results require an actual delta and after-state consistent with the requested delta and the recorded before-state; unrelated label changes cannot be represented as this action's verified effects. Nil result fields mean unknown; non-nil empty fields mean a verified no-op. Immutable requested/before snapshots and plan digests remain unchanged. A batch cannot be reported as fully applied while items are pending, conflicted or uncertain. An uncertain item must be reconciled before completion or cancellation and cannot transition directly to another in-flight retry.
+
+Undo will be a separate confirmed action referencing the original action, using verified actual deltas to construct compensating changes and checking live remote state again. This layer stores that provenance; it does not implement undo, provider calls, dry-run UI, remote state verification, or exactly-once delivery. A future action service must validate authorization and digest at confirmation, serialize account work, and distinguish external races. SQLite and Gmail cannot form one atomic transaction.
+
+Email/action deletion APIs are deliberately absent until cache removal, journal retention and recoverable credential cleanup are implemented together. Foreign keys retain journal evidence. FTS/vector indexes, sync cursor tables, full-text search APIs and additional providers remain later migrations rather than unused tables in this phase.
+
+### Persistence verification
+
+Temporary on-disk SQLite tests start from clean databases and also construct a genuine version-1 database for upgrade testing. Coverage includes clean/repeated migrations, checksum/future-version rejection, migration rollback, private-file/pragma settings, normalized round trips, nullable values, millisecond UTC timestamps, account uniqueness/isolation, batch rollback, concurrent replays, local category preservation, stale-analysis rejection, SQL-level foreign keys, journal restart recovery, immutable previews, optimistic concurrency, partial/uncertain results, expiration and undo provenance. No personal mail or provider credentials are used.
 
 ## 7. Risk detection and optional intelligence
 

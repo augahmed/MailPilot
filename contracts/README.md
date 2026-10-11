@@ -33,12 +33,12 @@ The only frontend command is Tauri `health`, without arguments. Rust sends:
     "protocolVersion": 1,
     "backend": "connected",
     "database": "connected",
-    "schemaVersion": 1
+    "schemaVersion": 2
   }
 }
 ```
 
-`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. Schema version 1 creates only the migration ledger and non-secret settings table; mailbox tables await the next phase.
+`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. Schema version 2 includes normalized mailbox persistence and the action journal; migration 1 remains the unchanged settings foundation. The wire protocol remains version 1.
 
 The host may send `shutdown` with empty parameters, receiving `{"stopping":true}`, or close stdin for clean shutdown. The UI cannot invoke initialize, shutdown, SQL, shell commands, filesystem paths, or arbitrary method names. Unknown fields/methods, mismatched protocol versions and malformed requests are rejected. Standard JSON-RPC error codes are used, plus `-32001` for a missing handshake; errors contain no underlying database paths or diagnostics. Logs are structured JSON on stderr.
 
