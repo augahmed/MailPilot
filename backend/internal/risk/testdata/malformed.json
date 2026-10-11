@@ -1,0 +1,25 @@
+{
+  "AccountID": "synthetic-account",
+  "ID": "synthetic-email",
+  "BodyState": "complete",
+  "Sender": {
+    "Address": "fallback@example.com"
+  },
+  "Subject": "ordinary update",
+  "BodyText": "https://[broken http://%zz.example/ https://valid.example/",
+  "BodyHTML": "<a href=\"https://destination.example/\"><b>https://visible.example/</b><form action=\"/submit\">",
+  "Headers": [
+    {
+      "Name": "From",
+      "Value": "broken <address"
+    },
+    {
+      "Name": "Reply-To",
+      "Value": "one@example.com\nInjected: sender@example.org"
+    },
+    {
+      "Name": "Authentication-Results",
+      "Value": "mail.example.test; spf=pass reason=\"unfinished; dmarc=fail"
+    }
+  ]
+}

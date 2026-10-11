@@ -13,7 +13,7 @@ Backend connected
 Database connected
 ```
 
-Gmail OAuth, OS-secure refresh-token storage, and connection controls are implemented. Follow [Gmail development setup](docs/GMAIL_SETUP.md) to connect a dedicated test account. Bounded manual Inbox import and a cached mailbox summary are implemented. Organization, phishing analysis, search, and AI remain unimplemented. The local application works without an account or external service. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
+Gmail OAuth, OS-secure refresh-token storage, and connection controls are implemented. Follow [Gmail development setup](docs/GMAIL_SETUP.md) to connect a dedicated test account. Bounded manual Inbox import and a cached mailbox summary are implemented. User-defined categories, local rule classification, reviewed Gmail label organization and structured offline phishing feature extraction are implemented. Phishing scoring/review, search and AI remain unimplemented. The local application works without an account or external service. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
 
 ## Prerequisites
 
@@ -88,7 +88,7 @@ Default desktop locations:
 - Windows: `%APPDATA%\com.mailpilot.desktop\mailpilot.db`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/com.mailpilot.desktop/mailpilot.db`
 
-SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Version 1 creates the migration ledger and non-secret settings; version 2 adds normalized email storage, accounts, labels, local categories, analysis results and a journal for future reversible actions. SQL-free repositories support transactional idempotent writes and account-scoped retrieval; version 3 adds cached body completeness and provider content identity for bounded Gmail imports. Version 4 adds category metadata/defaults, and version 5 adds structured rule evidence and complete classification assessments, including unclassified results. SQLite files are not encrypted.
+SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Version 1 creates the migration ledger and non-secret settings; version 2 adds normalized email storage, accounts, labels, local categories, analysis results and a journal for future reversible actions. SQL-free repositories support transactional idempotent writes and account-scoped retrieval; version 3 adds cached body completeness and provider content identity for bounded Gmail imports. Version 4 adds category metadata/defaults, and version 5 adds structured rule evidence and complete classification assessments, including unclassified results. Version 6 adds immutable organization plans and remote-write evidence under the action journal. SQLite files are not encrypted.
 
 Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to private IPC. Logs omit secrets, message content and filesystem paths. This phase has no persistent log files or telemetry.
 
@@ -143,7 +143,8 @@ backend/
     auth/ credentials/ provider/gmail/   OAuth lifecycle, keyring, Google adapter
     mail/ sync/                    MIME normalization and bounded imports
     classification/                    Local rule engine and starter configuration
-    actions/ ai/ organize/ risk/ search/   Future feature boundaries
+    organize/                          Reviewed Gmail label plans and undo
+    risk/                              Structured offline phishing observations
 frontend/
   src/app/                     Status screen, styles and UI tests
   src/features/accounts/       Gmail connection controls
@@ -193,3 +194,7 @@ After classifying mail, open **Gmail organization**, refresh the selection table
 Categories map to `MailPilot/<category name>` user labels. Existing exact-name labels are reused; missing ones are created when a preview is confirmed. MailPilot never deletes labels/emails, archives messages or changes system labels. Definition/name changes affect future mappings without renaming old Gmail labels. Completed writes and partial/uncertain outcomes persist under mailbox_actions. **Stop organization** cancels remaining work; a dispatched write can remain uncertain. **Reconcile interrupted batch** reads Gmail and records what can be established without replaying a write.
 
 **Preview undo last batch** shows only label memberships MailPilot successfully added and verified. Confirm undo separately. Inbox, pre-existing and unrelated Gmail labels are preserved; created labels stay in Gmail. Ambiguous additions are excluded from undo because ownership cannot be proven. Repeated confirmed undo is rejected, and partial/conflicting outcomes remain visible. Concurrent changes to the same label membership cannot be perfectly attributed. Organization uses synthetic tests; no personal mailbox is modified by the validation suite.
+
+## Phishing feature extraction
+
+The Go extractor returns structured address/authentication, URL/link, attachment, HTML-form and language observations with parser limitations. It is separate from scoring and uses no network, LLM or external threat service. Authentication header claims remain unverified; missing content/evidence never establishes safety. This stage has no risk score, persistence or UI yet. See [supported signals, limits and synthetic fixtures](docs/PHISHING_FEATURES.md).

@@ -1,3 +1,3 @@
-// Package risk reserves the boundary for explained local phishing risk.
-// No feature behavior is implemented in the desktop bootstrap.
+// Package risk extracts bounded, local phishing observations. Extraction is
+// separate from scoring; no score, trust verdict or mailbox action is produced.
 package risk

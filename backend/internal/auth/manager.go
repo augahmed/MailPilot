@@ -88,6 +88,8 @@ func (m *Manager) startLocked(state string, work func(context.Context) (Status, 
 					m.session, m.sessionCancel = context.WithCancel(m.root)
 				}
 				m.accountID = status.AccountID
+			} else if sessionRejected(status) {
+				m.endSessionLocked()
 			}
 			m.status = status
 			m.grant = grant
@@ -95,6 +97,13 @@ func (m *Manager) startLocked(state string, work func(context.Context) (Status, 
 		}
 	}()
 	return ctx
+}
+
+// Definitive credential rejection ends account authorization. A temporary
+// provider/network failure does not revoke an already authorized local cache;
+// remote requests still require successful token retrieval.
+func sessionRejected(status Status) bool {
+	return status.State == "disconnected" || status.State == "reauth_required" || status.Code == "credential_store_unavailable" || status.Code == "required_scope_missing" || status.Code == "consent_denied"
 }
 func failure(err error) Status {
 	code := "authentication_failed"
@@ -324,6 +333,9 @@ func (m *Manager) AccessToken(ctx context.Context, account domain.AccountID) (cr
 	if status.State != "connected" || status.AccountID != account {
 		m.status = status
 		m.grant = Grant{}
+		if sessionRejected(status) {
+			m.endSessionLocked()
+		}
 		return credentials.Secret{}, ErrExpired
 	}
 	m.status = status

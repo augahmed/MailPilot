@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { Organization } from "./Organization";
 import { organize, type OrganizationResponse } from "../../lib/ipc/client";
@@ -190,4 +196,122 @@ it("clears cached mail when the session becomes unauthorized", async () => {
   expect(
     screen.queryByRole("checkbox", { name: "Select Your receipt" }),
   ).not.toBeInTheDocument();
+});
+
+it("ignores an older initial status after the user reviews a newer preview", async () => {
+  let resolveOldStatus!: (value: OrganizationResponse) => void;
+  const oldStatus = new Promise<OrganizationResponse>((resolve) => {
+    resolveOldStatus = resolve;
+  });
+  const reviewed = {
+    ...preview,
+    id: "reviewed-action",
+    expiresAt: Date.now() + 300000,
+    rows: preview.rows.map((row) => ({
+      ...row,
+      subject: "New reviewed preview",
+    })),
+  };
+  vi.mocked(organize).mockImplementation(async (request) => {
+    if (request.operation === "list") return page;
+    if (request.operation === "status") return oldStatus;
+    return reviewed;
+  });
+  render(<Organization />);
+  await screen.findByText("Your receipt");
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "Select Your receipt" }),
+  );
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "Dry Run (read only)" }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Generate apply preview" }),
+  );
+  await screen.findByText("New reviewed preview");
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "I confirm these Gmail label changes.",
+    }),
+  );
+  await act(async () => {
+    resolveOldStatus({ ...reviewed, id: "old-action", rows: preview.rows });
+  });
+  expect(screen.getByText("New reviewed preview")).toBeInTheDocument();
+  expect(screen.queryByText("Your receipt")).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Apply selected labels" }),
+  );
+  await waitFor(() =>
+    expect(organize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "apply",
+        actionId: "reviewed-action",
+      }),
+    ),
+  );
+});
+
+it("reports cancellation transport failures instead of rejecting silently", async () => {
+  let finishStatus!: (value: OrganizationResponse) => void;
+  const working = new Promise<OrganizationResponse>((resolve) => {
+    finishStatus = resolve;
+  });
+  let previewRequested = false;
+  vi.mocked(organize).mockImplementation(async (request) => {
+    if (request.operation === "list") return page;
+    if (request.operation === "cancel")
+      throw new Error("synthetic transport failure");
+    if (request.operation === "dry_run") {
+      previewRequested = true;
+      return { ...idle, state: "running" };
+    }
+    return previewRequested ? working : idle;
+  });
+  const { unmount } = render(<Organization />);
+  await screen.findByText("Your receipt");
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "Select Your receipt" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Run Dry Run" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Stop organization" }),
+  );
+  await screen.findByText(
+    "Could not stop organization. Refresh batch status to check recorded outcomes.",
+  );
+  unmount();
+  await act(async () => {
+    finishStatus(idle);
+  });
+});
+
+it("does not overlap slow background status polls", async () => {
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      render(<Organization />);
+    });
+    let resolveStatus!: (value: OrganizationResponse) => void;
+    vi.mocked(organize).mockClear();
+    vi.mocked(organize).mockReturnValue(
+      new Promise((resolve) => {
+        resolveStatus = resolve;
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(organize).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveStatus(idle);
+    });
+    vi.mocked(organize).mockResolvedValue(idle);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(organize).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });

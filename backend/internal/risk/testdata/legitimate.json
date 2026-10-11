@@ -1,0 +1,35 @@
+{
+  "AccountID": "synthetic-account",
+  "ID": "synthetic-email",
+  "BodyState": "complete",
+  "Sender": {
+    "Address": "updates@shop.example.com"
+  },
+  "Subject": "Your receipt",
+  "BodyText": "Thank you for your purchase. Visit https://shop.example.com/orders/123.",
+  "BodyHTML": "<p>Thank you for your purchase.</p><a href=\"https://shop.example.com/orders/123\">https://shop.example.com/orders/123</a>",
+  "Headers": [
+    {
+      "Name": "From",
+      "Value": "Example Shop <updates@shop.example.com>"
+    },
+    {
+      "Name": "Reply-To",
+      "Value": "support@shop.example.com"
+    },
+    {
+      "Name": "Return-Path",
+      "Value": "<bounces@shop.example.com>"
+    },
+    {
+      "Name": "Authentication-Results",
+      "Value": "mail.example.test; spf=pass smtp.mailfrom=shop.example.com; dkim=pass header.d=shop.example.com; dmarc=pass header.from=shop.example.com"
+    }
+  ],
+  "Attachments": [
+    {
+      "Filename": "receipt.pdf",
+      "MIMEType": "application/pdf"
+    }
+  ]
+}

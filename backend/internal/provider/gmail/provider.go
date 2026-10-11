@@ -37,10 +37,26 @@ func NewProvider(account domain.AccountID, tokens TokenSource) *Provider {
 func (*Provider) Capabilities() provider.Capabilities {
 	return provider.Capabilities{CreateLabels: true, ModifyLabels: true}
 }
-func (p *Provider) Authenticate(ctx context.Context) (provider.Account, error) {
+
+// Keep credential/cancellation checks consistent across read and write paths.
+// Only sanitized provider errors leave this adapter; token-source errors may
+// contain credential-store or OAuth details.
+func (p *Provider) accessToken(ctx context.Context) (credentials.Secret, error) {
+	if err := ctx.Err(); err != nil {
+		return credentials.Secret{}, err
+	}
 	token, err := p.tokens.AccessToken(ctx, p.account)
+	if err := ctx.Err(); err != nil {
+		return credentials.Secret{}, err
+	}
 	if err != nil || token.Empty() {
-		return provider.Account{}, provider.ErrAuthenticationRequired
+		return credentials.Secret{}, provider.ErrAuthenticationRequired
+	}
+	return token, nil
+}
+func (p *Provider) Authenticate(ctx context.Context) (provider.Account, error) {
+	if _, err := p.accessToken(ctx); err != nil {
+		return provider.Account{}, err
 	}
 	return provider.Account{ID: p.account, Provider: "gmail"}, nil
 }
@@ -48,12 +64,9 @@ func (p *Provider) Authenticate(ctx context.Context) (provider.Account, error) {
 // GET-only transport with bounded retries and no raw errors or response logging.
 func (p *Provider) get(ctx context.Context, path string, q url.Values, dst any) error {
 	for attempt := 0; attempt < 3; attempt++ {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		token, err := p.tokens.AccessToken(ctx, p.account)
+		token, err := p.accessToken(ctx)
 		if err != nil {
-			return provider.ErrAuthenticationRequired
+			return err
 		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+path+"?"+q.Encode(), nil)
 		if err != nil {

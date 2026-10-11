@@ -472,3 +472,108 @@ func TestSyncTokenBoundaryAndDisconnectCancellation(t *testing.T) {
 		t.Fatal("disconnected token returned")
 	}
 }
+
+func TestRejectedCredentialsInvalidateExistingAccountSession(t *testing.T) {
+	for _, cause := range []string{"revoked", "consent_denied", "missing_scope", "credential_store_unavailable", "missing_credentials"} {
+		t.Run(cause, func(t *testing.T) {
+			m, store, p, _ := managerFixture(t)
+			signIn(t, m)
+			_, session, err := m.Session()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := "reauth_required"
+			switch cause {
+			case "revoked":
+				p.mu.Lock()
+				p.refreshErr = ErrExpired
+				p.mu.Unlock()
+			case "consent_denied", "missing_scope":
+				p.mu.Lock()
+				if cause == "consent_denied" {
+					p.refreshErr = ErrDenied
+				} else {
+					p.refreshErr = ErrScope
+				}
+				p.mu.Unlock()
+				expected = "error"
+			case "credential_store_unavailable":
+				store.mu.Lock()
+				store.failure = credentials.ErrUnavailable
+				store.mu.Unlock()
+				expected = "error"
+			case "missing_credentials":
+				if err := store.Delete(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+				expected = "disconnected"
+			}
+			m.Check()
+			waitStatus(t, m, expected)
+			if session.Err() != context.Canceled {
+				t.Fatal("failed check retained existing session")
+			}
+			if _, _, err := m.Session(); !errors.Is(err, ErrExpired) {
+				t.Fatal("failed check still authorizes cached account")
+			}
+			p.mu.Lock()
+			p.refreshErr = nil
+			p.mu.Unlock()
+			store.mu.Lock()
+			store.failure = nil
+			store.mu.Unlock()
+			if cause != "missing_credentials" {
+				m.Check()
+				waitStatus(t, m, "connected")
+				_, renewed, err := m.Session()
+				if err != nil || renewed == session || renewed.Err() != nil {
+					t.Fatal("successful retry did not create a fresh session")
+				}
+			}
+		})
+	}
+}
+func TestFailedAccessTokenRefreshInvalidatesSession(t *testing.T) {
+	m, _, p, _ := managerFixture(t)
+	signIn(t, m)
+	account, session, err := m.Session()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	m.grant.Expiry = time.Now().Add(-time.Minute)
+	m.mu.Unlock()
+	p.mu.Lock()
+	p.refreshErr = ErrExpired
+	p.mu.Unlock()
+	if _, err := m.AccessToken(context.Background(), account); !errors.Is(err, ErrExpired) {
+		t.Fatal("revoked refresh accepted")
+	}
+	if session.Err() != context.Canceled {
+		t.Fatal("failed token refresh retained old session")
+	}
+	if _, _, err := m.Session(); !errors.Is(err, ErrExpired) {
+		t.Fatal("failed token refresh still authorizes account")
+	}
+}
+
+func TestTransientRefreshFailurePreservesOfflineCacheSession(t *testing.T) {
+	m, _, p, _ := managerFixture(t)
+	signIn(t, m)
+	account, session, err := m.Session()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	p.refreshErr = ErrFailed
+	p.mu.Unlock()
+	m.Check()
+	waitStatus(t, m, "error")
+	id, current, err := m.Session()
+	if err != nil || id != account || current != session || session.Err() != nil {
+		t.Fatal("transient provider failure revoked local cache authorization")
+	}
+	if _, err := m.AccessToken(context.Background(), account); !errors.Is(err, ErrExpired) {
+		t.Fatal("failed refresh authorized provider traffic")
+	}
+}

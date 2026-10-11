@@ -26,6 +26,8 @@ export function Categories() {
   const [description, setDescription] = useState("");
   const [enabled, setEnabled] = useState(true);
   const active = useRef(true);
+  const pending = useRef(false);
+  const revision = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     active.current = true;
@@ -36,6 +38,9 @@ export function Categories() {
   async function run(
     request: Partial<CategoryRequest> & Pick<CategoryRequest, "operation">,
   ) {
+    if (pending.current) return;
+    pending.current = true;
+    revision.current++;
     setBusy(true);
     setMessage("");
     try {
@@ -62,19 +67,23 @@ export function Categories() {
       if (active.current)
         setMessage("Cannot reach category storage. Try again.");
     } finally {
+      pending.current = false;
       if (active.current) setBusy(false);
     }
   }
   useEffect(() => {
     let current = true;
+    const initialRevision = revision.current;
     void manageCategories({ operation: "list" })
       .then((result) => {
-        if (!current) return;
+        if (!current || pending.current || initialRevision !== revision.current)
+          return;
         if (result.code) setMessage(messages[result.code]);
         else setPage(result);
       })
       .catch(() => {
-        if (current) setMessage("Cannot reach category storage. Try again.");
+        if (current && !pending.current && initialRevision === revision.current)
+          setMessage("Cannot reach category storage. Try again.");
       });
     return () => {
       current = false;

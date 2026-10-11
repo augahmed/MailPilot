@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   organize,
   type OrganizationRequest,
@@ -36,14 +36,23 @@ export function Organization() {
   }, []);
   const mounted = useRef(false);
   const pending = useRef(false);
+  const revision = useRef(0);
   const account = useRef("");
+  const clearAccount = useCallback(() => {
+    account.current = "";
+    setPage(null);
+    setBatch(null);
+    setSelected([]);
+    setConfirmed(false);
+  }, []);
   useEffect(() => {
     let active = true;
+    const current = ++revision.current;
     mounted.current = true;
     async function load() {
       try {
         const result = await organize({ operation: "list", offset });
-        if (!active) return;
+        if (!active || pending.current || current !== revision.current) return;
         if (account.current && account.current !== result.accountId) {
           setBatch(null);
           setSelected([]);
@@ -57,13 +66,21 @@ export function Organization() {
             operation: "status",
             accountId: result.accountId,
           });
-          if (active) {
-            setBatch(saved);
-            setError(messages[saved.code] ?? "");
+          if (active && !pending.current && current === revision.current) {
+            if (
+              saved.code === "unauthorized" ||
+              (saved.accountId && saved.accountId !== result.accountId)
+            ) {
+              clearAccount();
+              setError(messages.unauthorized ?? "");
+            } else {
+              setBatch(saved);
+              setError(messages[saved.code] ?? "");
+            }
           }
         }
       } catch {
-        if (active)
+        if (active && !pending.current && current === revision.current)
           setError(
             "Cannot reach Gmail organization. Retry or restart MailPilot.",
           );
@@ -74,46 +91,67 @@ export function Organization() {
       active = false;
       mounted.current = false;
     };
-  }, [offset]);
+  }, [offset, clearAccount]);
   useEffect(() => {
     let active = true;
-    const timer = setInterval(() => {
-      if (pending.current || !account.current) return;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      const current = revision.current;
       const expected = account.current;
-      void organize({ operation: "status", accountId: expected })
-        .then((result) => {
-          if (!active || pending.current || expected !== account.current)
-            return;
-          if (
-            result.code === "unauthorized" ||
-            (result.accountId && result.accountId !== expected)
-          ) {
-            account.current = "";
-            setPage(null);
-            setBatch(null);
-            setSelected([]);
-            setConfirmed(false);
-            setError(messages.unauthorized ?? "");
-          } else if (
-            result.state === "uncertain" ||
-            result.state === "applying"
-          )
-            setBatch(result);
-        })
-        .catch(() => {
-          if (active)
-            setError(
-              "Cannot reach Gmail organization. Refresh recorded outcomes before continuing.",
-            );
+      try {
+        if (pending.current || !expected) return;
+        const result = await organize({
+          operation: "status",
+          accountId: expected,
         });
+        if (
+          !active ||
+          pending.current ||
+          current !== revision.current ||
+          expected !== account.current
+        )
+          return;
+        if (
+          result.code === "unauthorized" ||
+          (result.accountId && result.accountId !== expected)
+        ) {
+          clearAccount();
+          setError(messages.unauthorized ?? "");
+        } else if (
+          result.state === "uncertain" ||
+          result.state === "applying"
+        ) {
+          setBatch(result);
+          setConfirmed(false);
+        }
+      } catch {
+        if (
+          active &&
+          !pending.current &&
+          current === revision.current &&
+          expected === account.current
+        )
+          setError(
+            "Cannot reach Gmail organization. Refresh recorded outcomes before continuing.",
+          );
+      } finally {
+        if (active)
+          timer = setTimeout(() => {
+            void poll();
+          }, 5000);
+      }
+    }
+    timer = setTimeout(() => {
+      void poll();
     }, 5000);
     return () => {
       active = false;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
-  }, []);
+  }, [clearAccount]);
   async function act(operation: OrganizationRequest["operation"]) {
     if (pending.current) return;
+    revision.current++;
     pending.current = true;
     setBusy(true);
     setError("");
@@ -140,19 +178,19 @@ export function Organization() {
       if (!mounted.current || account.current !== expectedAccount) return;
       if (
         result.code === "unauthorized" ||
-        (result.accountId && result.accountId !== expectedAccount)
+        (expectedAccount &&
+          result.accountId &&
+          result.accountId !== expectedAccount)
       ) {
-        setBatch(null);
-        setPage(null);
-        setSelected([]);
+        clearAccount();
         setError(
           messages[result.code] ?? "Account changed. Refresh organization.",
         );
-        account.current = "";
         return;
       }
       setError(messages[result.code] ?? "");
       if (operation === "list") {
+        account.current = result.accountId;
         setPage(result);
         setSelected([]);
         setBatch(null);
@@ -353,7 +391,15 @@ export function Organization() {
       {busy && (
         <button
           onClick={() => {
-            void organize({ operation: "cancel", accountId: account.current });
+            const expected = account.current;
+            void organize({ operation: "cancel", accountId: expected }).catch(
+              () => {
+                if (mounted.current && expected === account.current)
+                  setError(
+                    "Could not stop organization. Refresh batch status to check recorded outcomes.",
+                  );
+              },
+            );
           }}
         >
           Stop organization

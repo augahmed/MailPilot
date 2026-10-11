@@ -367,3 +367,19 @@ func TestOrganizationResponsesBoundJSONEscaping(t *testing.T) {
 		t.Fatal("oversized escaped response reached bridge")
 	}
 }
+
+type failedOrganizationResults struct {
+	repository.ClassificationRepository
+}
+
+func (failedOrganizationResults) Get(context.Context, domain.AccountID, domain.EmailID) (domain.ClassificationRun, error) {
+	return domain.ClassificationRun{}, repository.ErrStorage
+}
+func TestOrganizationListReportsAssessmentReadFailure(t *testing.T) {
+	s, _, _ := organizationFixture(t)
+	s.results = failedOrganizationResults{s.results}
+	r := s.Handle(context.Background(), OrganizationRequest{Operation: "list", AccountID: "a"})
+	if r.Code != "operation_failed" || len(r.Rows) != 0 {
+		t.Fatal("storage failure silently appeared as unclassified mail")
+	}
+}

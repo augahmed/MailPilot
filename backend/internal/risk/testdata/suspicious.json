@@ -1,0 +1,35 @@
+{
+  "AccountID": "synthetic-account",
+  "ID": "synthetic-email",
+  "BodyState": "complete",
+  "Sender": {
+    "Address": "alerts@bank.example.com"
+  },
+  "Subject": "URGENT: Action required",
+  "BodyText": "Your account suspended. Act now within 24 hours. Verify your account and enter your credentials and password. https://192.0.2.10/login https://[2001:db8::10]/login https://xn--bcher-kva.example/verify",
+  "BodyHTML": "<p>Security alert: confirm your password immediately.</p><a href=\"https://login.attacker.example:8443/signin?redirect=https%3A%2F%2Fother.example%2F\">https://bank.example.com</a><form action=\"https://192.0.2.10/submit\"><input type=\"password\" name=\"password\"></form>",
+  "Headers": [
+    {
+      "Name": "From",
+      "Value": "Example Bank <alerts@bank.example.com>"
+    },
+    {
+      "Name": "Reply-To",
+      "Value": "help@attacker.example"
+    },
+    {
+      "Name": "Return-Path",
+      "Value": "<bounces@attacker.example>"
+    },
+    {
+      "Name": "Authentication-Results",
+      "Value": "mail.example.test; spf=fail smtp.mailfrom=attacker.example; dkim=fail reason=\"signature mismatch\" header.d=bank.example.com; dmarc=fail header.from=bank.example.com"
+    }
+  ],
+  "Attachments": [
+    {
+      "Filename": "Account-Notice.pdf.EXE",
+      "MIMEType": "application/octet-stream"
+    }
+  ]
+}

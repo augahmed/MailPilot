@@ -266,7 +266,10 @@ func (r *organizationRepository) Update(ctx context.Context, p domain.Organizati
 		if err != nil {
 			return err
 		}
-		steps, _ := encode(p.Steps)
+		steps, err := encode(p.Steps)
+		if err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, `UPDATE organization_plans SET steps_json=? WHERE account_id=? AND action_id=?`, steps, p.AccountID, p.ID)
 		return err
 	})

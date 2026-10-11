@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { Categories } from "./Categories";
 import { manageCategories, type CategoryPage } from "../../lib/ipc/client";
@@ -118,4 +124,30 @@ it("pages and renders hostile names as text", async () => {
     }),
   );
   expect(container.querySelector("img")).toBeNull();
+});
+
+it("ignores a late initial list after a newer request denies account access", async () => {
+  let resolveInitial!: (value: CategoryPage) => void;
+  vi.mocked(manageCategories).mockReturnValueOnce(
+    new Promise((resolve) => {
+      resolveInitial = resolve;
+    }),
+  );
+  vi.mocked(manageCategories).mockResolvedValue({
+    accountId: "",
+    rows: [],
+    hasMore: false,
+    code: "unauthorized",
+  });
+  render(<Categories />);
+  fireEvent.click(screen.getByRole("button", { name: "Refresh categories" }));
+  await screen.findByText(
+    "Connect your account to manage its local categories.",
+  );
+  await act(async () => {
+    resolveInitial(page);
+  });
+  expect(
+    screen.queryByRole("button", { name: "Edit School" }),
+  ).not.toBeInTheDocument();
 });

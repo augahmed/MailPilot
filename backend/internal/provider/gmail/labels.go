@@ -18,12 +18,9 @@ import (
 // POST is dispatched exactly once. Any failure is conservatively uncertain;
 // only the journal workflow may reconcile it. It never retries a write.
 func (p *Provider) post(ctx context.Context, path string, payload, dst any) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	token, err := p.tokens.AccessToken(ctx, p.account)
-	if err != nil || token.Empty() {
-		return provider.ErrAuthenticationRequired
+	token, err := p.accessToken(ctx)
+	if err != nil {
+		return err
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
