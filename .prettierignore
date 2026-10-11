@@ -1,0 +1,8 @@
+node_modules
+dist
+target
+src-tauri/gen
+src-tauri/binaries
+package-lock.json
+AGENTS.md
+docs/ARCHITECTURE.md

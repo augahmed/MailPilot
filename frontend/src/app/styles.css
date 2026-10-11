@@ -1,0 +1,91 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #17342f;
+  background: #f5f7f3;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+}
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 64px 28px 32px;
+}
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  background: #176348;
+  color: white;
+  border-radius: 15px;
+  font-size: 28px;
+  font-weight: 700;
+}
+.eyebrow {
+  margin: 28px 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  font-weight: 700;
+  color: #536c64;
+}
+h1 {
+  font-size: clamp(40px, 8vw, 54px);
+  letter-spacing: -0.055em;
+  margin: 0;
+  line-height: 1.1;
+}
+.subtitle {
+  font-size: 19px;
+  color: #536c64;
+  margin-top: 12px;
+}
+.status-card {
+  margin-top: 36px;
+  padding: 24px;
+  border: 1px solid #d8e1d8;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 28px #153a2c05;
+}
+h2 {
+  font-size: 14px;
+  margin: 0 0 22px;
+}
+.status-card p {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  margin: 14px 0;
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #8a7462;
+  flex-shrink: 0;
+}
+.dot.connected {
+  background: #278354;
+  box-shadow: 0 0 0 4px #edf6ef;
+}
+.status-card .help {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #735337;
+  margin: 22px 0 0;
+}
+footer {
+  margin-top: 28px;
+  font-size: 12px;
+  color: #536c64;
+  line-height: 1.6;
+}

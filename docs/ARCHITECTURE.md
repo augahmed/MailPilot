@@ -1,6 +1,18 @@
 # MailPilot architecture
 
-Status: proposed implementation baseline, prepared for review on 2026-10-10. The technology choices and product principles come from the project brief; implementation details below are recommendations, not a claim of prior approval. This change adds documentation only.
+Status: implementation baseline, initially proposed on 2026-10-10. The desktop bootstrap is now authorized and implemented; later product phases below remain planned.
+
+### Bootstrap implementation status
+
+The current code implements the Go entry point, requested internal package boundaries, non-secret configuration, structured stderr logging, React status UI, native Tauri lifecycle, bounded private JSON-RPC handshake/health/shutdown, and SQLite initialization. `config` and `logging` are small supporting packages added to the target layout. Future feature packages contain documentation only, as requested for this bootstrap; they do not implement Gmail or other mailbox behavior.
+
+The subsequent domain phase implements provider-neutral email values and an account-bound `EmailProvider` contract with validation and tests (section 4). Concrete adapters and mailbox behavior remain unimplemented.
+
+Schema migration 1 creates only the migration ledger and non-secret settings table. The full mailbox schema in section 6 remains a plan for the local-data phase; it is not installed prematurely. Database health is a real query. The frontend rechecks health periodically and exposes failures.
+
+The thin Rust host uses `std::process` for its fixed bundled sidecar, avoiding a shell plugin entirely. Only the main window's `health` command is permitted. A single-instance plugin controls desktop ownership; standalone Go runs are development tools and should use a separate data directory when running beside the desktop app. The bounded bootstrap protocol is sequential and does not yet implement jobs, streaming notifications or cancellation APIs. See `contracts/README.md` for the versioned wire contract.
+
+Implemented dependencies and native build instructions are in `README.md` and locked manifests. Unneeded provider, credential, AI, vector, HTML, query-cache and browser-automation dependencies are deferred. Generated icons come from a checked-in SVG. Native smoke mode exercises the real WebView-to-SQLite path using a disposable profile and graceful shutdown. Public signing, notarization, installers beyond the tested macOS app bundle, and Windows/Linux qualification remain release work.
 
 ## 1. Product and MVP boundary
 
@@ -59,7 +71,8 @@ MailPilot/
 │       ├── ipc/                # Framing, dispatch, DTO validation, cancellation
 │       ├── auth/               # OAuth sessions, refresh coordination, revocation
 │       ├── credentials/        # OS keyring adapter; no file fallback
-│       ├── provider/gmail/     # Gmail SDK translation, capabilities, cursors
+│       ├── provider/           # Neutral account-bound provider contracts
+│       │   └── gmail/          # Gmail SDK translation (not implemented yet)
 │       ├── sync/               # Import, delta sync, retries and checkpoints
 │       ├── store/sqlite/       # Explicit SQL, transactions, embedded migrations
 │       │   └── migrations/
@@ -89,21 +102,49 @@ Dependency direction: transport and adapters depend on application contracts and
 
 ## 4. Component contracts
 
-The following signatures document boundaries; they are not application code to create now. Types are provider-neutral. All account/message/label IDs in application contracts are local IDs; provider IDs are opaque adapter values. Provider calls use an account-bound adapter resolved by the composition layer.
+### Implemented email domain and provider boundary
+
+`backend/internal/domain/email.go` defines `Email`, `EmailAddress`, `EmailThread`, `EmailHeader`, `AttachmentMetadata`, `EmailLabel`, and `EmailCategory`. These internal Go models use only standard-library types. They are neither provider SDK structures nor IPC DTOs/SQL records; future transport code must explicitly map `time.Time` to the documented wire timestamps.
+
+- Local account/message/thread/label/category IDs and opaque provider message/thread/label/attachment IDs have distinct named string types. Provider IDs are scoped to an account and must never be parsed as numbers or confused with RFC Message-ID headers. Adapters receive local account identity during construction, return provider identity, and leave local entity IDs empty until persistence assigns them.
+- `Email` includes account identity, internal/provider IDs, provider thread ID, sender, To/CC recipients, subject, text, optional HTML, receive timestamp, ordered headers, labels, attachment metadata, and local categories. Providers without thread semantics may omit the message's thread ID. Adapters preserve receive instants and normalize timestamps to UTC.
+- Headers remain an ordered slice, preserving repeated fields. `HeaderValues` performs case-insensitive lookup without collapsing duplicates or marking authentication claims trusted. Incoming address strings and attachment filenames remain untrusted and may be malformed.
+- A nil HTML pointer distinguishes missing/not-fetched HTML from present-but-empty HTML. No renderer or external resource fetch is added. Attachment metadata contains no attachment bytes or local path; nil size means unknown, and zero means an explicitly empty attachment.
+- Labels describe provider mailbox membership, including user/system kind and account identity. Categories are local application classifications with their own IDs and names; no Gmail category taxonomy or implicit remote label mutation is introduced.
+- `Email.Validate` checks identity, receive time, label ownership/kind, and nonnegative known attachment sizes. It deliberately permits empty subjects, bodies, recipient lists, and malformed incoming senders. `EmailThread.Validate` additionally rejects cross-account/thread messages and duplicate provider message IDs in a page. Neither method declares email safe or deliverable.
+
+`backend/internal/provider/provider.go` owns the account-bound `EmailProvider` interface. It composes `Authenticator`, `Reader`, `LabelManager`, and `DraftCreator`; consumers accept the smallest interface they need. The full implemented method set is:
 
 ```go
-type MailReader interface {
+type EmailProvider interface {
+    Authenticate(context.Context) (Account, error)
+    ListMessages(context.Context, ListMessagesOptions) (MessagePage, error)
+    FetchMessage(context.Context, domain.ProviderMessageID) (domain.Email, error)
+    FetchThread(context.Context, domain.ProviderThreadID, PageOptions) (domain.EmailThread, error)
+    ListLabels(context.Context, PageOptions) (LabelPage, error)
+    CreateLabel(context.Context, string) (domain.EmailLabel, error)
+    ApplyLabel(context.Context, domain.ProviderMessageID, domain.ProviderLabelID) error
+    RemoveLabel(context.Context, domain.ProviderMessageID, domain.ProviderLabelID) error
+    CreateDraft(context.Context, DraftInput) (DraftReference, error)
     Capabilities() Capabilities
-    SnapshotCursor(ctx context.Context) (string, error)
-    ListMessages(ctx context.Context, q ListQuery, page string) (MessagePage, error)
-    GetMessage(ctx context.Context, id ProviderMessageID) (RemoteMessage, error)
-    ListLabels(ctx context.Context) ([]RemoteLabel, error)
-    Changes(ctx context.Context, cursor string, page string) (ChangePage, error)
 }
-type LabelWriter interface {
-    ReadLabels(ctx context.Context, id ProviderMessageID) ([]ProviderLabelID, error)
-    ApplyLabelDelta(ctx context.Context, id ProviderMessageID, delta LabelDelta) error
-}
+```
+
+Adapters are bound to one configured local account. Authentication accepts no password and returns only identity, never OAuth tokens, credentials or raw SDK responses. The future OAuth adapter obtains browser/credential dependencies through composition. Every operation accepts a context, honors cancellation, validates its options, enforces its account binding and normalizes returned values. Callers validate returned model structure before persistence; value structs do not enforce invariants merely by being constructed.
+
+Message listings contain references, not partially populated emails pretending to have cached bodies. Message, thread and label pagination use opaque next-page tokens, with page sizes from 1 to 100. Reuse a token only with the same account, operation and filters. The neutral listing filters are an inclusive receive-time lower bound and required label IDs; unsupported filters must be rejected, not silently ignored or converted to a public Gmail query string. Page ordering remains provider-defined. Thread pages explicitly carry continuation tokens.
+
+Capabilities distinguish support for thread fetching, label creation/modification and draft creation from granted OAuth permissions. Unsupported semantics return `ErrUnsupported`; missing resources, authentication requirements and invalid inputs have provider-neutral sentinel errors usable through `errors.Is`. Context cancellation/deadline errors remain recognizable. Future adapters must translate provider failures without leaking raw response data; rate-limit/conflict details can be added when synchronization needs them. Outlook folders must not masquerade as label membership if they require moving messages.
+
+Label application/removal is state-idempotent, but must eventually run through preview/confirmation/journaling/undo in the application layer. Label creation and draft creation are interface contracts only and remain outside the MVP runtime. Draft input is separate from incoming email, allows incomplete drafts, and validates recipient mailbox fields and subject against header injection. The authenticated account determines its sender. Draft creation is a remote write, never sending, and cannot be blindly retried after ambiguous failures. Attachment uploads and reply/thread association are not promised by the initial draft contract. No send, delete, move or arbitrary-provider-request method exists.
+
+There is no concrete provider implementation, OAuth flow, mailbox write, new database migration or frontend command in this phase. Gmail API types may only exist in `internal/provider/gmail`; an import-boundary test enforces that rule. Synthetic adapter tests demonstrate interface substitution, neutral errors and cancellation without claiming to validate a real Gmail integration.
+
+### Planned supporting contracts
+
+The following sketches remain future work. Incremental sync cursors and label-state reconciliation will be added as small contracts when synchronization/actions are implemented; the old proposed `MailReader`/`LabelWriter` sketches are superseded by the implemented boundary above.
+
+```go
 type CredentialStore interface {
     Get(ctx context.Context, ref string) ([]byte, error)
     Set(ctx context.Context, ref string, secret []byte) error
@@ -129,9 +170,7 @@ type VectorIndex interface {
 }
 ```
 
-`Capabilities` describes label support, change cursors, and other actual provider behavior. Future Outlook categories/folders are mapped only where semantics match; unsupported operations return a typed error instead of pretending every provider is Gmail. A future provider can perform snapshot reconciliation if it lacks delta cursors. No send/delete capability is exposed in these interfaces.
-
-`RemoteMessage` includes opaque message/thread IDs, provider receive time, normalized addresses, subject, text, label IDs, selected evidence headers, attachment metadata, and parsing status. `RiskAssessment` contains score 0–100, analyzer version, input hash, evaluation time, and structured findings `{code, severity, explanation, evidence}`. A score is a heuristic, not a probability or guarantee of safety. Missing or untrusted authentication evidence is marked unknown.
+`RiskAssessment` is still planned: a score from 0–100, analyzer version, input hash, evaluation time, and structured findings `{code, severity, explanation, evidence}`. A score is a heuristic, not a probability or guarantee of safety. Missing or untrusted authentication evidence must be marked unknown.
 
 Application commands:
 
