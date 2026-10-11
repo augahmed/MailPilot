@@ -103,3 +103,26 @@ it("accepts bounded Unicode display text without confusing code points with UTF-
     }).success,
   ).toBe(true);
 });
+
+import { organizationResponseSchema } from "./client";
+import organizationFixture from "../../../../contracts/organization-v1.json";
+it("checks the shared organization contract and rejects destructive operations and secret fields", () => {
+  const response = organizationFixture.response;
+  expect(organizationResponseSchema.safeParse(response).success).toBe(true);
+  expect(
+    organizationResponseSchema.safeParse({ ...response, token: "synthetic" })
+      .success,
+  ).toBe(false);
+  expect(
+    organizationResponseSchema.safeParse({
+      ...response,
+      steps: [{ ...response.steps[0], kind: "delete_label" }],
+    }).success,
+  ).toBe(false);
+  expect(
+    organizationResponseSchema.safeParse({
+      ...response,
+      rows: [{ ...response.rows[0], confidence: 1.1 }],
+    }).success,
+  ).toBe(false);
+});

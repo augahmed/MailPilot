@@ -1,3 +1,4 @@
+import { Organization } from "../features/organization/Organization";
 import { ClassificationReview } from "../features/classification/ClassificationReview";
 import { Categories } from "../features/categories/Categories";
 import { Mailbox } from "../features/mailbox/Mailbox";
@@ -93,6 +94,7 @@ export function App() {
       />
       <Categories key={`categories-${connectionRevision}`} />
       <ClassificationReview key={`classification-${connectionRevision}`} />
+      <Organization key={`organization-${connectionRevision}`} />
       <footer>
         {health
           ? `Version ${health.version} · ${health.database === "connected" ? "Local storage ready" : "Database unavailable"}`

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import {
+  organize,
   reviewClassifications,
   manageCategories,
   gmailCommand,
@@ -11,6 +12,7 @@ import {
 } from "../lib/ipc/client";
 
 vi.mock("../lib/ipc/client", () => ({
+  organize: vi.fn(),
   reviewClassifications: vi.fn(),
   manageCategories: vi.fn(),
   getHealth: vi.fn(),
@@ -21,6 +23,19 @@ vi.mock("../lib/ipc/client", () => ({
 describe("desktop status", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(organize).mockResolvedValue({
+      accountId: "",
+      state: "idle",
+      code: "unauthorized",
+      id: "",
+      digest: "",
+      kind: "",
+      expiresAt: 0,
+      dryRun: false,
+      hasMore: false,
+      rows: [],
+      steps: [],
+    });
     vi.mocked(reviewClassifications).mockResolvedValue({
       accountId: "",
       rows: [],

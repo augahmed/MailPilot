@@ -94,3 +94,12 @@ type EmailSummary struct {
 	ReceivedAt time.Time
 	BodyState  string
 }
+
+// OrganizationRepository extends the action journal with label-creation evidence.
+// Update permits only outcome transitions; the confirmed plan remains immutable.
+type OrganizationRepository interface {
+	Create(context.Context, domain.OrganizationPlan) (domain.OrganizationPlan, error)
+	Get(context.Context, domain.AccountID, domain.ActionID) (domain.OrganizationPlan, error)
+	Latest(context.Context, domain.AccountID, bool) (domain.OrganizationPlan, error)
+	Update(context.Context, domain.OrganizationPlan) (domain.OrganizationPlan, error)
+}

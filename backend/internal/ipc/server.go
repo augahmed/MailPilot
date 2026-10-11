@@ -39,6 +39,9 @@ type CategoryService interface {
 type ClassificationService interface {
 	ReviewClassifications(context.Context, app.ClassificationRequest) app.ClassificationPage
 }
+type OrganizationService interface {
+	Organize(context.Context, app.OrganizationRequest) app.OrganizationResponse
+}
 type Factory func(context.Context) (HealthService, error)
 
 type request struct {
@@ -106,6 +109,16 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 					} else {
 						reply.Result = map[string]int{"protocolVersion": domain.ProtocolVersion}
 					}
+				}
+			case "organization.manage":
+				organization, ok := service.(OrganizationService)
+				var params app.OrganizationRequest
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Organization unavailable")
+				} else {
+					reply.Result = organization.Organize(callCtx, params)
 				}
 			case "classification.review":
 				review, ok := service.(ClassificationService)

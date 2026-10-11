@@ -20,6 +20,7 @@ type App struct {
 	Emails         repository.EmailRepository
 	Categories     repository.CategoryRepository
 	Classification *ClassificationReview
+	Organization   *Organization
 	db             Database
 	version        string
 }

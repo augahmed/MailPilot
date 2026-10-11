@@ -1,0 +1,48 @@
+{
+  "request": {
+    "operation": "preview",
+    "accountId": "fixture-account",
+    "offset": 0,
+    "emailIds": ["fixture-email"],
+    "actionId": "",
+    "digest": ""
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "state": "preview",
+    "code": "",
+    "id": "fixture-action",
+    "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "label_delta",
+    "expiresAt": 1791741600000,
+    "dryRun": false,
+    "hasMore": false,
+    "rows": [
+      {
+        "emailId": "fixture-email",
+        "sender": "store@example.test",
+        "subject": "Your receipt",
+        "currentLabels": ["INBOX", "Keep"],
+        "proposedLabel": "MailPilot/Receipts",
+        "confidence": 0.6,
+        "change": "add"
+      }
+    ],
+    "steps": [
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Receipts",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Receipts",
+        "emailId": "fixture-email",
+        "state": "pending",
+        "code": ""
+      }
+    ]
+  }
+}

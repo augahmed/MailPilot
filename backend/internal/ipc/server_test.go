@@ -211,3 +211,48 @@ func TestClassificationContractAndStrictRequests(t *testing.T) {
 		t.Fatal("invalid classification dispatch")
 	}
 }
+
+type organizationService struct {
+	healthy
+	calls int
+}
+
+func (s *organizationService) Organize(_ context.Context, p app.OrganizationRequest) app.OrganizationResponse {
+	s.calls++
+	return app.OrganizationResponse{State: "idle", Rows: []app.OrganizationRowDTO{}, Steps: []app.OrganizationStepDTO{}}
+}
+func TestOrganizationContractAndNarrowRequests(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/organization-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Request  app.OrganizationRequest  `json:"request"`
+		Response app.OrganizationResponse `json:"response"`
+	}
+	if strictDecode(data, &fixture) != nil || !fixture.Request.Valid() || fixture.Response.Rows[0].ProposedLabel != "MailPilot/Receipts" {
+		t.Fatal("shared contract mismatch")
+	}
+	service := &organizationService{}
+	var output bytes.Buffer
+	input := `{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":1}}
+{"jsonrpc":"2.0","id":"2","method":"organization.manage","params":{"operation":"delete","accountId":"a"}}
+{"jsonrpc":"2.0","id":"3","method":"organization.manage","params":{"operation":"preview","accountId":"a","emailIds":["e","e"]}}
+{"jsonrpc":"2.0","id":"4","method":"organization.manage","params":{"operation":"apply","accountId":"a","actionId":"id"}}
+{"jsonrpc":"2.0","id":"5","method":"organization.manage","params":{"operation":"list","sql":"synthetic"}}
+{"jsonrpc":"2.0","id":"6","method":"organization.manage","params":{"operation":"list","offset":0}}
+`
+	if err := Serve(context.Background(), strings.NewReader(input), &output, func(context.Context) (HealthService, error) { return service, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if service.calls != 1 {
+		t.Fatal("invalid IPC reached use case")
+	}
+	for i, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var r response
+		_ = json.Unmarshal([]byte(line), &r)
+		if (i > 0 && i < 5) != (r.Error != nil) {
+			t.Fatal("wrong validation response", i)
+		}
+	}
+}

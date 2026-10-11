@@ -13,6 +13,7 @@
     "allow-sync-status",
     "allow-mailbox-list",
     "allow-categories-manage",
-    "allow-classification-review"
+    "allow-classification-review",
+    "allow-organization-manage"
   ]
 }

@@ -55,9 +55,13 @@ func run() int {
 	var store *sqlite.Store
 	var authentication *auth.Manager
 	var synchronization *mailsync.Service
+	var organization *app.Organization
 	defer func() {
 		if synchronization != nil {
 			synchronization.Clear()
+		}
+		if organization != nil {
+			organization.Close()
 		}
 		if authentication != nil {
 			authentication.Close()
@@ -91,6 +95,13 @@ func run() int {
 		if err != nil {
 			return nil, err
 		}
+		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {
+			return gmail.NewProvider(account, authentication)
+		}, store.Emails(), store.Categories(), store.Classifications(), store.Organization(), engine)
+		gate := make(chan struct{}, 1)
+		organization.SetOperationGate(gate)
+		synchronization.SetOperationGate(gate)
+		application.Organization = organization
 		application.Classification = app.NewClassificationReview(authentication.Session, engine, store.Emails(), store.Categories(), store.Classifications())
 		return application, nil
 	})

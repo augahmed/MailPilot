@@ -31,6 +31,7 @@ type Progress struct {
 	Capped     bool             `json:"capped"`
 }
 type Service struct {
+	gate       chan struct{}
 	mu         sync.Mutex
 	root       context.Context
 	session    Session
@@ -45,7 +46,10 @@ type Service struct {
 func New(root context.Context, session Session, factory Factory, emails repository.EmailRepository, limit int) *Service {
 	return &Service{root: root, session: session, factory: factory, emails: emails, limit: limit, progress: Progress{State: "idle", Limit: limit}}
 }
-func (s *Service) Status() Progress { s.mu.Lock(); defer s.mu.Unlock(); return s.progress }
+
+// SetOperationGate is configured once before starting jobs; use a capacity-one channel.
+func (s *Service) SetOperationGate(gate chan struct{}) { s.gate = gate }
+func (s *Service) Status() Progress                    { s.mu.Lock(); defer s.mu.Unlock(); return s.progress }
 func (s *Service) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -94,6 +98,14 @@ func (s *Service) run(ctx context.Context, account domain.AccountID, g uint64, r
 		}
 		s.update(g, func(p *Progress) { p.State = state })
 	}()
+	if s.gate != nil {
+		select {
+		case s.gate <- struct{}{}:
+			defer func() { <-s.gate }()
+		case <-ctx.Done():
+			return
+		}
+	}
 	report := func(code string) { s.update(g, func(p *Progress) { p.Errors++; p.Code = code }) }
 	seen := map[domain.ProviderMessageID]bool{}
 	pages := map[string]bool{}

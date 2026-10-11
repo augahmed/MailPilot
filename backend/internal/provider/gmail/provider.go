@@ -34,7 +34,9 @@ var _ provider.MetadataReader = (*Provider)(nil)
 func NewProvider(account domain.AccountID, tokens TokenSource) *Provider {
 	return &Provider{account: account, tokens: tokens, baseURL: "https://gmail.googleapis.com/gmail/v1/users/me", client: &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
-func (*Provider) Capabilities() provider.Capabilities { return provider.Capabilities{} }
+func (*Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{CreateLabels: true, ModifyLabels: true}
+}
 func (p *Provider) Authenticate(ctx context.Context) (provider.Account, error) {
 	token, err := p.tokens.AccessToken(ctx, p.account)
 	if err != nil || token.Empty() {
@@ -181,7 +183,7 @@ func (p *Provider) FetchMessageMetadata(ctx context.Context, id domain.ProviderM
 	if m.ID != string(id) {
 		return provider.MessageMetadata{}, provider.ErrMalformed
 	}
-	return provider.MessageMetadata{ProviderID: id, ProviderThreadID: domain.ProviderThreadID(m.ThreadID), ContentRevision: contentRevision(m), Labels: mappedLabels(p.account, m.LabelIDs, p.labels)}, nil
+	return provider.MessageMetadata{ProviderID: id, ProviderThreadID: domain.ProviderThreadID(m.ThreadID), ContentRevision: contentRevision(m), Labels: mappedLabels(p.account, m.LabelIDs, p.labelSnapshot())}, nil
 }
 func (p *Provider) FetchMessage(ctx context.Context, id domain.ProviderMessageID) (domain.Email, error) {
 	if !validID(string(id)) {
@@ -197,20 +199,26 @@ func (p *Provider) FetchMessage(ctx context.Context, id domain.ProviderMessageID
 	if m.ID != string(id) {
 		return domain.Email{}, provider.ErrMalformed
 	}
-	return normalize(p.account, m, p.labels)
+	return normalize(p.account, m, p.labelSnapshot())
 }
 func (p *Provider) ListLabels(ctx context.Context, page provider.PageOptions) (provider.LabelPage, error) {
 	if page.Validate() != nil {
 		return provider.LabelPage{}, provider.ErrInvalidArgument
 	}
+	if page.PageToken == "" {
+		p.mu.Lock()
+		p.labels = nil
+		p.mu.Unlock()
+	}
 	if err := p.loadLabels(ctx); err != nil {
 		return provider.LabelPage{}, err
 	}
 	ids := []string{}
-	for id := range p.labels {
+	snapshot := p.labelSnapshot()
+	for id := range snapshot {
 		ids = append(ids, id)
 	}
-	labels := mappedLabels(p.account, ids, p.labels)
+	labels := mappedLabels(p.account, ids, snapshot)
 	offset := 0
 	if page.PageToken != "" {
 		var err error
@@ -229,15 +237,16 @@ func (p *Provider) ListLabels(ctx context.Context, page provider.PageOptions) (p
 func (*Provider) FetchThread(context.Context, domain.ProviderThreadID, provider.PageOptions) (domain.EmailThread, error) {
 	return domain.EmailThread{}, provider.ErrUnsupported
 }
-func (*Provider) CreateLabel(context.Context, string) (domain.EmailLabel, error) {
-	return domain.EmailLabel{}, provider.ErrUnsupported
-}
-func (*Provider) ApplyLabel(context.Context, domain.ProviderMessageID, domain.ProviderLabelID) error {
-	return provider.ErrUnsupported
-}
-func (*Provider) RemoveLabel(context.Context, domain.ProviderMessageID, domain.ProviderLabelID) error {
-	return provider.ErrUnsupported
-}
 func (*Provider) CreateDraft(context.Context, provider.DraftInput) (provider.DraftReference, error) {
 	return provider.DraftReference{}, provider.ErrUnsupported
+}
+
+func (p *Provider) labelSnapshot() map[string]domain.EmailLabel {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	labels := make(map[string]domain.EmailLabel, len(p.labels))
+	for id, l := range p.labels {
+		labels[id] = l
+	}
+	return labels
 }

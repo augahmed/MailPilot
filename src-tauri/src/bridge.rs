@@ -126,6 +126,94 @@ pub struct ClassificationPage {
     pub code: Option<String>,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrganizationRequest {
+    pub operation: String,
+    pub account_id: String,
+    pub offset: u32,
+    pub email_ids: Vec<String>,
+    pub action_id: String,
+    pub digest: String,
+}
+impl OrganizationRequest {
+    fn valid(&self) -> bool {
+        if self.account_id.len() > 100
+            || self.offset > 1_000_000
+            || self.email_ids.len() > 5
+            || self.action_id.len() > 100
+            || self.digest.len() > 64
+        {
+            return false;
+        }
+        for (i, id) in self.email_ids.iter().enumerate() {
+            if id.is_empty() || id.len() > 100 || self.email_ids[..i].contains(id) {
+                return false;
+            }
+        }
+        match self.operation.as_str() {
+            "list" | "status" => self.email_ids.is_empty() && self.digest.is_empty(),
+            "preview" | "dry_run" => {
+                !self.account_id.is_empty()
+                    && !self.email_ids.is_empty()
+                    && self.action_id.is_empty()
+                    && self.digest.is_empty()
+            }
+            "undo_preview" => {
+                !self.account_id.is_empty()
+                    && self.email_ids.is_empty()
+                    && self.action_id.is_empty()
+                    && self.digest.is_empty()
+            }
+            "apply" => {
+                !self.account_id.is_empty()
+                    && !self.action_id.is_empty()
+                    && self.digest.len() == 64
+                    && self.email_ids.is_empty()
+            }
+            "reconcile" | "cancel" => {
+                !self.account_id.is_empty() && self.email_ids.is_empty() && self.digest.is_empty()
+            }
+            _ => false,
+        }
+    }
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrganizationRow {
+    pub email_id: String,
+    pub sender: String,
+    pub subject: String,
+    pub current_labels: Vec<String>,
+    pub proposed_label: String,
+    pub confidence: f64,
+    pub change: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrganizationStep {
+    pub kind: String,
+    pub name: String,
+    pub email_id: String,
+    pub state: String,
+    pub code: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrganizationResponse {
+    pub account_id: String,
+    pub state: String,
+    pub code: String,
+    pub id: String,
+    pub digest: String,
+    pub kind: String,
+    pub expires_at: i64,
+    pub dry_run: bool,
+    pub rows: Vec<OrganizationRow>,
+    pub steps: Vec<OrganizationStep>,
+    pub has_more: bool,
+}
+
 const MAX_FRAME: u64 = 64 * 1024;
 const PROTOCOL_VERSION: u32 = 1;
 
@@ -389,6 +477,19 @@ impl Bridge {
         serde_json::from_value(self.request(method, json!({}))?)
             .map_err(|_| "Invalid sync response".into())
     }
+    pub fn organization(
+        &mut self,
+        request: OrganizationRequest,
+    ) -> Result<OrganizationResponse, String> {
+        if !request.valid() {
+            return Err("Invalid organization request".into());
+        }
+        serde_json::from_value(self.request(
+            "organization.manage",
+            serde_json::to_value(request).map_err(|_| "Invalid organization request")?,
+        )?)
+        .map_err(|_| "Invalid organization response".into())
+    }
     pub fn classifications(
         &mut self,
         request: ClassificationRequest,
@@ -547,5 +648,30 @@ mod classification_tests {
         bad = fixture["request"].clone();
         bad["offset"] = json!(-1);
         assert!(serde_json::from_value::<ClassificationRequest>(bad).is_err());
+    }
+}
+
+#[cfg(test)]
+mod organization_tests {
+    use super::*;
+    #[test]
+    fn strict_organization_contract() {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../contracts/organization-v1.json")).unwrap();
+        let mut request: OrganizationRequest =
+            serde_json::from_value(fixture["request"].clone()).unwrap();
+        assert!(request.valid());
+        let response: OrganizationResponse =
+            serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(response.rows[0].proposed_label, "MailPilot/Receipts");
+        assert_eq!(response.steps.len(), 2);
+        request.operation = "delete".into();
+        assert!(!request.valid());
+        request.operation = "preview".into();
+        request.email_ids.push(request.email_ids[0].clone());
+        assert!(!request.valid());
+        let mut bad = fixture["request"].clone();
+        bad["shell"] = serde_json::json!("synthetic");
+        assert!(serde_json::from_value::<OrganizationRequest>(bad).is_err());
     }
 }
