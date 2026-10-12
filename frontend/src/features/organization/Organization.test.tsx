@@ -315,3 +315,78 @@ it("does not overlap slow background status polls", async () => {
     vi.useRealTimers();
   }
 });
+
+import riskFixture from "../../../../contracts/organization-phishing-v1.json";
+it("reviews phishing scores before a confirmed label-only action and defaults to Dry Run", async () => {
+  const riskPreview = {
+    ...riskFixture.response,
+    expiresAt: Date.now() + 300000,
+  } as OrganizationResponse;
+  vi.mocked(organize).mockImplementation(async (request) => {
+    if (request.operation === "list")
+      return request.source === "phishing"
+        ? {
+            ...idle,
+            rows: riskPreview.rows.map((row) => ({
+              ...row,
+              change: "candidate" as const,
+            })),
+          }
+        : page;
+    if (request.operation === "preview") return riskPreview;
+    if (request.operation === "apply")
+      return { ...riskPreview, state: "applied" };
+    return idle;
+  });
+  render(<Organization />);
+  await screen.findByText("Your receipt");
+  fireEvent.change(
+    screen.getByRole("combobox", { name: "Review suggestions" }),
+    { target: { value: "phishing" } },
+  );
+  await screen.findByText("80 HIGH");
+  expect(screen.getByText("HIGH threshold: 60")).toBeInTheDocument();
+  expect(
+    screen.getByText("+25 Reply-To and sender use different sites"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("checkbox", { name: "Dry Run (read only)" }),
+  ).toBeChecked();
+  expect(screen.getByRole("button", { name: "Run Dry Run" })).toBeDisabled();
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "Select Your receipt" }),
+  );
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "Dry Run (read only)" }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Generate apply preview" }),
+  );
+  const apply = await screen.findByRole("button", {
+    name: "Apply selected labels",
+  });
+  expect(apply).toBeDisabled();
+  expect(organize).toHaveBeenLastCalledWith(
+    expect.objectContaining({ operation: "preview", source: "phishing" }),
+  );
+  expect(
+    screen.getByText(/Create label: Potential Phishing/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("list", { name: "Phishing risk reasons" }),
+  ).toHaveTextContent("Credential-related language");
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "I confirm these Gmail label changes.",
+    }),
+  );
+  fireEvent.click(apply);
+  await screen.findByText("Batch: applied");
+  expect(organize).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      operation: "apply",
+      source: undefined,
+      digest: riskPreview.digest,
+    }),
+  );
+});

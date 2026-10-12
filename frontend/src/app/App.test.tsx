@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import {
+  semanticSearch,
   organize,
   reviewClassifications,
   manageCategories,
@@ -12,6 +13,7 @@ import {
 } from "../lib/ipc/client";
 
 vi.mock("../lib/ipc/client", () => ({
+  semanticSearch: vi.fn(),
   organize: vi.fn(),
   reviewClassifications: vi.fn(),
   manageCategories: vi.fn(),
@@ -23,6 +25,21 @@ vi.mock("../lib/ipc/client", () => ({
 describe("desktop status", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(semanticSearch).mockResolvedValue({
+      accountId: "",
+      jobId: "",
+      operation: "",
+      state: "idle",
+      counts: { cached: 0, eligible: 0, indexed: 0 },
+      processed: 0,
+      errors: 0,
+      scanned: 0,
+      partial: false,
+      capped: false,
+      excerptFallback: false,
+      rows: [],
+      code: "unauthorized",
+    });
     vi.mocked(organize).mockResolvedValue({
       accountId: "",
       state: "idle",

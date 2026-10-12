@@ -10,14 +10,17 @@ const errors = {
   conflict:
     "Mail, labels, or category definitions changed. Refresh and review again.",
   cancelled: "Review stopped. Successfully saved assessments remain available.",
-  invalid_message: "This message exceeds the supported classification limits.",
+  invalid_message:
+    "This message or assessment exceeds the supported review limits.",
+  embedding_unavailable:
+    "Local embeddings are unavailable. Check the model installation and retry.",
   storage_error: "Could not load or save a local assessment. Try again.",
 };
 const states = {
   not_reviewed: "Not reviewed yet",
-  unclassified: "Unclassified — no clear rule match",
+  unclassified: "Unclassified — no clear category match",
   classified: "Predicted category",
-  stale: "Review needed — inputs or rules changed",
+  stale: "Review needed — inputs or classifier changed",
   error: "Could not review",
 };
 export function ClassificationReview() {
@@ -114,13 +117,13 @@ export function ClassificationReview() {
     >
       <h2 id="classification-heading">Classification review</h2>
       <p>
-        Review local rule suggestions for downloaded mail, five emails at a
+        Review local hybrid suggestions for downloaded mail, five emails at a
         time. Emails with weak or ambiguous evidence remain unclassified.
       </p>
       <p className="help">
-        Confidence is a rule strength score, not a measured probability.
-        Reviewing saves suggestions locally and does not assign categories or
-        change Gmail.
+        Rule confidence and cosine similarity are scores, not measured
+        probabilities. Reviewing saves suggestions locally and does not assign
+        categories or change Gmail.
       </p>
       <div role="status" aria-live="polite">
         {busy ? "Reviewing cached mail…" : message}
@@ -166,17 +169,23 @@ export function ClassificationReview() {
                         <td>
                           {prediction.category_name}
                           <small>
-                            {prediction.classifier_name} ·{" "}
-                            {prediction.classifier_version}
+                            {row.assessment?.used_classifier ||
+                              prediction.classifier_name}{" "}
+                            · {prediction.classifier_version}
                           </small>
                         </td>
-                        <td>{Math.round(prediction.confidence * 100)}%</td>
+                        <td>
+                          {prediction.score_kind === "cosine_similarity"
+                            ? `Cosine ${prediction.confidence.toFixed(3)}`
+                            : `${Math.round(prediction.confidence * 100)}% rule confidence`}
+                        </td>
                         <td>
                           <ul>
                             {prediction.reasons.map((reason, index) => (
                               <li key={index}>{reason}</li>
                             ))}
                           </ul>
+                          <Candidates assessment={row.assessment} />
                           <small>
                             Reviewed{" "}
                             <time
@@ -209,8 +218,10 @@ export function ClassificationReview() {
                         {row.code
                           ? errors[row.code]
                           : row.state === "unclassified"
-                            ? "No supported category has enough evidence."
-                            : "Use Classify this page to run the local rules."}
+                            ? row.assessment?.reason ||
+                              "No supported category has enough evidence."
+                            : "Use Classify this page to run the local classifier."}
+                        <Candidates assessment={row.assessment} />
                       </td>
                     </tr>
                   )}
@@ -243,5 +254,25 @@ export function ClassificationReview() {
         </button>
       </div>
     </section>
+  );
+}
+
+function Candidates({
+  assessment,
+}: {
+  assessment: ClassificationPage["rows"][number]["assessment"];
+}) {
+  if (!assessment?.candidates.length) return null;
+  return (
+    <details>
+      <summary>Top category candidates</summary>
+      <ol>
+        {assessment.candidates.map((candidate) => (
+          <li key={candidate.category_id}>
+            {candidate.category_name}: cosine {candidate.similarity.toFixed(3)}
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }

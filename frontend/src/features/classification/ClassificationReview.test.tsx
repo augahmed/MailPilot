@@ -32,13 +32,13 @@ it("loads saved reviews without classifying and runs only the requested cached p
   expect(screen.getAllByText("Not reviewed yet")).toHaveLength(2);
   vi.mocked(reviewClassifications).mockResolvedValue(saved);
   fireEvent.click(screen.getByRole("button", { name: "Classify this page" }));
-  await screen.findByRole("cell", { name: "60%" });
+  await screen.findByRole("cell", { name: "60% rule confidence" });
   expect(screen.getByRole("cell", { name: /Receipts/ })).toBeInTheDocument();
   expect(
     screen.getByText(saved.rows[0]!.predictions[0]!.reasons[0]!),
   ).toBeInTheDocument();
   expect(
-    screen.getByText("Unclassified — no clear rule match"),
+    screen.getByText("Unclassified — no clear category match"),
   ).toBeInTheDocument();
   expect(reviewClassifications).toHaveBeenLastCalledWith({
     operation: "run",
@@ -67,7 +67,7 @@ it("shows partial failure counts and preserves successful suggestions", async ()
     ],
   });
   fireEvent.click(screen.getByRole("button", { name: "Classify this page" }));
-  await screen.findByRole("cell", { name: "60%" });
+  await screen.findByRole("cell", { name: "60% rule confidence" });
   expect(screen.getByRole("status")).toHaveTextContent(
     "1 cached emails. 1 errors.",
   );
@@ -89,9 +89,9 @@ it("does not display stale category or confidence and explains unavailable bodie
     ],
   });
   render(<ClassificationReview />);
-  await screen.findByText("Review needed — inputs or rules changed");
+  await screen.findByText("Review needed — inputs or classifier changed");
   expect(screen.queryByText("Receipts")).not.toBeInTheDocument();
-  expect(screen.queryByText("60%")).not.toBeInTheDocument();
+  expect(screen.queryByText("60% rule confidence")).not.toBeInTheDocument();
   expect(screen.getByText("Body unavailable")).toBeInTheDocument();
 });
 it("pages locally and escapes hostile message content and reasons", async () => {
@@ -175,4 +175,20 @@ it("ignores an old in-flight result after disconnect/remount", async () => {
   await waitFor(() =>
     expect(screen.queryByText("Your receipt")).not.toBeInTheDocument(),
   );
+});
+
+import semanticFixture from "../../../../contracts/classification-semantic-v1.json";
+it("shows cosine scores and ranked candidates for selected and unclassified mail", async () => {
+  vi.mocked(reviewClassifications).mockResolvedValue(
+    semanticFixture.response as ClassificationPage,
+  );
+  render(<ClassificationReview />);
+  expect(await screen.findByText("Cosine 0.600")).toBeInTheDocument();
+  expect(screen.getAllByText("Top category candidates")).toHaveLength(2);
+  expect(screen.getByText("Finance: cosine 0.200")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Leading categories are within the 0.050 ambiguity margin; no category chosen.",
+    ),
+  ).toBeInTheDocument();
 });

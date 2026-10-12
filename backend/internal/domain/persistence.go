@@ -13,7 +13,13 @@ type Account struct {
 	UpdatedAt         time.Time
 }
 
+type ClassificationCandidate struct {
+	CategoryID CategoryID
+	Similarity float64
+}
+
 type ClassificationResult struct {
+	ScoreKind         string // rule_confidence or cosine_similarity; neither is calibrated probability.
 	AccountID         AccountID
 	EmailID           EmailID
 	CategoryID        CategoryID
@@ -28,6 +34,9 @@ type ClassificationResult struct {
 // ClassificationRun persists abstention as well as predictions. Results are
 // suggestions; they never imply local category assignment or provider writes.
 type ClassificationRun struct {
+	UsedClassifier    string // Actual selected engine, or none on abstention.
+	Reason            string
+	Candidates        []ClassificationCandidate
 	AccountID         AccountID
 	EmailID           EmailID
 	ClassifierName    string
@@ -38,6 +47,7 @@ type ClassificationRun struct {
 }
 
 type PhishingFinding struct {
+	Points      int
 	Code        string
 	Explanation string
 	Evidence    string

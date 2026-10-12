@@ -2,37 +2,16 @@ package sqlite
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 
 	"mailpilot.local/core/internal/domain"
+	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/repository"
 )
 
-func contentHash(e domain.Email) (string, error) {
-	// IDs, provider label membership and local categories are not analysis inputs.
-	e.ID = ""
-	e.AccountID = ""
-	e.ProviderID = ""
-	e.ProviderThreadID = ""
-	e.ContentRevision = ""
-	e.Labels = nil
-	e.Categories = nil
-	e.ReceivedAt = instant(e.ReceivedAt.UnixMilli())
-	e.Recipients = append([]domain.EmailAddress{}, e.Recipients...)
-	e.CCRecipients = append([]domain.EmailAddress{}, e.CCRecipients...)
-	e.Headers = append([]domain.EmailHeader{}, e.Headers...)
-	e.Attachments = append([]domain.AttachmentMetadata{}, e.Attachments...)
-	data, err := json.Marshal(e)
-	if err != nil {
-		return "", repository.ErrInvalid
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]), nil
-}
+func contentHash(e domain.Email) (string, error) { return repository.EmailContentHash(e) }
 
 func (r *emailRepository) Upsert(ctx context.Context, e domain.Email) (domain.EmailID, error) {
 	ids, err := r.UpsertBatch(ctx, e.AccountID, []domain.Email{e})
@@ -123,6 +102,15 @@ func upsertEmail(ctx context.Context, tx *sql.Tx, e domain.Email) (domain.EmailI
 		}
 	}
 	if oldHash != "" && oldHash != hash {
+		// Keep vectors for unchanged cleaned text (for example, quoted-chain or
+		// recipient changes); remove stale derived data in this same transaction.
+		prepared, prepareErr := embedding.Prepare(e)
+		if prepareErr != nil {
+			prepared.Hash = "" // Ineligible content invalidates every cached vector.
+		}
+		if _, err = tx.ExecContext(ctx, "DELETE FROM email_embeddings WHERE account_id=? AND email_id=? AND (input_hash<>? OR preprocessing_version<>?)", e.AccountID, id, prepared.Hash, embedding.PreprocessingVersion); err != nil {
+			return "", err
+		}
 		for _, table := range []string{"classification_results", "classification_runs", "phishing_results"} {
 			if _, err = tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE account_id=? AND email_id=?", e.AccountID, id); err != nil {
 				return "", err
@@ -328,7 +316,7 @@ func (r *emailRepository) GetPhishingResult(ctx context.Context, a domain.Accoun
 	var p domain.PhishingResult
 	var findings string
 	var assessed int64
-	err := r.store.db.QueryRowContext(ctx, `SELECT account_id,email_id,score,analyzer_version,input_hash,findings_json,assessed_at FROM phishing_results WHERE account_id=? AND email_id=?`, a, id).Scan(&p.AccountID, &p.EmailID, &p.Score, &p.AnalyzerVersion, &p.InputHash, &findings, &assessed)
+	err := r.store.db.QueryRowContext(ctx, `SELECT account_id,email_id,score,analyzer_version,input_hash,findings_json,assessed_at FROM phishing_results WHERE account_id=? AND email_id=? AND input_hash=(SELECT content_hash FROM emails WHERE account_id=phishing_results.account_id AND id=phishing_results.email_id)`, a, id).Scan(&p.AccountID, &p.EmailID, &p.Score, &p.AnalyzerVersion, &p.InputHash, &findings, &assessed)
 	if err != nil {
 		return p, storageError(err)
 	}

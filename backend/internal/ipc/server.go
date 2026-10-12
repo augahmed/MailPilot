@@ -36,6 +36,10 @@ type MailService interface {
 type CategoryService interface {
 	ManageCategories(context.Context, app.CategoryRequest) app.CategoryPage
 }
+type SearchService interface {
+	SearchMailbox(context.Context, app.SearchRequest) app.SearchResponse
+}
+
 type ClassificationService interface {
 	ReviewClassifications(context.Context, app.ClassificationRequest) app.ClassificationPage
 }
@@ -91,7 +95,11 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 			fail(-32600, "Invalid request")
 		} else {
 			reply.ID = req.ID
-			callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			timeout := 5 * time.Second
+			if req.Method == "classification.review" {
+				timeout = 30 * time.Second
+			}
+			callCtx, cancel := context.WithTimeout(ctx, timeout)
 			switch req.Method {
 			case "initialize":
 				var params struct {
@@ -120,6 +128,17 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 				} else {
 					reply.Result = organization.Organize(callCtx, params)
 				}
+			case "search.semantic":
+				var params app.SearchRequest
+				search, ok := service.(SearchService)
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Search unavailable")
+				} else {
+					reply.Result = search.SearchMailbox(callCtx, params)
+				}
+
 			case "classification.review":
 				review, ok := service.(ClassificationService)
 				var params app.ClassificationRequest

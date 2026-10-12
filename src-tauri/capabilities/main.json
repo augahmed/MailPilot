@@ -14,6 +14,7 @@
     "allow-mailbox-list",
     "allow-categories-manage",
     "allow-classification-review",
-    "allow-organization-manage"
+    "allow-organization-manage",
+    "allow-semantic-search"
   ]
 }

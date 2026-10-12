@@ -11,6 +11,95 @@ use std::{
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchRequest {
+    pub operation: String,
+    pub account_id: String,
+    pub job_id: String,
+    pub query: String,
+    pub top_k: u32,
+    pub sender: String,
+    pub category_id: String,
+    pub from: Option<i64>,
+    pub until: Option<i64>,
+}
+impl SearchRequest {
+    fn valid(&self) -> bool {
+        if self.account_id.len() > 100
+            || self.job_id.len() > 100
+            || self.query.len() > 1000
+            || self.sender.len() > 256
+            || self.category_id.len() > 100
+        {
+            return false;
+        }
+        for value in [self.from, self.until].into_iter().flatten() {
+            if !(0..=253_402_300_800_000).contains(&value) {
+                return false;
+            }
+        }
+        if let (Some(from), Some(until)) = (self.from, self.until) {
+            if from >= until {
+                return false;
+            }
+        }
+        let empty = self.query.is_empty()
+            && self.top_k == 0
+            && self.sender.is_empty()
+            && self.category_id.is_empty()
+            && self.from.is_none()
+            && self.until.is_none();
+        match self.operation.as_str() {
+            "status" => empty,
+            "cancel" => empty && !self.account_id.is_empty() && !self.job_id.is_empty(),
+            "index" => empty && !self.account_id.is_empty() && self.job_id.is_empty(),
+            "query" => {
+                !self.account_id.is_empty()
+                    && self.job_id.is_empty()
+                    && !self.query.trim().is_empty()
+                    && (1..=20).contains(&self.top_k)
+            }
+            _ => false,
+        }
+    }
+}
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchCounts {
+    pub cached: u64,
+    pub eligible: u64,
+    pub indexed: u64,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchHit {
+    pub email_id: String,
+    pub sender: String,
+    pub subject: String,
+    pub received_at: i64,
+    pub similarity: f64,
+    pub excerpt: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchResponse {
+    pub account_id: String,
+    pub job_id: String,
+    pub operation: String,
+    pub state: String,
+    pub counts: SearchCounts,
+    pub processed: u32,
+    pub errors: u32,
+    pub scanned: u32,
+    pub partial: bool,
+    pub capped: bool,
+    pub excerpt_fallback: bool,
+    pub rows: Vec<SearchHit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CategoryRequest {
     pub operation: String,
     pub account_id: String,
@@ -91,6 +180,8 @@ impl ClassificationRequest {
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClassificationPrediction {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score_kind: Option<String>,
     pub email_id: String,
     pub category_id: String,
     pub category_name: String,
@@ -102,7 +193,23 @@ pub struct ClassificationPrediction {
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct ClassificationCandidate {
+    pub category_id: String,
+    pub category_name: String,
+    pub similarity: f64,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClassificationAssessment {
+    pub used_classifier: String,
+    pub reason: String,
+    pub candidates: Vec<ClassificationCandidate>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClassificationRow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assessment: Option<ClassificationAssessment>,
     pub email_id: String,
     pub sender: String,
     pub subject: String,
@@ -129,6 +236,8 @@ pub struct ClassificationPage {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrganizationRequest {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source: String,
     pub operation: String,
     pub account_id: String,
     pub offset: u32,
@@ -138,6 +247,12 @@ pub struct OrganizationRequest {
 }
 impl OrganizationRequest {
     fn valid(&self) -> bool {
+        if !self.source.is_empty()
+            && (self.source != "phishing"
+                || !["list", "preview", "dry_run"].contains(&self.operation.as_str()))
+        {
+            return false;
+        }
         if self.account_id.len() > 100
             || self.offset > 1_000_000
             || self.email_ids.len() > 5
@@ -180,7 +295,18 @@ impl OrganizationRequest {
 }
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrganizationRisk {
+    pub score: u8,
+    pub risk: String,
+    pub version: String,
+    pub reasons: Vec<RiskReason>,
+    pub threshold: u8,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrganizationRow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phishing: Option<OrganizationRisk>,
     pub email_id: String,
     pub sender: String,
     pub subject: String,
@@ -326,12 +452,29 @@ pub struct SyncProgress {
 }
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RiskReason {
+    pub code: String,
+    pub points: i32,
+    pub explanation: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RiskAssessment {
+    pub score: u8,
+    pub risk: String,
+    pub version: String,
+    pub reasons: Vec<RiskReason>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MailboxRow {
     pub id: String,
     pub sender: String,
     pub subject: String,
     pub received_at: i64,
     pub body_state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phishing: Option<RiskAssessment>,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -425,7 +568,11 @@ impl Bridge {
             input.flush().map_err(|_| "Backend disconnected")?;
             let bytes = self
                 .responses
-                .recv_timeout(Duration::from_secs(7))
+                .recv_timeout(Duration::from_secs(if method == "classification.review" {
+                    32
+                } else {
+                    7
+                }))
                 .map_err(|_| "Backend did not respond")?;
             let response: Response =
                 serde_json::from_slice(&bytes).map_err(|_| "Invalid backend response")?;
@@ -489,6 +636,16 @@ impl Bridge {
             serde_json::to_value(request).map_err(|_| "Invalid organization request")?,
         )?)
         .map_err(|_| "Invalid organization response".into())
+    }
+    pub fn search(&mut self, request: SearchRequest) -> Result<SearchResponse, String> {
+        if !request.valid() {
+            return Err("Invalid semantic search request".into());
+        }
+        serde_json::from_value(self.request(
+            "search.semantic",
+            serde_json::to_value(request).map_err(|_| "Invalid semantic search request")?,
+        )?)
+        .map_err(|_| "Invalid semantic search response".into())
     }
     pub fn classifications(
         &mut self,
@@ -673,5 +830,100 @@ mod organization_tests {
         let mut bad = fixture["request"].clone();
         bad["shell"] = serde_json::json!("synthetic");
         assert!(serde_json::from_value::<OrganizationRequest>(bad).is_err());
+    }
+}
+
+#[cfg(test)]
+mod risk_tests {
+    use super::*;
+    #[test]
+    fn phishing_contract_preserves_signed_reasons() {
+        let fixture = include_str!("../../contracts/phishing-v1.json");
+        let page: MailboxPage = serde_json::from_str(fixture).unwrap();
+        let assessment = page.rows[0].phishing.as_ref().unwrap();
+        assert_eq!(assessment.score, 7);
+        assert_eq!(assessment.reasons[1].points, -8);
+        let encoded = serde_json::to_value(page).unwrap();
+        assert_eq!(
+            encoded,
+            serde_json::from_str::<serde_json::Value>(fixture).unwrap()
+        );
+    }
+}
+
+#[cfg(test)]
+mod phishing_organization_tests {
+    use super::*;
+    #[test]
+    fn reviewed_risk_contract_and_source_validation() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../contracts/organization-phishing-v1.json"
+        ))
+        .unwrap();
+        let request: OrganizationRequest =
+            serde_json::from_value(fixture["request"].clone()).unwrap();
+        assert!(request.valid());
+        let response: OrganizationResponse =
+            serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(response.rows[0].phishing.as_ref().unwrap().threshold, 60);
+        let mut expected = fixture["response"].clone();
+        expected["rows"][0]["confidence"] = serde_json::json!(0.0);
+        assert_eq!(serde_json::to_value(response).unwrap(), expected);
+        let mut invalid = request;
+        invalid.source = "spam".into();
+        assert!(!invalid.valid());
+        invalid.source = "phishing".into();
+        invalid.operation = "apply".into();
+        invalid.email_ids.clear();
+        invalid.action_id = "action".into();
+        invalid.digest = "a".repeat(64);
+        assert!(!invalid.valid());
+    }
+    #[test]
+    fn semantic_classification_contract() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../contracts/classification-semantic-v1.json"
+        ))
+        .unwrap();
+        let page: ClassificationPage = serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(
+            page.rows[0].assessment.as_ref().unwrap().candidates.len(),
+            2
+        );
+        assert_eq!(
+            page.rows[0].predictions[0].score_kind.as_deref(),
+            Some("cosine_similarity")
+        );
+        assert_eq!(serde_json::to_value(page).unwrap(), fixture["response"]);
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+    #[test]
+    fn semantic_search_contract_and_strict_scope() {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../contracts/search-semantic-v1.json")).unwrap();
+        let request: SearchRequest = serde_json::from_value(fixture["request"].clone()).unwrap();
+        assert!(request.valid());
+        let response: SearchResponse = serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(serde_json::to_value(response).unwrap(), fixture["response"]);
+        for change in [
+            json!({"topK":21}),
+            json!({"operation":"fetch"}),
+            json!({"from":20,"until":10}),
+            json!({"query":""}),
+        ] {
+            let mut bad = fixture["request"].clone();
+            for (k, v) in change.as_object().unwrap() {
+                bad[k] = v.clone();
+            }
+            let request: SearchRequest = serde_json::from_value(bad).unwrap();
+            assert!(!request.valid());
+        }
+        let mut bad = fixture["request"].clone();
+        bad["url"] = json!("https://example.test");
+        assert!(serde_json::from_value::<SearchRequest>(bad).is_err());
     }
 }

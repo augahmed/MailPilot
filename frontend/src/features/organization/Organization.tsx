@@ -21,6 +21,7 @@ const messages: Record<string, string> = {
   busy: "An earlier account operation is still stopping.",
 };
 export function Organization() {
+  const [source, setSource] = useState<"" | "phishing">("");
   const [page, setPage] = useState<OrganizationResponse | null>(null);
   const [batch, setBatch] = useState<OrganizationResponse | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -51,7 +52,11 @@ export function Organization() {
     mounted.current = true;
     async function load() {
       try {
-        const result = await organize({ operation: "list", offset });
+        const result = await organize({
+          operation: "list",
+          offset,
+          source: source || undefined,
+        });
         if (!active || pending.current || current !== revision.current) return;
         if (account.current && account.current !== result.accountId) {
           setBatch(null);
@@ -91,7 +96,7 @@ export function Organization() {
       active = false;
       mounted.current = false;
     };
-  }, [offset, clearAccount]);
+  }, [offset, source, clearAccount]);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -160,6 +165,12 @@ export function Organization() {
     try {
       let result = await organize({
         operation,
+        source:
+          operation === "list" ||
+          operation === "preview" ||
+          operation === "dry_run"
+            ? source || undefined
+            : undefined,
         accountId: expectedAccount,
         offset,
         emailIds:
@@ -213,15 +224,37 @@ export function Organization() {
     <section className="status-card" aria-labelledby="organization-heading">
       <h2 id="organization-heading">Gmail organization</h2>
       <p>
-        Select predictions, then review live Gmail labels before applying.
-        Confidence reflects rule strength. Only MailPilot user labels are added;
-        messages stay in your Inbox.
+        Select suggestions, then review live Gmail labels before applying.
+        Classification scores reflect rule strength or embedding similarity.
+        Phishing scores are heuristics, not proof of phishing or a guarantee of
+        safety. Applying adds a label only; messages are never deleted,
+        archived, or moved to Spam.
       </p>
       <p className="help">
         The selection table uses cached labels. Dry Run and previews read live
         Gmail state. Undo removes verified additions from the last batch;
         created labels remain in Gmail.
       </p>
+      <label>
+        Review suggestions
+        <select
+          value={source}
+          disabled={busy}
+          onChange={(event) => {
+            revision.current++;
+            setSource(event.target.value === "phishing" ? "phishing" : "");
+            setOffset(0);
+            setSelected([]);
+            setPage(null);
+            setBatch(null);
+            setConfirmed(false);
+            setDryRun(true);
+          }}
+        >
+          <option value="">Classification labels</option>
+          <option value="phishing">Potential Phishing</option>
+        </select>
+      </label>
       {error && <p role="alert">{error}</p>}
       <div role="status" aria-live="polite">
         {busy
@@ -264,7 +297,7 @@ export function Organization() {
                 <th scope="col">Email</th>
                 <th scope="col">Current labels</th>
                 <th scope="col">Proposed label</th>
-                <th scope="col">Confidence</th>
+                <th scope="col">Evidence</th>
                 <th scope="col">Change</th>
               </tr>
             </thead>
@@ -298,13 +331,41 @@ export function Organization() {
                       ? row.currentLabels.join(", ")
                       : "No labels"}
                   </td>
-                  <td>{row.proposedLabel || "Unclassified"}</td>
                   <td>
-                    {row.confidence
-                      ? `${Math.round(row.confidence * 100)}%`
-                      : "—"}
+                    {row.proposedLabel ||
+                      (source === "phishing"
+                        ? "No HIGH-risk proposal"
+                        : "Unclassified")}
                   </td>
-                  <td>{row.change === "none" ? "No change" : row.change}</td>
+                  <td>
+                    {row.phishing ? (
+                      <>
+                        <strong>{row.phishing.score} HIGH</strong>
+                        <p>HIGH threshold: {row.phishing.threshold}</p>
+                        <ol aria-label="Phishing risk reasons">
+                          {row.phishing.reasons.map((reason) => (
+                            <li key={reason.code}>
+                              {reason.points > 0 ? "+" : ""}
+                              {reason.points} {reason.explanation}
+                            </li>
+                          ))}
+                        </ol>
+                      </>
+                    ) : row.confidence ? (
+                      `${Math.round(row.confidence * 100)}%`
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td>
+                    {row.change === "none"
+                      ? "No change"
+                      : row.change === "below_threshold"
+                        ? "Below HIGH threshold"
+                        : row.change === "risk_unavailable"
+                          ? "Risk analysis unavailable; refresh to retry"
+                          : row.change}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -312,7 +373,10 @@ export function Organization() {
         </div>
       )}
       {!rows.length && (
-        <p>No cached predictions available. Sync and classify mail first.</p>
+        <p>
+          No cached suggestions available. Sync mail, then review phishing risk
+          or classify messages.
+        </p>
       )}
       {!batch?.rows.length && (
         <>
@@ -361,8 +425,9 @@ export function Organization() {
       ) : null}
       {batch?.state === "dry_run" && (
         <p>
-          Dry Run complete. No mailbox or journal changes were made. Turn off
-          Dry Run and generate a fresh apply preview to continue.
+          Dry Run complete. No Gmail or action-journal changes were made. Local
+          risk assessments may be refreshed. Turn off Dry Run and generate a
+          fresh apply preview to continue.
         </p>
       )}
       {preview && (

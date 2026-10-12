@@ -10,6 +10,7 @@ import (
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/repository"
+	"mailpilot.local/core/internal/risk"
 )
 
 type OrganizationProvider interface {
@@ -23,6 +24,7 @@ type OrganizationProvider interface {
 // Organization runs a single bounded job per desktop session. No remote write
 // is reachable from list, preview, dry run, status or reconciliation.
 type Organization struct {
+	riskEngine *risk.Engine
 	mu         sync.Mutex
 	gate       chan struct{}
 	root       context.Context
@@ -40,8 +42,11 @@ type Organization struct {
 }
 
 func NewOrganization(root context.Context, session func() (domain.AccountID, context.Context, error), factory func(domain.AccountID) OrganizationProvider, emails repository.EmailRepository, categories repository.CategoryRepository, results repository.ClassificationRepository, journal repository.OrganizationRepository, engine classification.ClassificationEngine) *Organization {
-	return &Organization{root: root, session: session, factory: factory, emails: emails, categories: categories, results: results, journal: journal, engine: engine, response: emptyOrganization()}
+	return &Organization{riskEngine: risk.DefaultEngine(), root: root, session: session, factory: factory, emails: emails, categories: categories, results: results, journal: journal, engine: engine, response: emptyOrganization()}
 }
+
+// SetRiskEngine configures scoring once before any requests.
+func (s *Organization) SetRiskEngine(engine *risk.Engine) { s.riskEngine = engine }
 
 // SetOperationGate is configured once before starting jobs; use a capacity-one channel.
 func (s *Organization) SetOperationGate(gate chan struct{}) { s.gate = gate }
@@ -64,7 +69,7 @@ func (a *App) Organize(ctx context.Context, p OrganizationRequest) OrganizationR
 }
 func orgCode(err error) string {
 	switch {
-	case errors.Is(err, repository.ErrConflict):
+	case errors.Is(err, repository.ErrConflict), errors.Is(err, errRiskBelowThreshold):
 		return "stale_preview"
 	case errors.Is(err, repository.ErrNotFound):
 		return "not_found"
@@ -94,7 +99,11 @@ func (s *Organization) Handle(ctx context.Context, p OrganizationRequest) Organi
 	stop := context.AfterFunc(session, cancel)
 	defer stop()
 	if p.Operation == "list" {
-		return s.list(ctx, account, p.Offset)
+		result := s.list(ctx, account, p.Offset, p.Source)
+		if session.Err() != nil {
+			return fail("unauthorized")
+		}
+		return result
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -1,0 +1,48 @@
+{
+  "request": {
+    "operation": "query",
+    "accountId": "fixture-account",
+    "jobId": "",
+    "query": "technical interview scheduling",
+    "topK": 2,
+    "sender": "",
+    "categoryId": "",
+    "from": null,
+    "until": null
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "jobId": "fixture-search-job",
+    "operation": "query",
+    "state": "completed",
+    "counts": {
+      "cached": 4,
+      "eligible": 3,
+      "indexed": 3
+    },
+    "processed": 0,
+    "errors": 0,
+    "scanned": 3,
+    "partial": false,
+    "capped": false,
+    "excerptFallback": false,
+    "rows": [
+      {
+        "emailId": "fixture-interview",
+        "sender": "Recruiter <recruiter@example.test>",
+        "subject": "Meet the engineering team",
+        "receivedAt": 1791633600000,
+        "similarity": 0.82,
+        "excerpt": "Choose a time for your technical interview with the hiring team"
+      },
+      {
+        "emailId": "fixture-followup",
+        "sender": "Hiring team <hiring@example.test>",
+        "subject": "Interview calendar update",
+        "receivedAt": 1791547200000,
+        "similarity": 0.63,
+        "excerpt": "The recruiter has sent a revised meeting time"
+      }
+    ]
+  }
+}

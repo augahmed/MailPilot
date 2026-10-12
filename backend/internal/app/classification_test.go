@@ -10,6 +10,7 @@ import (
 
 	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/domain"
+	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/repository"
 	"mailpilot.local/core/internal/store/sqlite"
 )
@@ -182,13 +183,67 @@ func TestClassificationResponseFitsPrivateFrameWithEscapedText(t *testing.T) {
 		for j := 0; j < 6; j++ {
 			prediction.Reasons = append(prediction.Reasons, text(160))
 		}
-		page.Rows = append(page.Rows, ClassificationRow{EmailID: prediction.EmailID, Sender: text(101), Subject: text(201), BodyState: "complete", State: "classified", Timestamp: &timestamp, Predictions: []ClassificationDTO{prediction}})
+		assessment := &ClassificationAssessmentDTO{UsedClassifier: text(100), Reason: text(160), Candidates: []ClassificationCandidateDTO{}}
+		for j := 0; j < 5; j++ {
+			assessment.Candidates = append(assessment.Candidates, ClassificationCandidateDTO{CategoryID: text(100), CategoryName: text(101), Similarity: .6})
+		}
+		page.Rows = append(page.Rows, ClassificationRow{Assessment: assessment, EmailID: prediction.EmailID, Sender: text(101), Subject: text(201), BodyState: "complete", State: "classified", Timestamp: &timestamp, Predictions: []ClassificationDTO{prediction}})
 	}
 	encoded, err := json.Marshal(struct {
 		JSONRPC, ID string
 		Result      ClassificationPage
-	}{"2.0", strings.Repeat("i", 64), page})
+	}{"2.0", strings.Repeat("i", 64), boundedClassificationPage(page)})
 	if err != nil || len(encoded)+1 >= 64*1024 {
 		t.Fatal("classification DTO exceeds private frame limit", len(encoded), err)
+	}
+}
+
+type reviewSemanticEmbeddings struct{ err error }
+
+func (e *reviewSemanticEmbeddings) ProviderName() string { return "fixture/model" }
+func (e *reviewSemanticEmbeddings) Dimension() int       { return 2 }
+func (e *reviewSemanticEmbeddings) EmbedEmail(context.Context, domain.AccountID, domain.EmailID) ([]float32, error) {
+	return []float32{1, 0}, e.err
+}
+func (e *reviewSemanticEmbeddings) EmbedCategories(_ context.Context, _ domain.AccountID, categories []domain.EmailCategory) ([][]float32, error) {
+	v := make([][]float32, len(categories))
+	for i, c := range categories {
+		if c.Name == "Receipts" {
+			v[i] = []float32{1, 0}
+		} else {
+			v[i] = []float32{0, 1}
+		}
+	}
+	return v, e.err
+}
+func TestHybridReviewStoresAndExposesSemanticEvidence(t *testing.T) {
+	store, review, receipt, _ := reviewFixture(t)
+	fake := &reviewSemanticEmbeddings{}
+	semantic, err := classification.NewSemanticClassifier(fake, classification.DefaultSemanticConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hybrid, err := classification.NewHybridClassifier(review.engine, semantic, classification.DefaultHybridConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	review.engine = hybrid
+	request := ClassificationRequest{Operation: "run", AccountID: "a"}
+	page := review.Review(context.Background(), request)
+	if page.Errors != 0 || page.Processed != 2 || page.Rows[0].Assessment == nil || page.Rows[0].Assessment.UsedClassifier != "SemanticClassifier" || len(page.Rows[0].Assessment.Candidates) != 3 || page.Rows[0].Predictions[0].ScoreKind != "cosine_similarity" {
+		t.Fatal(page)
+	}
+	old, err := store.Classifications().Get(context.Background(), "a", receipt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.err = embedding.ErrProvider
+	failed := review.Review(context.Background(), request)
+	if failed.Errors != 2 || failed.Rows[0].Code != "embedding_unavailable" {
+		t.Fatal(failed)
+	}
+	saved, err := store.Classifications().Get(context.Background(), "a", receipt.ID)
+	if err != nil || !saved.Timestamp.Equal(old.Timestamp) {
+		t.Fatal("failed inference overwrote prior assessment", err)
 	}
 }

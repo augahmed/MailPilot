@@ -1,3 +1,4 @@
+import { SemanticSearch } from "../features/search/SemanticSearch";
 import { Organization } from "../features/organization/Organization";
 import { ClassificationReview } from "../features/classification/ClassificationReview";
 import { Categories } from "../features/categories/Categories";
@@ -92,6 +93,7 @@ export function App() {
         key={connectionRevision}
         connectionRevision={connectionRevision}
       />
+      <SemanticSearch key={`search-${connectionRevision}`} />
       <Categories key={`categories-${connectionRevision}`} />
       <ClassificationReview key={`classification-${connectionRevision}`} />
       <Organization key={`organization-${connectionRevision}`} />

@@ -6,6 +6,7 @@ import (
 	"mailpilot.local/core/internal/auth"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/repository"
+	"mailpilot.local/core/internal/risk"
 	mailsync "mailpilot.local/core/internal/sync"
 )
 
@@ -15,6 +16,8 @@ type Database interface {
 }
 
 type App struct {
+	Search         *MailboxSearch
+	RiskEngine     *risk.Engine
 	Auth           *auth.Manager
 	Sync           *mailsync.Service
 	Emails         repository.EmailRepository
@@ -37,6 +40,9 @@ func (a *App) Health(ctx context.Context) domain.Health {
 
 func (a *App) AuthStatus() auth.Status { return a.Auth.Status() }
 func (a *App) AuthBegin() auth.BeginResult {
+	if a.Search != nil {
+		a.Search.Clear()
+	}
 	if a.Sync != nil {
 		a.Sync.Clear()
 	}
@@ -44,6 +50,9 @@ func (a *App) AuthBegin() auth.BeginResult {
 }
 func (a *App) AuthCheck() auth.Status { return a.Auth.Check() }
 func (a *App) AuthDisconnect() auth.Status {
+	if a.Search != nil {
+		a.Search.Clear()
+	}
 	if a.Sync != nil {
 		a.Sync.Clear()
 	}

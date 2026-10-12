@@ -7,13 +7,12 @@ import (
 	"strings"
 	"unicode"
 
-	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/repository"
 )
 
-func (s *Organization) list(ctx context.Context, account domain.AccountID, offset int) OrganizationResponse {
+func (s *Organization) list(ctx context.Context, account domain.AccountID, offset int, source string) OrganizationResponse {
 	r := emptyOrganization()
 	r.AccountID = string(account)
 	emails, err := s.emails.List(ctx, account, repository.Page{Limit: 6, Offset: offset})
@@ -38,6 +37,20 @@ func (s *Organization) list(ctx context.Context, account domain.AccountID, offse
 		row := OrganizationRowDTO{EmailID: string(email.ID), Sender: shortText(email.Sender.Address, 100), Subject: shortText(email.Subject, 200), CurrentLabels: []string{}, Change: "unclassified"}
 		for _, label := range email.Labels[:min(len(email.Labels), 50)] {
 			row.CurrentLabels = append(row.CurrentLabels, shortText(label.Name, 100))
+		}
+		if source == "phishing" {
+			proposal, _, err := s.proposal(ctx, account, email.ID, source)
+			if err == nil {
+				row.ProposedLabel = proposal.ProposedLabel
+				row.Phishing = organizationRiskDTO(proposal.Phishing)
+				row.Change = "candidate"
+			} else if !errors.Is(err, errRiskBelowThreshold) {
+				row.Change = "risk_unavailable"
+			} else {
+				row.Change = "below_threshold"
+			}
+			r.Rows = append(r.Rows, row)
+			continue
 		}
 		run, err := s.results.Get(ctx, account, email.ID)
 		if err != nil && !errors.Is(err, repository.ErrNotFound) && !errors.Is(err, repository.ErrConflict) {
@@ -138,7 +151,7 @@ func (s *Organization) preview(ctx context.Context, account domain.AccountID, re
 	plan := domain.OrganizationPlan{AccountID: account, Kind: domain.ActionLabelDelta, Rows: []domain.OrganizationRow{}, Steps: []domain.OrganizationStep{}}
 	creates := map[string]bool{}
 	for _, id := range req.EmailIDs {
-		run, cat, email, err := s.prediction(ctx, account, domain.EmailID(id))
+		row, email, err := s.proposal(ctx, account, domain.EmailID(id), req.Source)
 		if err != nil {
 			return emptyOrganization(), err
 		}
@@ -146,15 +159,21 @@ func (s *Organization) preview(ctx context.Context, account domain.AccountID, re
 		if err != nil {
 			return emptyOrganization(), err
 		}
-		if live.AccountID != account || live.ProviderID != email.ProviderID || classification.InputHash(live, categories) != run.InputHash {
+		if live.AccountID != account || live.ProviderID != email.ProviderID || !matchesOrganizationInput(live, categories, row) {
 			return emptyOrganization(), repository.ErrConflict
 		}
 		before, names, err := labelsSnapshot(account, live.Labels)
 		if err != nil {
 			return emptyOrganization(), err
 		}
-		name := "MailPilot/" + cat.Name
-		row := domain.OrganizationRow{EmailID: email.ID, ProviderID: email.ProviderID, CategoryID: cat.ID, InputHash: run.InputHash, PredictionTimestamp: run.Timestamp.UnixMilli(), Sender: shortText(email.Sender.Address, 100), Subject: shortText(email.Subject, 200), CurrentLabels: names, BeforeLabels: before, ProposedLabel: name, Confidence: run.Results[0].Confidence, Change: "add"}
+		name := row.ProposedLabel
+		row.EmailID = email.ID
+		row.ProviderID = email.ProviderID
+		row.Sender = shortText(email.Sender.Address, 100)
+		row.Subject = shortText(email.Subject, 200)
+		row.CurrentLabels = names
+		row.BeforeLabels = before
+		row.Change = "add"
 		label, exists := labels[name]
 		if exists {
 			if label.Kind != domain.LabelKindUser {

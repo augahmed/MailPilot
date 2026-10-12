@@ -116,7 +116,7 @@ States: idle, running, completed, error, cancelled. Optional `code` is a safe di
 }
 ```
 
-An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; schemaVersion in health now reports 6.
+An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; schemaVersion in health now reports 7.
 
 ## Category management (protocol v1 additive extension)
 
@@ -143,3 +143,56 @@ Top-level safe codes are validation, unauthorized, conflict, cancelled, invalid_
 Responses always include accountId, state, code, id, digest, kind, expiresAt (UTC milliseconds), dryRun, rows, steps and hasMore. Rows contain emailId, sender, subject, currentLabels, proposedLabel, confidence and change (candidate/unclassified/add/remove/none). Steps contain kind (create_label/add/remove), name, emailId, state and safe code. Rows/steps are bounded to five/ten. Dry run has no action ID/digest and cannot be applied. No message bodies or credentials are returned. Codes are validation, unauthorized, busy, stale_preview, not_found, cancelled, reauth_required, unsupported, operation_failed and reconciliation_required, or the empty string on success. Step codes describe conflicts/uncertainty/cache failures without provider bodies.
 
 Network jobs return running immediately and are polled with status; short IPC calls retain the five-second deadline. Jobs have a three-minute timeout and session-bound cancellation. Go owns all authorization, preview persistence, digest/expiry checks, dispatch/reconciliation and undo. Rust exposes only the specific allowlisted command. A preview does not authorize a write; the frontend requires explicit confirmation for apply and for undo. Legacy protocol-v1 DTOs remain unchanged and the fixed core/host/frontend are packaged together.
+
+## Protocol 1 additive phishing assessment
+
+Each `mail.list` row may include `phishing` (absent means analysis unavailable):
+
+```json
+{
+  "score": 7,
+  "risk": "LOW",
+  "version": "risk-1/phishing-features-1/<configuration-sha256>",
+  "reasons": [
+    {
+      "code": "credentials",
+      "points": 15,
+      "explanation": "Credential-related language (may also be legitimate)"
+    },
+    {
+      "code": "aligned_links",
+      "points": -8,
+      "explanation": "All observed web links align with the sender site (weak signal)"
+    },
+    {
+      "code": "authentication_unknown",
+      "points": 0,
+      "explanation": "Authentication is unverified; header claims do not affect this score"
+    }
+  ]
+}
+```
+
+Score is an integer 0–100; risk is LOW, MEDIUM or HIGH. Reasons contain signed integer points, stable codes and plain-text explanations, with at most 12 entries. Positive contributions sort descending, then reductions, then zero-point limitations. The total is clamped. The version includes the exact weights/thresholds fingerprint. These are heuristic indicators, never confirmed phishing or guaranteed safety. Results are local, account-scoped, persisted and recomputed on content/configuration changes. Mailbox polling only scores missing/stale assessments; there is no new command or remote write. Older rows without assessments remain valid. Old strict clients/hosts must be upgraded with the core to accept this additive field.
+
+## Reviewed phishing organization (protocol 1 additive extension)
+
+[organization-phishing-v1.json](organization-phishing-v1.json) is checked by Go, Rust and TypeScript. Organization requests accept optional `source: "phishing"` only for list, preview and dry_run. Absent/empty source retains category organization. Apply, undo, status, reconcile and cancel must omit it; their saved action determines the evidence. Unknown sources, supplied labels/scores/thresholds and automatic-apply fields are rejected.
+
+Risk candidate/preview rows propose the exact `Potential Phishing` label and include optional `phishing: {score, risk: "HIGH", threshold, version, reasons}`. Reasons have the same signed-points shape as mailbox assessments. `score >= threshold`, with threshold 31–100, default 60. Classification confidence is zero for risk rows. Additional row changes are `below_threshold` and `risk_unavailable`, neither selectable. Other row fields, steps, batch limits and explicit digest-based confirmation remain unchanged; user-label step names now also accept the exact `Potential Phishing` name. Dry Run has no applyable action ID and makes no Gmail or action-journal writes, but may update local risk assessments.
+
+Migration 7 retains old category plans; optional phishing evidence is stored in the immutable plan JSON. Old fixtures without source/evidence remain valid. Ship the updated core, strict host DTOs and frontend together. No new native command or permission was added.
+
+## Hybrid semantic classification (protocol v1 additive extension)
+
+[classification-semantic-v1.json](classification-semantic-v1.json) extends the existing review fixture. Predictions may carry `score_kind: "rule_confidence" | "cosine_similarity"`. Reviewed classified/unclassified rows may carry `assessment: {used_classifier, reason, candidates}`; other states carry none. Candidates contain category_id, category_name and finite similarity from -1 to 1, at most five, ordered descending with category-ID tie breaks and no duplicate IDs. Semantic winner ID/score must match the first candidate. Reasons are nonempty and capped at 160 bytes; used_classifier is capped at 100 bytes. Missing additive fields remain compatible with old responses. `embedding_unavailable` is an additional safe row/page error code. Current runtime returns three candidates and distinguishes actual classifier from the hybrid engine/version stored on predictions.
+
+Manual `classification.review` uses a 30-second core deadline and 32-second native response deadline for local inference; all other commands retain their existing deadlines. No new command or arbitrary worker invocation is added. Account authorization, bounded five-email pages and zero mailbox writes are unchanged.
+
+## Local semantic search (protocol v1 additive extension)
+
+The main-window `semantic_search` native command maps only to `search.semantic`. [search-semantic-v1.json](search-semantic-v1.json) is the shared synthetic example. Request fields are operation (`status`, `index`, `query`, `cancel`), accountId, jobId, query, topK, sender, categoryId, from/until (nullable UTC epoch milliseconds). Missing Go/Rust nullable fields denote no date filter; the client sends explicit nulls. Index/query require an authorized matching account and no jobId; cancel requires the current jobId. Status/cancel/index reject query/filter/top-K fields; query requires nonblank text ≤1,000 UTF-8 bytes and topK 1–20. Sender is ≤256 bytes, IDs ≤100 bytes. Dates are bounded to 1970–10000 with from < until, start inclusive/end exclusive. Unknown fields and operations are rejected; no endpoint, Gmail query language, model path or generic backend invocation is accepted.
+
+Responses carry accountId, jobId, operation, state (`idle`, `indexing`, `searching`, `completed`, `cancelled`, `error`), counts `{cached, eligible, indexed}`, processed/errors/scanned, partial/capped/excerptFallback, rows and optional safe code. Count invariants are indexed ≤ eligible ≤ cached; processed/errors/scanned are bounded by 10,000. Rows appear only for a completed query: at most 20 unique emailIds, descending finite cosine similarity -1…1, sender ≤81 Unicode characters, subject ≤121, receivedAt in epoch milliseconds, excerpt ≤161. Ties use date descending then ID ascending. Source bodies/HTML, query text and vectors are not echoed. Caps/errors are explicit; unauthorized responses carry no account/mail rows. Codes: unauthorized, validation, conflict, cancelled, embedding_unavailable, storage_error, busy, response_too_large. Responses are capped at 48 KiB before framing.
+
+Index/query start background local jobs and return immediately; status/cancel remain under ordinary IPC deadlines. Category filters match explicit assignments or fresh choices under the current classifier, not stale predictions. No provider operation or external inference is reachable. The desktop smoke check now also verifies this command denies mailbox access without an authorized account.

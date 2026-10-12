@@ -63,3 +63,49 @@ it("reports bridge failure without retaining mailbox content", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Cannot reach");
   expect(screen.queryByText("Sender")).not.toBeInTheDocument();
 });
+it("shows signed, ordered risk explanations and uncertainty", async () => {
+  vi.mocked(getMailbox).mockResolvedValue({
+    accountId: "a",
+    hasMore: false,
+    rows: [
+      {
+        id: "1",
+        sender: "Sender",
+        subject: "Example",
+        receivedAt: 1700000000000,
+        bodyState: "complete",
+        phishing: {
+          score: 7,
+          risk: "LOW",
+          version: "risk-test",
+          reasons: [
+            {
+              code: "credentials",
+              points: 15,
+              explanation: "Credential-related language",
+            },
+            { code: "aligned_links", points: -8, explanation: "Aligned links" },
+            {
+              code: "incomplete",
+              points: 0,
+              explanation: "Analysis is incomplete",
+            },
+          ],
+        },
+      },
+    ],
+  });
+  render(<Mailbox connectionRevision={0} />);
+  expect(await screen.findByText("7 LOW")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("7 LOW"));
+  expect(
+    screen.getAllByRole("listitem").map((item) => item.textContent),
+  ).toEqual([
+    "+15 Credential-related language",
+    "-8 Aligned links",
+    "0 Analysis is incomplete",
+  ]);
+  expect(
+    screen.getByText(/not a probability or a guarantee/),
+  ).toBeInTheDocument();
+});

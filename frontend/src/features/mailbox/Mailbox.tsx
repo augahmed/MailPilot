@@ -125,6 +125,10 @@ export function Mailbox({
       )}
       {page?.code && <p role="alert">Could not read the local mailbox.</p>}
       <h2>Cached mail</h2>
+      <p>
+        Phishing risk is a local heuristic, not a probability or a guarantee of
+        safety. Scores are limited to 0–100; missing content may hide risk.
+      </p>
       <p className="help">
         Updated counts include refreshed cached messages. This list is a cached
         subset, not a complete or live Inbox.
@@ -141,6 +145,7 @@ export function Mailbox({
                 <th scope="col">Sender</th>
                 <th scope="col">Subject</th>
                 <th scope="col">Received</th>
+                <th scope="col">Phishing risk</th>
               </tr>
             </thead>
             <tbody>
@@ -157,6 +162,26 @@ export function Mailbox({
                     <time dateTime={new Date(row.receivedAt).toISOString()}>
                       {new Date(row.receivedAt).toLocaleString()}
                     </time>
+                  </td>
+                  <td>
+                    {row.phishing ? (
+                      <details>
+                        <summary>
+                          {row.phishing.score} {row.phishing.risk}
+                        </summary>
+                        <ol>
+                          {row.phishing.reasons.map((reason) => (
+                            <li key={reason.code}>
+                              {reason.points > 0 ? "+" : ""}
+                              {reason.points} {reason.explanation}
+                            </li>
+                          ))}
+                        </ol>
+                        <small>Analyzer: {row.phishing.version}</small>
+                      </details>
+                    ) : (
+                      <span>Risk analysis unavailable; refresh to retry.</span>
+                    )}
                   </td>
                 </tr>
               ))}

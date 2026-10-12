@@ -1,0 +1,87 @@
+{
+  "request": {
+    "operation": "preview",
+    "accountId": "fixture-account",
+    "offset": 0,
+    "emailIds": ["fixture-email"],
+    "actionId": "",
+    "digest": "",
+    "source": "phishing"
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "state": "preview",
+    "code": "",
+    "id": "fixture-action",
+    "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "label_delta",
+    "expiresAt": 1791741600000,
+    "dryRun": false,
+    "hasMore": false,
+    "rows": [
+      {
+        "emailId": "fixture-email",
+        "sender": "store@example.test",
+        "subject": "Your receipt",
+        "currentLabels": ["INBOX", "Keep"],
+        "proposedLabel": "Potential Phishing",
+        "confidence": 0,
+        "change": "add",
+        "phishing": {
+          "score": 80,
+          "risk": "HIGH",
+          "threshold": 60,
+          "version": "risk-test",
+          "reasons": [
+            {
+              "code": "reply_mismatch",
+              "points": 25,
+              "explanation": "Reply-To and sender use different sites"
+            },
+            {
+              "code": "misleading_url",
+              "points": 25,
+              "explanation": "Displayed URL and destination use different sites"
+            },
+            {
+              "code": "credentials",
+              "points": 15,
+              "explanation": "Credential-related language (may also be legitimate)"
+            },
+            {
+              "code": "urgency",
+              "points": 8,
+              "explanation": "Urgency language"
+            },
+            {
+              "code": "account_security",
+              "points": 7,
+              "explanation": "Account-security language"
+            },
+            {
+              "code": "authentication_unknown",
+              "points": 0,
+              "explanation": "Authentication is unverified; header claims do not affect this score"
+            }
+          ]
+        }
+      }
+    ],
+    "steps": [
+      {
+        "kind": "create_label",
+        "name": "Potential Phishing",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "Potential Phishing",
+        "emailId": "fixture-email",
+        "state": "pending",
+        "code": ""
+      }
+    ]
+  }
+}

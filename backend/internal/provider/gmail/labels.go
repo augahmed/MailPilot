@@ -47,7 +47,7 @@ func (p *Provider) post(ctx context.Context, path string, payload, dst any) erro
 	return nil
 }
 func (p *Provider) CreateLabel(ctx context.Context, name string) (domain.EmailLabel, error) {
-	if !strings.HasPrefix(name, "MailPilot/") || len(name) <= 10 || len(name) > 110 || !utf8.ValidString(name) || strings.ContainsFunc(name, unicode.IsControl) {
+	if (!strings.HasPrefix(name, "MailPilot/") && name != domain.PotentialPhishingLabel) || len(name) <= 10 || len(name) > 110 || !utf8.ValidString(name) || strings.ContainsFunc(name, unicode.IsControl) {
 		return domain.EmailLabel{}, provider.ErrInvalidArgument
 	}
 	var l struct{ ID, Name, Type string }
@@ -75,7 +75,7 @@ func (p *Provider) modify(ctx context.Context, message domain.ProviderMessageID,
 	p.mu.Lock()
 	l, ok := p.labels[string(label)]
 	p.mu.Unlock()
-	if !ok || l.Kind != domain.LabelKindUser || !strings.HasPrefix(l.Name, "MailPilot/") {
+	if !ok || l.Kind != domain.LabelKindUser || (!strings.HasPrefix(l.Name, "MailPilot/") && l.Name != domain.PotentialPhishingLabel) {
 		return provider.ErrInvalidArgument
 	}
 	key := "removeLabelIds"

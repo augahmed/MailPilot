@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/domain"
+	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/repository"
 )
 
@@ -22,6 +24,7 @@ func (p ClassificationRequest) Valid() bool {
 }
 
 type ClassificationDTO struct {
+	ScoreKind         string   `json:"score_kind,omitempty"`
 	EmailID           string   `json:"email_id"`
 	CategoryID        string   `json:"category_id"`
 	CategoryName      string   `json:"category_name"`
@@ -31,15 +34,26 @@ type ClassificationDTO struct {
 	Reasons           []string `json:"reasons"`
 	Timestamp         int64    `json:"timestamp"`
 }
+type ClassificationCandidateDTO struct {
+	CategoryID   string  `json:"category_id"`
+	CategoryName string  `json:"category_name"`
+	Similarity   float64 `json:"similarity"`
+}
+type ClassificationAssessmentDTO struct {
+	UsedClassifier string                       `json:"used_classifier"`
+	Reason         string                       `json:"reason"`
+	Candidates     []ClassificationCandidateDTO `json:"candidates"`
+}
 type ClassificationRow struct {
-	EmailID     string              `json:"email_id"`
-	Sender      string              `json:"sender"`
-	Subject     string              `json:"subject"`
-	BodyState   string              `json:"bodyState"`
-	State       string              `json:"state"`
-	Predictions []ClassificationDTO `json:"predictions"`
-	Timestamp   *int64              `json:"timestamp"`
-	Code        string              `json:"code,omitempty"`
+	Assessment  *ClassificationAssessmentDTO `json:"assessment,omitempty"`
+	EmailID     string                       `json:"email_id"`
+	Sender      string                       `json:"sender"`
+	Subject     string                       `json:"subject"`
+	BodyState   string                       `json:"bodyState"`
+	State       string                       `json:"state"`
+	Predictions []ClassificationDTO          `json:"predictions"`
+	Timestamp   *int64                       `json:"timestamp"`
+	Code        string                       `json:"code,omitempty"`
 }
 type ClassificationPage struct {
 	AccountID string              `json:"accountId"`
@@ -82,7 +96,9 @@ func classificationCode(err error) string {
 		return "conflict"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return "cancelled"
-	case errors.Is(err, classification.ErrInvalidInput):
+	case errors.Is(err, embedding.ErrProvider), errors.Is(err, embedding.ErrVector), errors.Is(err, embedding.ErrUnavailable):
+		return "embedding_unavailable"
+	case errors.Is(err, classification.ErrInvalidInput), errors.Is(err, embedding.ErrInput):
 		return "invalid_message"
 	default:
 		return "storage_error"
@@ -159,17 +175,44 @@ func (s *ClassificationReview) Review(ctx context.Context, p ClassificationReque
 			timestamp := run.Timestamp.UnixMilli()
 			row.Timestamp = &timestamp
 			row.State = "unclassified"
+			if run.Reason != "" {
+				row.Assessment = &ClassificationAssessmentDTO{UsedClassifier: run.UsedClassifier, Reason: run.Reason, Candidates: []ClassificationCandidateDTO{}}
+				for _, candidate := range run.Candidates {
+					row.Assessment.Candidates = append(row.Assessment.Candidates, ClassificationCandidateDTO{string(candidate.CategoryID), shortText(names[candidate.CategoryID], 100), candidate.Similarity})
+				}
+			}
 			if len(run.Results) > 0 {
 				row.State = "classified"
 			}
 			for _, result := range run.Results {
-				row.Predictions = append(row.Predictions, ClassificationDTO{string(result.EmailID), string(result.CategoryID), shortText(names[result.CategoryID], 100), result.Confidence, result.ClassifierName, result.ClassifierVersion, result.Reasons, result.Timestamp.UnixMilli()})
+				row.Predictions = append(row.Predictions, ClassificationDTO{ScoreKind: result.ScoreKind, EmailID: string(result.EmailID), CategoryID: string(result.CategoryID), CategoryName: shortText(names[result.CategoryID], 100), Confidence: result.Confidence, ClassifierName: result.ClassifierName, ClassifierVersion: result.ClassifierVersion, Reasons: result.Reasons, Timestamp: result.Timestamp.UnixMilli()})
 			}
 		}
 		page.Rows = append(page.Rows, row)
 	}
 	if session.Err() != nil {
 		return ClassificationPage{Rows: []ClassificationRow{}, Code: "unauthorized"}
+	}
+	return boundedClassificationPage(page)
+}
+
+// Keep JSON escaping and added assessment evidence inside the private frame.
+// Oversized evidence remains persisted, but its row reports a display error.
+func boundedClassificationPage(page ClassificationPage) ClassificationPage {
+	for i := len(page.Rows) - 1; i >= 0; i-- {
+		data, err := json.Marshal(page)
+		if err == nil && len(data) <= 48*1024 {
+			return page
+		}
+		row := &page.Rows[i]
+		if row.State == "classified" || row.State == "unclassified" {
+			row.State = "error"
+			row.Code = "invalid_message"
+			row.Timestamp = nil
+			row.Predictions = []ClassificationDTO{}
+			row.Assessment = nil
+			page.Errors++
+		}
 	}
 	return page
 }

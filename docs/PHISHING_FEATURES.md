@@ -2,7 +2,7 @@
 
 Implemented in [PhishingFeatureExtractor](../backend/internal/risk/features.go), with the structured [PhishingFeatures model](../backend/internal/domain/phishing.go). `NewPhishingFeatureExtractor().Extract(ctx, email)` accepts a normalized `domain.Email` and returns observations identified by account ID, email ID and extractor version `phishing-features-1`.
 
-This is an extraction stage only. It does not assign a score, classify a message as phishing, establish safety, persist results, expose an IPC/UI operation or change a mailbox. It uses no LLM, embeddings, external threat intelligence, DNS lookup, link visit or attachment download/execution. A later scoring stage can consume these observations separately. No dependencies or migrations were added.
+This is an extraction stage only. It does not assign a score, classify a message as phishing, establish safety, persist results, expose an IPC/UI operation or change a mailbox. It uses no LLM, embeddings, external threat intelligence, DNS lookup, link visit or attachment download/execution. The separate implemented `risk.Engine` consumes these observations; the cached-mail use case persists and displays its explained score (see ARCHITECTURE.md section 7). No dependencies or migrations were added.
 
 ## Supported observations
 

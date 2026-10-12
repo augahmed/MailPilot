@@ -1,0 +1,35 @@
+{
+  "accountId": "synthetic-account",
+  "rows": [
+    {
+      "id": "synthetic-email",
+      "sender": "Synthetic Sender",
+      "subject": "Example",
+      "receivedAt": 1700000000000,
+      "bodyState": "complete",
+      "phishing": {
+        "score": 7,
+        "risk": "LOW",
+        "version": "risk-1/phishing-features-1/example-config-digest",
+        "reasons": [
+          {
+            "code": "credentials",
+            "points": 15,
+            "explanation": "Credential-related language (may also be legitimate)"
+          },
+          {
+            "code": "aligned_links",
+            "points": -8,
+            "explanation": "All observed web links align with the sender site (weak signal)"
+          },
+          {
+            "code": "authentication_unknown",
+            "points": 0,
+            "explanation": "Authentication is unverified; header claims do not affect this score"
+          }
+        ]
+      }
+    }
+  ],
+  "hasMore": false
+}

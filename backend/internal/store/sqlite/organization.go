@@ -31,13 +31,22 @@ func (r *organizationRepository) Create(ctx context.Context, p domain.Organizati
 	p.Digest = ""
 	seen := map[domain.EmailID]bool{}
 	for _, row := range p.Rows {
-		if row.EmailID == "" || row.ProviderID == "" || row.CategoryID == "" || len(row.ProposedLabel) > 110 || math.IsNaN(row.Confidence) || math.IsInf(row.Confidence, 0) || row.Confidence < 0 || row.Confidence > 1 || seen[row.EmailID] || !strings.HasPrefix(row.ProposedLabel, "MailPilot/") {
+		if row.EmailID == "" || row.ProviderID == "" || len(row.ProposedLabel) > 110 || math.IsNaN(row.Confidence) || math.IsInf(row.Confidence, 0) || row.Confidence < 0 || row.Confidence > 1 || seen[row.EmailID] || !validOrganizationEvidence(row) {
 			return p, repository.ErrInvalid
 		}
 		seen[row.EmailID] = true
 	}
 	for _, step := range p.Steps {
-		if step.State != domain.ItemPending || step.ResultID != "" || step.Added || len(step.AfterLabels) != 0 || step.Code != "" || (step.Kind != "create_label" && step.Kind != "add" && step.Kind != "remove") || !strings.HasPrefix(step.Name, "MailPilot/") || (step.Kind != "create_label" && !seen[step.EmailID]) || (step.Kind == "remove" && p.Kind != domain.ActionUndo) {
+		matched := false
+		for _, row := range p.Rows {
+			if step.Name == row.ProposedLabel && (step.Kind == "create_label" || step.EmailID == row.EmailID) {
+				matched = true
+			}
+		}
+		if !matched {
+			return p, repository.ErrInvalid
+		}
+		if step.State != domain.ItemPending || step.ResultID != "" || step.Added || len(step.AfterLabels) != 0 || step.Code != "" || (step.Kind != "create_label" && step.Kind != "add" && step.Kind != "remove") || (!strings.HasPrefix(step.Name, "MailPilot/") && step.Name != domain.PotentialPhishingLabel) || (step.Kind != "create_label" && !seen[step.EmailID]) || (step.Kind == "remove" && p.Kind != domain.ActionUndo) {
 			return p, repository.ErrInvalid
 		}
 	}
@@ -80,7 +89,7 @@ func (r *organizationRepository) Create(ctx context.Context, p domain.Organizati
 			return err
 		}
 		for _, row := range p.Rows {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO organization_emails VALUES(?,?,?,?)`, p.AccountID, p.ID, row.EmailID, row.CategoryID); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO organization_emails VALUES(?,?,?,?)`, p.AccountID, p.ID, row.EmailID, optionalString(string(row.CategoryID))); err != nil {
 				return err
 			}
 		}
@@ -277,4 +286,20 @@ func (r *organizationRepository) Update(ctx context.Context, p domain.Organizati
 		p.Revision++
 	}
 	return p, err
+}
+
+func validOrganizationEvidence(row domain.OrganizationRow) bool {
+	if row.Phishing == nil {
+		return row.CategoryID != "" && strings.HasPrefix(row.ProposedLabel, "MailPilot/")
+	}
+	p := row.Phishing
+	if row.CategoryID != "" || row.ProposedLabel != domain.PotentialPhishingLabel || row.Confidence != 0 || p.Threshold < 31 || p.Threshold > 100 || p.Score < p.Threshold || p.Score > 100 || p.Version == "" || len(p.Version) > 200 || len(row.InputHash) != 64 || len(p.Findings) == 0 || len(p.Findings) > 12 {
+		return false
+	}
+	for _, f := range p.Findings {
+		if f.Points < -20 || f.Points > 100 || f.Code == "" || len(f.Code) > 100 || f.Explanation == "" || len(f.Explanation) > 300 {
+			return false
+		}
+	}
+	return true
 }

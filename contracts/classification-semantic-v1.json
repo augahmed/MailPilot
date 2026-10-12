@@ -1,0 +1,79 @@
+{
+  "request": {
+    "operation": "run",
+    "accountId": "fixture-account",
+    "offset": 0
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "rows": [
+      {
+        "email_id": "fixture-receipt",
+        "sender": "store@example.test",
+        "subject": "Your receipt",
+        "bodyState": "complete",
+        "state": "classified",
+        "predictions": [
+          {
+            "email_id": "fixture-receipt",
+            "category_id": "fixture-receipts",
+            "category_name": "Receipts",
+            "confidence": 0.6,
+            "classifier_name": "HybridClassifier",
+            "classifier_version": "v1-fixture",
+            "reasons": [
+              "Category description has cosine similarity 0.600, above 0.450, with a clear lead."
+            ],
+            "timestamp": 1791676800000,
+            "score_kind": "cosine_similarity"
+          }
+        ],
+        "timestamp": 1791676800000,
+        "assessment": {
+          "used_classifier": "SemanticClassifier",
+          "reason": "Category description has cosine similarity 0.600, above 0.450, with a clear lead.",
+          "candidates": [
+            {
+              "category_id": "fixture-receipts",
+              "category_name": "Receipts",
+              "similarity": 0.6
+            },
+            {
+              "category_id": "fixture-finance",
+              "category_name": "Finance",
+              "similarity": 0.2
+            }
+          ]
+        }
+      },
+      {
+        "email_id": "fixture-personal",
+        "sender": "friend@example.test",
+        "subject": "Saturday plans",
+        "bodyState": "complete",
+        "state": "unclassified",
+        "predictions": [],
+        "timestamp": 1791676800000,
+        "assessment": {
+          "used_classifier": "none",
+          "reason": "Leading categories are within the 0.050 ambiguity margin; no category chosen.",
+          "candidates": [
+            {
+              "category_id": "fixture-personal",
+              "category_name": "Personal",
+              "similarity": 0.5
+            },
+            {
+              "category_id": "fixture-newsletters",
+              "category_name": "Newsletters",
+              "similarity": 0.49
+            }
+          ]
+        }
+      }
+    ],
+    "hasMore": false,
+    "processed": 2,
+    "errors": 0
+  }
+}

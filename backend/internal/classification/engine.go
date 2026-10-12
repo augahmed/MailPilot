@@ -21,7 +21,7 @@ type ClassificationEngine interface {
 
 // InputHash covers exactly the locally available inputs, including category
 // definitions and label names. It deliberately excludes provider-specific IDs,
-// raw HTML, attachments, local assignments, and recipients that rules cannot use.
+// attachments, local assignments, and recipients. HTML is included for embedding fallback.
 func InputHash(email domain.Email, categories []domain.EmailCategory) string {
 	type label struct {
 		Name string
@@ -50,11 +50,12 @@ func InputHash(email domain.Email, categories []domain.EmailCategory) string {
 	sort.Slice(definitions, func(i, j int) bool { return definitions[i].ID < definitions[j].ID })
 	data, _ := json.Marshal(struct {
 		Version                  int
+		HTML                     *string
 		Sender                   domain.EmailAddress
 		Subject, Body, BodyState string
 		Labels                   []label
 		Categories               []category
-	}{1, email.Sender, email.Subject, email.BodyText, email.BodyState, labels, definitions})
+	}{2, email.BodyHTML, email.Sender, email.Subject, email.BodyText, email.BodyState, labels, definitions})
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }

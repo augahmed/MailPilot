@@ -2,7 +2,17 @@ package domain
 
 // OrganizationPlan is the immutable, account-scoped preview stored under
 // mailbox_actions. Steps contain the narrowly bounded remote write journal.
+const PotentialPhishingLabel = "Potential Phishing"
+
+// OrganizationRisk is immutable review evidence; it grants no write authority.
+type OrganizationRisk struct {
+	Score     int               `json:"score"`
+	Threshold int               `json:"threshold"`
+	Version   string            `json:"version"`
+	Findings  []PhishingFinding `json:"findings"`
+}
 type OrganizationRow struct {
+	Phishing            *OrganizationRisk `json:"phishing,omitempty"`
 	EmailID             EmailID           `json:"emailId"`
 	ProviderID          ProviderMessageID `json:"providerId"`
 	CategoryID          CategoryID        `json:"categoryId"`

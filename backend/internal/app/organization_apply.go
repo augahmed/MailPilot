@@ -5,7 +5,6 @@ import (
 	"slices"
 	"time"
 
-	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/repository"
@@ -70,18 +69,14 @@ func (s *Organization) apply(ctx context.Context, plan domain.OrganizationPlan, 
 	}
 	for _, row := range plan.Rows {
 		if plan.Kind == domain.ActionLabelDelta {
-			run, cat, _, err := s.prediction(ctx, plan.AccountID, row.EmailID)
-			if err != nil {
+			if err := s.checkProposal(ctx, plan.AccountID, row); err != nil {
 				return organizationDTO(plan), err
-			}
-			if run.InputHash != row.InputHash || run.Timestamp.UnixMilli() != row.PredictionTimestamp || "MailPilot/"+cat.Name != row.ProposedLabel {
-				return organizationDTO(plan), repository.ErrConflict
 			}
 			live, err := p.FetchMessage(ctx, row.ProviderID)
 			if err != nil {
 				return organizationDTO(plan), err
 			}
-			if live.AccountID != plan.AccountID || live.ProviderID != row.ProviderID || classification.InputHash(live, categories) != row.InputHash {
+			if live.AccountID != plan.AccountID || live.ProviderID != row.ProviderID || !matchesOrganizationInput(live, categories, row) {
 				return organizationDTO(plan), repository.ErrConflict
 			}
 			ids, _, err := labelsSnapshot(plan.AccountID, live.Labels)
@@ -136,8 +131,8 @@ func (s *Organization) apply(ctx context.Context, plan domain.OrganizationPlan, 
 		if step.Kind != "create_label" {
 			row := findOrganizationRow(plan, step.EmailID)
 			if plan.Kind == domain.ActionLabelDelta {
-				run, cat, _, checkErr := s.prediction(ctx, plan.AccountID, row.EmailID)
-				if checkErr != nil || run.InputHash != row.InputHash || run.Timestamp.UnixMilli() != row.PredictionTimestamp || "MailPilot/"+cat.Name != row.ProposedLabel {
+				checkErr := s.checkProposal(ctx, plan.AccountID, row)
+				if checkErr != nil {
 					step.State = domain.ItemConflict
 					step.Code = "prediction_changed"
 					plan, err = s.save(plan)
@@ -152,7 +147,7 @@ func (s *Organization) apply(ctx context.Context, plan domain.OrganizationPlan, 
 				full, fullErr := p.FetchMessage(ctx, row.ProviderID)
 				if fullErr != nil {
 					readErr = fullErr
-				} else if full.AccountID != plan.AccountID || full.ProviderID != row.ProviderID || classification.InputHash(full, categories) != row.InputHash {
+				} else if full.AccountID != plan.AccountID || full.ProviderID != row.ProviderID || !matchesOrganizationInput(full, categories, row) {
 					readErr = repository.ErrConflict
 				} else {
 					live.Labels = full.Labels

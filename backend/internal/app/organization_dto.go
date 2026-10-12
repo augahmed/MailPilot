@@ -7,6 +7,7 @@ import (
 )
 
 type OrganizationRequest struct {
+	Source    string   `json:"source,omitempty"`
 	Operation string   `json:"operation"`
 	AccountID string   `json:"accountId"`
 	Offset    int      `json:"offset"`
@@ -16,6 +17,9 @@ type OrganizationRequest struct {
 }
 
 func (p OrganizationRequest) Valid() bool {
+	if p.Source != "" && (p.Source != "phishing" || (p.Operation != "list" && p.Operation != "preview" && p.Operation != "dry_run")) {
+		return false
+	}
 	if len(p.AccountID) > 100 || p.Offset < 0 || p.Offset > 1000000 || len(p.EmailIDs) > 5 || len(p.ActionID) > 100 || len(p.Digest) > 64 {
 		return false
 	}
@@ -42,14 +46,27 @@ func (p OrganizationRequest) Valid() bool {
 	}
 }
 
+type OrganizationRiskDTO struct {
+	*RiskDTO
+	Threshold int `json:"threshold"`
+}
+
+func organizationRiskDTO(p *domain.OrganizationRisk) *OrganizationRiskDTO {
+	if p == nil {
+		return nil
+	}
+	return &OrganizationRiskDTO{riskDTO(p.Score, "HIGH", p.Version, p.Findings), p.Threshold}
+}
+
 type OrganizationRowDTO struct {
-	EmailID       string   `json:"emailId"`
-	Sender        string   `json:"sender"`
-	Subject       string   `json:"subject"`
-	CurrentLabels []string `json:"currentLabels"`
-	ProposedLabel string   `json:"proposedLabel"`
-	Confidence    float64  `json:"confidence"`
-	Change        string   `json:"change"`
+	Phishing      *OrganizationRiskDTO `json:"phishing,omitempty"`
+	EmailID       string               `json:"emailId"`
+	Sender        string               `json:"sender"`
+	Subject       string               `json:"subject"`
+	CurrentLabels []string             `json:"currentLabels"`
+	ProposedLabel string               `json:"proposedLabel"`
+	Confidence    float64              `json:"confidence"`
+	Change        string               `json:"change"`
 }
 type OrganizationStepDTO struct {
 	Kind    string `json:"kind"`
@@ -97,7 +114,7 @@ func organizationDTO(p domain.OrganizationPlan) OrganizationResponse {
 	r.Kind = string(p.Kind)
 	r.ExpiresAt = p.ExpiresAt
 	for _, row := range p.Rows {
-		r.Rows = append(r.Rows, OrganizationRowDTO{string(row.EmailID), row.Sender, row.Subject, row.CurrentLabels, row.ProposedLabel, row.Confidence, row.Change})
+		r.Rows = append(r.Rows, OrganizationRowDTO{organizationRiskDTO(row.Phishing), string(row.EmailID), row.Sender, row.Subject, row.CurrentLabels, row.ProposedLabel, row.Confidence, row.Change})
 	}
 	for _, step := range p.Steps {
 		r.Steps = append(r.Steps, OrganizationStepDTO{step.Kind, step.Name, string(step.EmailID), string(step.State), step.Code})

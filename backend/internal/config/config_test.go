@@ -63,3 +63,52 @@ func TestSyncLimit(t *testing.T) {
 		t.Fatal("sync limit flag ignored", err)
 	}
 }
+
+func TestRiskHighThreshold(t *testing.T) {
+	for _, value := range []string{"30", "101", "bad"} {
+		_, err := Load(nil, func(k string) string {
+			if k == "MAILPILOT_RISK_HIGH_THRESHOLD" {
+				return value
+			}
+			return ""
+		}, t.TempDir())
+		if err == nil {
+			t.Fatal("invalid risk threshold")
+		}
+	}
+	env := func(k string) string {
+		if k == "MAILPILOT_RISK_HIGH_THRESHOLD" {
+			return "80"
+		}
+		return ""
+	}
+	c, err := Load(nil, env, t.TempDir())
+	if err != nil || c.RiskHighThreshold != 80 {
+		t.Fatal("env threshold", err)
+	}
+	c, err = Load([]string{"--risk-high-threshold", "70"}, env, t.TempDir())
+	if err != nil || c.RiskHighThreshold != 70 {
+		t.Fatal("flag threshold", err)
+	}
+	c, err = Load(nil, func(string) string { return "" }, t.TempDir())
+	if err != nil || c.RiskHighThreshold != 60 {
+		t.Fatal("default threshold", err)
+	}
+}
+
+func TestLocalEmbeddingPaths(t *testing.T) {
+	for _, values := range []map[string]string{
+		{"MAILPILOT_EMBEDDING_PYTHON": "/trusted/python"},
+		{"MAILPILOT_EMBEDDING_MODEL_DIR": "/trusted/model"},
+		{"MAILPILOT_EMBEDDING_PYTHON": "relative", "MAILPILOT_EMBEDDING_MODEL_DIR": "/trusted/model"},
+	} {
+		if _, err := Load(nil, func(k string) string { return values[k] }, "/private/tmp/mailpilot"); err == nil {
+			t.Fatal("invalid embedding paths accepted")
+		}
+	}
+	values := map[string]string{"MAILPILOT_EMBEDDING_PYTHON": "/trusted/python", "MAILPILOT_EMBEDDING_MODEL_DIR": "/trusted/model"}
+	cfg, err := Load([]string{"--embedding-model-dir", "/other/model"}, func(k string) string { return values[k] }, "/private/tmp/mailpilot")
+	if err != nil || cfg.EmbeddingModelDir != "/other/model" || cfg.EmbeddingPython != "/trusted/python" {
+		t.Fatal(cfg, err)
+	}
+}

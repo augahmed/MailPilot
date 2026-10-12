@@ -193,3 +193,18 @@ button {
 .classification-review td li {
   margin-bottom: 0.5rem;
 }
+
+.mailbox-search p {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.mailbox-search select {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  font: inherit;
+}
+.mailbox-search li {
+  margin-block: 1.25rem;
+  overflow-wrap: anywhere;
+}

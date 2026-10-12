@@ -14,9 +14,13 @@ import (
 	"mailpilot.local/core/internal/config"
 	"mailpilot.local/core/internal/credentials"
 	"mailpilot.local/core/internal/domain"
+	"mailpilot.local/core/internal/embedding"
+	"mailpilot.local/core/internal/embedding/minilm"
 	"mailpilot.local/core/internal/ipc"
 	"mailpilot.local/core/internal/logging"
 	"mailpilot.local/core/internal/provider/gmail"
+	"mailpilot.local/core/internal/risk"
+	"mailpilot.local/core/internal/search"
 	"mailpilot.local/core/internal/store/sqlite"
 	mailsync "mailpilot.local/core/internal/sync"
 )
@@ -56,7 +60,11 @@ func run() int {
 	var authentication *auth.Manager
 	var synchronization *mailsync.Service
 	var organization *app.Organization
+	var mailboxSearch *app.MailboxSearch
 	defer func() {
+		if mailboxSearch != nil {
+			mailboxSearch.Close()
+		}
 		if synchronization != nil {
 			synchronization.Clear()
 		}
@@ -86,19 +94,53 @@ func run() int {
 		authentication = auth.NewManager(ctxRoot, gmail.NewOAuth(cfg.GoogleClientID, cfg.GoogleClientSecret), tokenStore, store.Accounts(), tokenStore.Reference())
 		authentication.Check()
 		application := app.New(store, version)
+		riskConfig := risk.DefaultConfig()
+		riskConfig.High = cfg.RiskHighThreshold
+		riskEngine, err := risk.NewEngine(riskConfig)
+		if err != nil {
+			return nil, err
+		}
+		application.RiskEngine = riskEngine
 		application.Auth = authentication
 		synchronization = mailsync.New(ctxRoot, authentication.Session, func(account domain.AccountID) mailsync.Reader { return gmail.NewProvider(account, authentication) }, store.Emails(), cfg.InitialSyncLimit)
 		application.Sync = synchronization
 		application.Emails = store.Emails()
 		application.Categories = store.Categories()
-		engine, err := classification.NewRuleBasedClassifier(classification.StarterConfig())
+		rules, err := classification.NewRuleBasedClassifier(classification.StarterConfig())
 		if err != nil {
 			return nil, err
 		}
+		var semantic *classification.SemanticClassifier
+		var embeddings *embedding.Service
+		if cfg.EmbeddingModelDir != "" {
+			model, modelErr := minilm.New(ctx, cfg.EmbeddingPython, cfg.EmbeddingModelDir)
+			if modelErr != nil {
+				return nil, modelErr
+			}
+			embeddings, modelErr = embedding.NewLocalClassificationService(model, store.Emails(), store.Vectors(), store.CategoryVectors())
+			if modelErr != nil {
+				return nil, modelErr
+			}
+			semantic, modelErr = classification.NewSemanticClassifier(embeddings, classification.DefaultSemanticConfig())
+			if modelErr != nil {
+				return nil, modelErr
+			}
+		}
+		engine, err := classification.NewHybridClassifier(rules, semantic, classification.DefaultHybridConfig())
+		if err != nil {
+			return nil, err
+		}
+		var searchEmbeddings search.Embeddings
+		if embeddings != nil {
+			searchEmbeddings = embeddings
+		}
+		mailboxSearch = app.NewMailboxSearch(ctxRoot, authentication.Session, search.New(store.SearchIndex(), searchEmbeddings, engine), store.Categories())
+		application.Search = mailboxSearch
 		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {
 			return gmail.NewProvider(account, authentication)
 		}, store.Emails(), store.Categories(), store.Classifications(), store.Organization(), engine)
 		gate := make(chan struct{}, 1)
+		organization.SetRiskEngine(riskEngine)
 		organization.SetOperationGate(gate)
 		synchronization.SetOperationGate(gate)
 		application.Organization = organization

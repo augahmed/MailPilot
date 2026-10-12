@@ -13,7 +13,7 @@ Backend connected
 Database connected
 ```
 
-Gmail OAuth, OS-secure refresh-token storage, and connection controls are implemented. Follow [Gmail development setup](docs/GMAIL_SETUP.md) to connect a dedicated test account. Bounded manual Inbox import and a cached mailbox summary are implemented. User-defined categories, local rule classification, reviewed Gmail label organization and structured offline phishing feature extraction are implemented. Phishing scoring/review, search and AI remain unimplemented. The local application works without an account or external service. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
+Gmail OAuth, OS-secure refresh-token storage, and connection controls are implemented. Follow [Gmail development setup](docs/GMAIL_SETUP.md) to connect a dedicated test account. Bounded manual Inbox import and a cached mailbox summary are implemented. User-defined categories, local rule classification, reviewed Gmail label organization and structured offline phishing feature extraction are implemented. Phishing scoring/review and local semantic classification/search are implemented; external AI remains unimplemented. The local application works without an account or external service. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
 
 ## Prerequisites
 
@@ -183,9 +183,9 @@ Connect an account and use **Refresh categories** to manage its local definition
 
 After connecting and syncing an account, open **Classification review** and choose **Classify this page**. MailPilot reviews up to five cached emails, saves the results, and shows each email’s predicted category, confidence and reasons. Use the previous/next review-page controls to cover more downloaded messages. **Refresh reviews** loads saved assessments without running the classifier. Reading results uses local SQLite and requires no AI provider/key.
 
-Conservative starter rules cover Job Applications, Job Interviews, Receipts and Newsletters. They require multiple signals and use confidence scores of 55–65%; these scores are heuristic strengths rather than measured probabilities. Weak, conflicting or incomplete evidence can leave mail unclassified. Renamed, disabled or custom categories have no starter mapping; rule configuration is centralized in [starter_rules.json](backend/internal/classification/starter_rules.json) and can be supplied through validated Go configuration. Changes to that configuration require a new classifier version.
+The hybrid classifier first accepts deterministic rules at strength 0.85 or above, then falls back to locally computed category-description cosine similarity. The existing conservative starter rules cover Job Applications, Job Interviews, Receipts and Newsletters. They require multiple signals and use confidence scores of 55–65%; these scores are heuristic strengths rather than measured probabilities. The starter scores fall below the new high-confidence cutoff. Weak, conflicting or incomplete evidence can leave mail unclassified; without a local model, weak matches abstain. Renamed, disabled or custom categories have no starter mapping; rule configuration is centralized in [starter_rules.json](backend/internal/classification/starter_rules.json) and can be supplied through validated Go configuration. Changes to that configuration require a new classifier version.
 
-Category definitions and label changes can make previous predictions stale; rerun the page to refresh them. Partial storage failures report successful saves and row errors separately. Classification saves suggestions only: it does not assign categories, modify Gmail, use an LLM or create embeddings. The existing account session is required to access retained cached mail; reconnect and refresh after disconnect. Automated tests use synthetic mail and temporary databases.
+Category definitions and label changes can make previous predictions stale; rerun the page to refresh them. Partial storage failures report successful saves and row errors separately. Classification saves suggestions only: it does not assign categories, modify Gmail or use an LLM. The explicitly configured local MiniLM provider computes and caches embeddings during manual hybrid review. See [semantic setup](docs/SEMANTIC_CLASSIFICATION.md) and [measured synthetic evaluation](docs/SEMANTIC_EVALUATION.md). The existing account session is required to access retained cached mail; reconnect and refresh after disconnect. Automated tests use synthetic mail and temporary databases.
 
 ## Safe Gmail organization
 
@@ -198,3 +198,17 @@ Categories map to `MailPilot/<category name>` user labels. Existing exact-name l
 ## Phishing feature extraction
 
 The Go extractor returns structured address/authentication, URL/link, attachment, HTML-form and language observations with parser limitations. It is separate from scoring and uses no network, LLM or external threat service. Authentication header claims remain unverified; missing content/evidence never establishes safety. This stage has no risk score, persistence or UI yet. See [supported signals, limits and synthetic fixtures](docs/PHISHING_FEATURES.md).
+
+### Review high-risk mail in Gmail organization
+
+Choose **Potential Phishing** in **Review suggestions**. HIGH-risk messages show their score, threshold and ordered reasons. Select messages and run the default **Dry Run** to inspect live labels without Gmail or action-journal writes. To apply, turn off Dry Run, generate a fresh preview, review the explanations and exact operations, then explicitly confirm. Missing `Potential Phishing` user labels are created through the existing label workflow. No message is deleted, archived or moved to Spam.
+
+Set `MAILPILOT_RISK_HIGH_THRESHOLD=75` before starting the desktop app to change HIGH from its default of 60; the core also accepts `--risk-high-threshold 75`. Supported values are 31–100 (MEDIUM starts at 30). Restart after changing configuration; existing previews with the old scoring version cannot be applied. Scores are heuristics, not proof of phishing or guarantees of safety. Dry Run may refresh local risk assessments.
+
+**Preview undo last batch** and its separate confirmation remove only verified additions, preserving pre-existing and unrelated labels. Created labels remain in Gmail. Interrupted or uncertain writes require reconciliation first. Schema migration 7 preserves existing plans and makes category references optional for risk proposals.
+
+## Search your mailbox
+
+Configure the local MiniLM runtime using [semantic setup](docs/SEMANTIC_CLASSIFICATION.md), sync cached mail, then choose **Index cached mail** under **Search your mailbox**. Enter a description and choose **Search locally** for cosine-ranked results with sender, subject, date, score and a relevant excerpt. Optional date, sender and category filters use local cached data. Progress, incomplete-body coverage, partial results and cancellation are visible. Saved vectors are reused across searches and restarts; indexing is explicit and only computes missing current-model entries.
+
+Retrieval never sends mail to an external inference service or runs a Gmail keyword query. Gmail keyword search remains a separate future feature. [Search documentation](docs/SEMANTIC_SEARCH.md) explains cache coverage, filters, limits and the real synthetic 4/4 retrieval check. The optional Python/ONNX runtime still requires configured local paths and is not bundled in public installers.

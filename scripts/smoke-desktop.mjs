@@ -41,6 +41,7 @@ try {
       !diagnostics.includes('"event":"frontend_categories_ok"') ||
       !diagnostics.includes('"event":"frontend_classification_ok"') ||
       !diagnostics.includes('"event":"frontend_organization_ok"') ||
+      !diagnostics.includes('"event":"frontend_search_ok"') ||
       !diagnostics.includes('"msg":"core stopped"')
     ) {
       throw new Error(
@@ -48,7 +49,7 @@ try {
       );
     }
     console.log(
-      "Native WebView → Tauri → Go → SQLite health, Gmail status, mailbox, category, classification and organization authorization checks passed; core shut down cleanly.",
+      "Native WebView → Tauri → Go → SQLite health, Gmail status, mailbox, category, classification, organization and semantic search authorization checks passed; core shut down cleanly.",
     );
   } finally {
     clearTimeout(deadline);
