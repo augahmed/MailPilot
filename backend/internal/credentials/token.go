@@ -10,7 +10,7 @@ import (
 )
 
 // Secret cannot be accidentally formatted, logged, or JSON-encoded as plaintext.
-// Reveal is reserved for the credential adapter and OAuth network boundary.
+// Reveal is reserved for credential adapters and OAuth/AI network boundaries.
 type Secret struct{ value string }
 
 func NewSecret(value string) Secret         { return Secret{value: value} }

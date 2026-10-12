@@ -212,3 +212,11 @@ Set `MAILPILOT_RISK_HIGH_THRESHOLD=75` before starting the desktop app to change
 Configure the local MiniLM runtime using [semantic setup](docs/SEMANTIC_CLASSIFICATION.md), sync cached mail, then choose **Index cached mail** under **Search your mailbox**. Enter a description and choose **Search locally** for cosine-ranked results with sender, subject, date, score and a relevant excerpt. Optional date, sender and category filters use local cached data. Progress, incomplete-body coverage, partial results and cancellation are visible. Saved vectors are reused across searches and restarts; indexing is explicit and only computes missing current-model entries.
 
 Retrieval never sends mail to an external inference service or runs a Gmail keyword query. Gmail keyword search remains a separate future feature. [Search documentation](docs/SEMANTIC_SEARCH.md) explains cache coverage, filters, limits and the real synthetic 4/4 retrieval check. The optional Python/ONNX runtime still requires configured local paths and is not bundled in public installers.
+
+## Optional generative AI
+
+The backend provides an optional, consent-gated AIProvider and an isolated OpenAI
+adapter with OS credential storage. The current desktop has no generation UI or
+AI key settings screen and remains disabled for generation. See
+[provider setup and security boundaries](docs/GENERATIVE_AI.md). Tests use synthetic
+fakes and never require paid API calls.
