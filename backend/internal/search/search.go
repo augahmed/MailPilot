@@ -30,7 +30,11 @@ type Model struct {
 }
 
 func (m Model) Validate() error {
-	return (embedding.Key{AccountID: "check", EmailID: "check", Provider: m.Provider, Dimension: m.Dimension, Version: m.Version, InputHash: strings.Repeat("0", 64)}).Validate()
+	version := m.Version
+	if version == embedding.RetrievalVersion {
+		version = embedding.PreprocessingVersion
+	}
+	return (embedding.Key{AccountID: "check", EmailID: "check", Provider: m.Provider, Dimension: m.Dimension, Version: version, InputHash: strings.Repeat("0", 64)}).Validate()
 }
 
 type Filters struct {
@@ -59,7 +63,12 @@ type Counts struct {
 	Eligible int `json:"eligible"`
 	Indexed  int `json:"indexed"`
 }
+type ChunkVector struct {
+	Passage embedding.Passage
+	Vector  []float32
+}
 type Candidate struct {
+	Chunks    []ChunkVector
 	Stored    repository.StoredEmail
 	Vector    []float32
 	InputHash string
@@ -97,6 +106,9 @@ func New(index Repository, embeddings Embeddings, classifier ClassificationIdent
 	if embeddings != nil {
 		m.Provider = embeddings.ProviderName()
 		m.Dimension = embeddings.Dimension()
+		if versioned, ok := embeddings.(interface{ PreprocessingVersion() string }); ok {
+			m.Version = versioned.PreprocessingVersion()
+		}
 	}
 	if classifier != nil {
 		m.ClassifierName = classifier.Name()
@@ -110,9 +122,12 @@ type ClassificationIdentity interface {
 	Version() string
 }
 type Hit struct {
-	Stored     repository.StoredEmail
-	Similarity float64
-	Excerpt    string
+	PassageKind  string
+	PassageIndex int
+	DedupKey     string
+	Stored       repository.StoredEmail
+	Similarity   float64
+	Excerpt      string
 }
 type Result struct {
 	Hits            []Hit
@@ -122,6 +137,9 @@ type Result struct {
 }
 
 func (s *Service) Query(ctx context.Context, account domain.AccountID, query string, k int, filters Filters) (Result, error) {
+	if s.Model.Version == embedding.RetrievalVersion {
+		return s.queryPassages(ctx, account, query, k, filters)
+	}
 	result := Result{Hits: []Hit{}}
 	if account == "" || len(query) > 1000 || !utf8.ValidString(query) || strings.TrimSpace(query) == "" || k < 1 || k > MaxTopK || filters.Validate() != nil {
 		return result, ErrInput

@@ -258,3 +258,24 @@ it("accepts incremental status while rejecting leaked provider cursors", async (
     syncSchema.safeParse({ ...fixture.default, mode: "unknown" }).success,
   ).toBe(false);
 });
+
+it("accepts passage search metadata and bounds the displayed passage", async () => {
+  const { semanticSearchResponseSchema } = await import("./client");
+  const fixture = await import("../../../../contracts/search-semantic-v1.json");
+  const result = {
+    ...fixture.default.response,
+    rows: fixture.default.response.rows.map((row) => ({
+      ...row,
+      passageKind: "body",
+      passageIndex: 5,
+      excerpt: "x".repeat(240),
+    })),
+  };
+  expect(semanticSearchResponseSchema.safeParse(result).success).toBe(true);
+  expect(
+    semanticSearchResponseSchema.safeParse({
+      ...result,
+      rows: result.rows.map((row) => ({ ...row, passageKind: "html" })),
+    }).success,
+  ).toBe(false);
+});

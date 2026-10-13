@@ -66,14 +66,20 @@ it("submits a local semantic query with filters and renders sender/date/score/ex
   fireEvent.change(screen.getByLabelText("Maximum results"), {
     target: { value: "2" },
   });
-  vi.mocked(semanticSearch).mockResolvedValue(
-    fixture.response as SemanticSearchResponse,
-  );
+  vi.mocked(semanticSearch).mockResolvedValue({
+    ...fixture.response,
+    rows: fixture.response.rows.map((row) => ({
+      ...row,
+      passageKind: "body",
+      passageIndex: 4,
+    })),
+  } as SemanticSearchResponse);
   fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
   expect(
     await screen.findByText("Meet the engineering team"),
   ).toBeInTheDocument();
   expect(screen.getByText("Similarity: 0.820")).toBeInTheDocument();
+  expect(screen.getAllByText("Matched body passage").length).toBeGreaterThan(0);
   expect(
     screen.getByText(
       "Choose a time for your technical interview with the hiring team",

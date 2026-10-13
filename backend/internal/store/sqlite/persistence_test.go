@@ -72,7 +72,7 @@ func TestCleanDatabaseRunsAllMigrations(t *testing.T) {
 			t.Fatalf("new table %s not empty", table)
 		}
 	}
-	if count(t, s, "schema_migrations") != 12 {
+	if count(t, s, "schema_migrations") != 13 {
 		t.Fatal("missing migration")
 	}
 	rows, err := s.db.Query("PRAGMA foreign_key_check")
@@ -126,7 +126,7 @@ func TestUpgradeVersionOnePreservesSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SchemaVersion() != 12 || count(t, s, "settings") != 1 {
+	if s.SchemaVersion() != 13 || count(t, s, "settings") != 1 {
 		t.Fatal("upgrade lost data")
 	}
 	_ = s.Close()
@@ -135,7 +135,7 @@ func TestUpgradeVersionOnePreservesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if count(t, s, "schema_migrations") != 12 {
+	if count(t, s, "schema_migrations") != 13 {
 		t.Fatal("migrations repeated")
 	}
 }

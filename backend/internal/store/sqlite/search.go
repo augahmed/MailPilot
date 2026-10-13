@@ -15,6 +15,13 @@ import (
 	"mailpilot.local/core/internal/search"
 )
 
+func retrievalTable(m search.Model) string {
+	if m.Version == embedding.RetrievalVersion {
+		return "email_retrieval_indexes"
+	}
+	return "email_embeddings"
+}
+
 type searchRepository struct{ store *Store }
 
 func (s *Store) SearchIndex() search.Repository { return &searchRepository{s} }
@@ -23,14 +30,14 @@ func (r *searchRepository) Counts(ctx context.Context, a domain.AccountID, m sea
 	if a == "" || m.Validate() != nil {
 		return c, repository.ErrInvalid
 	}
-	err := r.store.db.QueryRowContext(ctx, `SELECT count(*),coalesce(sum(e.body_state='complete'),0),coalesce(sum(e.body_state='complete' AND v.email_id IS NOT NULL),0) FROM emails e LEFT JOIN email_embeddings v ON v.account_id=e.account_id AND v.email_id=e.id AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? WHERE e.remote_deleted=0 AND e.account_id=?`, m.Provider, m.Dimension, m.Version, a).Scan(&c.Cached, &c.Eligible, &c.Indexed)
+	err := r.store.db.QueryRowContext(ctx, `SELECT count(*),coalesce(sum(e.body_state='complete'),0),coalesce(sum(e.body_state='complete' AND v.email_id IS NOT NULL),0) FROM emails e LEFT JOIN `+retrievalTable(m)+` v ON v.account_id=e.account_id AND v.email_id=e.id AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? WHERE e.remote_deleted=0 AND e.account_id=?`, m.Provider, m.Dimension, m.Version, a).Scan(&c.Cached, &c.Eligible, &c.Indexed)
 	return c, storageError(err)
 }
 func (r *searchRepository) Missing(ctx context.Context, a domain.AccountID, m search.Model, after domain.EmailID, limit int) ([]domain.EmailID, error) {
 	if a == "" || m.Validate() != nil || limit < 1 || limit > embedding.MaxBatchSize {
 		return nil, repository.ErrInvalid
 	}
-	rows, err := r.store.db.QueryContext(ctx, `SELECT e.id FROM emails e LEFT JOIN email_embeddings v ON v.account_id=e.account_id AND v.email_id=e.id AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? WHERE e.remote_deleted=0 AND e.account_id=? AND e.body_state='complete' AND e.id>? AND v.email_id IS NULL ORDER BY e.id LIMIT ?`, m.Provider, m.Dimension, m.Version, a, after, limit)
+	rows, err := r.store.db.QueryContext(ctx, `SELECT e.id FROM emails e LEFT JOIN `+retrievalTable(m)+` v ON v.account_id=e.account_id AND v.email_id=e.id AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? WHERE e.remote_deleted=0 AND e.account_id=? AND e.body_state='complete' AND e.id>? AND v.email_id IS NULL ORDER BY e.id LIMIT ?`, m.Provider, m.Dimension, m.Version, a, after, limit)
 	if err != nil {
 		return nil, storageError(err)
 	}
@@ -86,7 +93,11 @@ func (r *searchRepository) Candidates(ctx context.Context, a domain.AccountID, m
 		return page, repository.ErrInvalid
 	}
 	// Parameters only: sender is a literal substring, never Gmail query syntax or SQL.
-	query := `SELECT e.id,v.input_hash,v.vector FROM email_embeddings v JOIN emails e ON e.account_id=v.account_id AND e.id=v.email_id JOIN email_addresses sender ON sender.email_id=e.id AND sender.role='sender' WHERE e.remote_deleted=0 AND v.account_id=? AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? AND e.body_state='complete' AND e.id>?`
+	vectorColumn := "v.vector"
+	if m.Version == embedding.RetrievalVersion {
+		vectorColumn = "NULL"
+	}
+	query := `SELECT e.id,v.input_hash,` + vectorColumn + ` FROM ` + retrievalTable(m) + ` v JOIN emails e ON e.account_id=v.account_id AND e.id=v.email_id JOIN email_addresses sender ON sender.email_id=e.id AND sender.role='sender' WHERE e.remote_deleted=0 AND v.account_id=? AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? AND e.body_state='complete' AND e.id>?`
 	args := []any{a, m.Provider, m.Dimension, m.Version, after}
 	if f.From != nil {
 		query += " AND e.received_at>=?"
@@ -157,6 +168,29 @@ func (r *searchRepository) Candidates(ctx context.Context, a domain.AccountID, m
 				continue
 			}
 			candidate := search.Candidate{Stored: source, InputHash: record.hash}
+			if m.Version == embedding.RetrievalVersion {
+				prepared, prepareErr := embedding.PrepareRetrieval(source.Email)
+				values, cacheErr := passageCache(ctx, tx, a, record.id, m)
+				if cacheErr != nil {
+					return cacheErr
+				}
+				candidate.Valid = prepareErr == nil && prepared.Hash == record.hash
+				for _, p := range prepared.Passages {
+					v := values[p.Hash]
+					if v == nil {
+						candidate.Valid = false
+					}
+					candidate.Chunks = append(candidate.Chunks, search.ChunkVector{Passage: p, Vector: v})
+				}
+				if !candidate.Valid {
+					if _, err := tx.ExecContext(ctx, `DELETE FROM email_retrieval_indexes WHERE account_id=? AND email_id=? AND provider=? AND dimension=? AND preprocessing_version=?`, a, record.id, m.Provider, m.Dimension, m.Version); err != nil {
+						return err
+					}
+				}
+				page.Candidates = append(page.Candidates, candidate)
+				continue
+			}
+
 			if len(record.data) == m.Dimension*4 {
 				candidate.Vector = make([]float32, m.Dimension)
 				for i := range candidate.Vector {
@@ -195,11 +229,16 @@ func (r *searchRepository) Current(ctx context.Context, a domain.AccountID, m se
 			return repository.ErrConflict
 		}
 		prepared, err := embedding.Prepare(e)
+		if m.Version == embedding.RetrievalVersion {
+			var doc embedding.RetrievalText
+			doc, err = embedding.PrepareRetrieval(e)
+			prepared.Hash = doc.Hash
+		}
 		if err != nil {
 			return repository.ErrConflict
 		}
 		var hash string
-		if err = tx.QueryRowContext(ctx, `SELECT input_hash FROM email_embeddings WHERE account_id=? AND email_id=? AND provider=? AND dimension=? AND preprocessing_version=?`, a, id, m.Provider, m.Dimension, m.Version).Scan(&hash); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT input_hash FROM `+retrievalTable(m)+` WHERE account_id=? AND email_id=? AND provider=? AND dimension=? AND preprocessing_version=?`, a, id, m.Provider, m.Dimension, m.Version).Scan(&hash); err != nil {
 			return err
 		}
 		if hash != prepared.Hash {

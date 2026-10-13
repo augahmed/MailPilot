@@ -59,7 +59,7 @@ func (r *syncRepository) Commit(ctx context.Context, a domain.AccountID, expecte
 				return err
 			}
 			if err == nil {
-				for _, table := range []string{"email_labels", "email_categories", "email_embeddings", "classification_results", "classification_runs", "phishing_results"} {
+				for _, table := range []string{"email_passage_vectors", "email_retrieval_indexes", "email_labels", "email_categories", "email_embeddings", "classification_results", "classification_runs", "phishing_results"} {
 					if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE account_id=? AND email_id=?", a, id); err != nil {
 						return err
 					}

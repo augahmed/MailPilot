@@ -102,6 +102,9 @@ func upsertEmail(ctx context.Context, tx *sql.Tx, e domain.Email) (domain.EmailI
 		}
 	}
 	if oldHash != "" && oldHash != hash {
+		if err := invalidatePassages(ctx, tx, e, id); err != nil {
+			return "", err
+		}
 		// Keep vectors for unchanged cleaned text (for example, quoted-chain or
 		// recipient changes); remove stale derived data in this same transaction.
 		prepared, prepareErr := embedding.Prepare(e)

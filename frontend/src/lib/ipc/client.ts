@@ -550,7 +550,9 @@ const semanticSearchHitSchema = z
     subject: z.string().refine((value) => [...value].length <= 121),
     receivedAt: z.number().int(),
     similarity: z.number().min(-1).max(1),
-    excerpt: z.string().refine((value) => [...value].length <= 161),
+    excerpt: z.string().refine((value) => [...value].length <= 241),
+    passageKind: z.enum(["subject", "body"]).optional(),
+    passageIndex: z.number().int().min(0).max(8191).optional(),
   })
   .strict();
 export const semanticSearchResponseSchema = z

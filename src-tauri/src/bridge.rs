@@ -73,6 +73,10 @@ pub struct SearchCounts {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchHit {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub passage_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub passage_index: Option<u32>,
     pub email_id: String,
     pub sender: String,
     pub subject: String,

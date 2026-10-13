@@ -336,6 +336,12 @@ export function SemanticSearch({ onOpen }: { onOpen?: OpenMail } = {}) {
                 </time>
               </p>
               <p>Similarity: {row.similarity.toFixed(3)}</p>
+              {row.passageKind && (
+                <small>
+                  Matched{" "}
+                  {row.passageKind === "subject" ? "subject" : "body passage"}
+                </small>
+              )}
               <p>{row.excerpt || "No cached text excerpt is available."}</p>
             </li>
           ))}

@@ -193,7 +193,7 @@ Manual `classification.review` uses a 30-second core deadline and 32-second nati
 
 The main-window `semantic_search` native command maps only to `search.semantic`. [search-semantic-v1.json](search-semantic-v1.json) is the shared synthetic example. Request fields are operation (`status`, `index`, `query`, `cancel`), accountId, jobId, query, topK, sender, categoryId, from/until (nullable UTC epoch milliseconds). Missing Go/Rust nullable fields denote no date filter; the client sends explicit nulls. Index/query require an authorized matching account and no jobId; cancel requires the current jobId. Status/cancel/index reject query/filter/top-K fields; query requires nonblank text ≤1,000 UTF-8 bytes and topK 1–20. Sender is ≤256 bytes, IDs ≤100 bytes. Dates are bounded to 1970–10000 with from < until, start inclusive/end exclusive. Unknown fields and operations are rejected; no endpoint, Gmail query language, model path or generic backend invocation is accepted.
 
-Responses carry accountId, jobId, operation, state (`idle`, `indexing`, `searching`, `completed`, `cancelled`, `error`), counts `{cached, eligible, indexed}`, processed/errors/scanned, partial/capped/excerptFallback, rows and optional safe code. Count invariants are indexed ≤ eligible ≤ cached; processed/errors/scanned are bounded by 10,000. Rows appear only for a completed query: at most 20 unique emailIds, descending finite cosine similarity -1…1, sender ≤81 Unicode characters, subject ≤121, receivedAt in epoch milliseconds, excerpt ≤161. Ties use date descending then ID ascending. Source bodies/HTML, query text and vectors are not echoed. Caps/errors are explicit; unauthorized responses carry no account/mail rows. Codes: unauthorized, validation, conflict, cancelled, embedding_unavailable, storage_error, busy, response_too_large. Responses are capped at 48 KiB before framing.
+Responses carry accountId, jobId, operation, state (`idle`, `indexing`, `searching`, `completed`, `cancelled`, `error`), counts `{cached, eligible, indexed}`, processed/errors/scanned, partial/capped/excerptFallback, rows and optional safe code. Count invariants are indexed ≤ eligible ≤ cached; processed/errors/scanned are bounded by 10,000. Rows appear only for a completed query: at most 20 unique emailIds, descending finite cosine similarity -1…1, sender ≤81 Unicode characters, subject ≤121, receivedAt in epoch milliseconds, excerpt ≤241. Ties use date descending then ID ascending. Source bodies/HTML, query text and vectors are not echoed. Caps/errors are explicit; unauthorized responses carry no account/mail rows. Codes: unauthorized, validation, conflict, cancelled, embedding_unavailable, storage_error, busy, response_too_large. Responses are capped at 48 KiB before framing.
 
 Index/query start background local jobs and return immediately; status/cancel remain under ordinary IPC deadlines. Category filters match explicit assignments or fresh choices under the current classifier, not stale predictions. No provider operation or external inference is reachable. The desktop smoke check now also verifies this command denies mailbox access without an authorized account.
 
@@ -283,3 +283,18 @@ No history cursor, provider IDs or email content is exposed by status.
 
 [sync-incremental-v1.json](sync-incremental-v1.json) is a shared synthetic example
 validated by Rust and TypeScript alongside the existing fields.
+
+### Search passage results (compatible v1)
+
+Production search results may include `passageKind: "subject" | "body"` and
+`passageIndex` (zero-based ordinal within the normalized source document, 0–8191).
+The existing `emailId` identifies the source for the cached reader. `excerpt` is
+the actual winning cleaned passage, with a 240-character display bound plus a
+possible ellipsis; no HTML is returned. Similarity remains raw cosine, now for the
+winning persisted passage. One result per email is returned; identical winning
+passages in the same thread are collapsed. No thread IDs, vectors or normalized
+hashes cross IPC. `excerptFallback` remains for compatibility and is false on the
+new passage path. Counts/scanned remain email counts, not vector counts.
+
+Reindexing is explicit after the migration; classification vectors are independent.
+Both legacy and additive result shapes remain accepted by updated clients.

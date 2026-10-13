@@ -140,6 +140,9 @@ func run() int {
 		if embeddings != nil {
 			searchEmbeddings = embeddings
 		}
+		if searchEmbeddings != nil {
+			searchEmbeddings = &search.PassageEmbeddings{Base: searchEmbeddings, Emails: store.Emails(), Vectors: store.PassageVectors()}
+		}
 		mailboxSearch = app.NewMailboxSearch(ctxRoot, authentication.Session, search.New(store.SearchIndex(), searchEmbeddings, engine), store.Categories())
 		application.Search = mailboxSearch
 		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {

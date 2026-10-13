@@ -52,12 +52,14 @@ func (p SearchRequest) Valid() bool {
 }
 
 type SearchHitDTO struct {
-	EmailID    string  `json:"emailId"`
-	Sender     string  `json:"sender"`
-	Subject    string  `json:"subject"`
-	ReceivedAt int64   `json:"receivedAt"`
-	Similarity float64 `json:"similarity"`
-	Excerpt    string  `json:"excerpt"`
+	PassageKind  string  `json:"passageKind,omitempty"`
+	PassageIndex int     `json:"passageIndex,omitempty"`
+	EmailID      string  `json:"emailId"`
+	Sender       string  `json:"sender"`
+	Subject      string  `json:"subject"`
+	ReceivedAt   int64   `json:"receivedAt"`
+	Similarity   float64 `json:"similarity"`
+	Excerpt      string  `json:"excerpt"`
 }
 type SearchResponse struct {
 	AccountID       string         `json:"accountId"`
@@ -326,7 +328,7 @@ func (s *MailboxSearch) query(ctx context.Context, a domain.AccountID, p SearchR
 		if hit.Stored.Email.Sender.Name != "" {
 			sender = hit.Stored.Email.Sender.Name + " <" + sender + ">"
 		}
-		r.Rows = append(r.Rows, SearchHitDTO{EmailID: string(hit.Stored.Email.ID), Sender: searchDisplay(sender, 80), Subject: searchDisplay(hit.Stored.Email.Subject, 120), ReceivedAt: hit.Stored.Email.ReceivedAt.UnixMilli(), Similarity: hit.Similarity, Excerpt: searchDisplay(hit.Excerpt, 160)})
+		r.Rows = append(r.Rows, SearchHitDTO{EmailID: string(hit.Stored.Email.ID), Sender: searchDisplay(sender, 80), Subject: searchDisplay(hit.Stored.Email.Subject, 120), ReceivedAt: hit.Stored.Email.ReceivedAt.UnixMilli(), Similarity: hit.Similarity, Excerpt: searchDisplay(hit.Excerpt, 240), PassageKind: hit.PassageKind, PassageIndex: hit.PassageIndex})
 	}
 	return r, nil
 }
