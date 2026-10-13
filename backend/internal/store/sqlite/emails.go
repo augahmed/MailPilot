@@ -229,7 +229,7 @@ func (r *emailRepository) get(ctx context.Context, account domain.AccountID, col
 	var result repository.StoredEmail
 	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
 		var err error
-		result, err = scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE account_id=? AND "+column+"=?", account, id))
+		result, err = scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE remote_deleted=0 AND account_id=? AND "+column+"=?", account, id))
 		if err != nil {
 			return err
 		}
@@ -252,7 +252,7 @@ func (r *emailRepository) List(ctx context.Context, a domain.AccountID, page rep
 	}
 	result := []repository.StoredEmail{}
 	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE account_id=? ORDER BY received_at DESC,id DESC LIMIT ? OFFSET ?", a, page.Limit, page.Offset)
+		rows, err := tx.QueryContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE remote_deleted=0 AND account_id=? ORDER BY received_at DESC,id DESC LIMIT ? OFFSET ?", a, page.Limit, page.Offset)
 		if err != nil {
 			return err
 		}
@@ -284,7 +284,7 @@ func (r *emailRepository) List(ctx context.Context, a domain.AccountID, page rep
 
 func checkInputHash(ctx context.Context, tx *sql.Tx, a domain.AccountID, id domain.EmailID, hash string) error {
 	var current string
-	if err := tx.QueryRowContext(ctx, "SELECT content_hash FROM emails WHERE account_id=? AND id=?", a, id).Scan(&current); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT content_hash FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?", a, id).Scan(&current); err != nil {
 		return err
 	}
 	if hash != current {
@@ -332,7 +332,7 @@ func (r *emailRepository) ListSummaries(ctx context.Context, a domain.AccountID,
 	if a == "" || page.Validate() != nil {
 		return nil, repository.ErrInvalid
 	}
-	rows, err := r.store.db.QueryContext(ctx, `SELECT e.id,COALESCE(a.name,''),COALESCE(a.address,''),e.subject,e.received_at,e.body_state FROM emails e LEFT JOIN email_addresses a ON a.email_id=e.id AND a.role='sender' WHERE e.account_id=? ORDER BY e.received_at DESC,e.id DESC LIMIT ? OFFSET ?`, a, page.Limit, page.Offset)
+	rows, err := r.store.db.QueryContext(ctx, `SELECT e.id,COALESCE(a.name,''),COALESCE(a.address,''),e.subject,e.received_at,e.body_state FROM emails e LEFT JOIN email_addresses a ON a.email_id=e.id AND a.role='sender' WHERE e.remote_deleted=0 AND e.account_id=? ORDER BY e.received_at DESC,e.id DESC LIMIT ? OFFSET ?`, a, page.Limit, page.Offset)
 	if err != nil {
 		return nil, storageError(err)
 	}

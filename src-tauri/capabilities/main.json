@@ -11,6 +11,7 @@
     "allow-gmail-disconnect",
     "allow-sync-start",
     "allow-sync-status",
+    "allow-sync-cancel",
     "allow-mailbox-list",
     "allow-mailbox-read",
     "allow-categories-manage",

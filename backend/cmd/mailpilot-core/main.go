@@ -161,6 +161,7 @@ func run() int {
 		organization.SetRiskEngine(riskEngine)
 		organization.SetOperationGate(gate)
 		synchronization.SetOperationGate(gate)
+		synchronization.SetCheckpoints(store.SyncCheckpoints())
 		application.Organization = organization
 		application.Classification = app.NewClassificationReview(authentication.Session, engine, store.Emails(), store.Categories(), store.Classifications())
 		application.Reader = app.NewCachedReader(authentication.Session, store.Emails(), application.Classification, riskEngine)

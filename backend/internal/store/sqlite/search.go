@@ -23,14 +23,14 @@ func (r *searchRepository) Counts(ctx context.Context, a domain.AccountID, m sea
 	if a == "" || m.Validate() != nil {
 		return c, repository.ErrInvalid
 	}
-	err := r.store.db.QueryRowContext(ctx, `SELECT count(*),coalesce(sum(e.body_state='complete'),0),coalesce(sum(e.body_state='complete' AND v.email_id IS NOT NULL),0) FROM emails e LEFT JOIN email_embeddings v ON v.account_id=e.account_id AND v.email_id=e.id AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? WHERE e.account_id=?`, m.Provider, m.Dimension, m.Version, a).Scan(&c.Cached, &c.Eligible, &c.Indexed)
+	err := r.store.db.QueryRowContext(ctx, `SELECT count(*),coalesce(sum(e.body_state='complete'),0),coalesce(sum(e.body_state='complete' AND v.email_id IS NOT NULL),0) FROM emails e LEFT JOIN email_embeddings v ON v.account_id=e.account_id AND v.email_id=e.id AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? WHERE e.remote_deleted=0 AND e.account_id=?`, m.Provider, m.Dimension, m.Version, a).Scan(&c.Cached, &c.Eligible, &c.Indexed)
 	return c, storageError(err)
 }
 func (r *searchRepository) Missing(ctx context.Context, a domain.AccountID, m search.Model, after domain.EmailID, limit int) ([]domain.EmailID, error) {
 	if a == "" || m.Validate() != nil || limit < 1 || limit > embedding.MaxBatchSize {
 		return nil, repository.ErrInvalid
 	}
-	rows, err := r.store.db.QueryContext(ctx, `SELECT e.id FROM emails e LEFT JOIN email_embeddings v ON v.account_id=e.account_id AND v.email_id=e.id AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? WHERE e.account_id=? AND e.body_state='complete' AND e.id>? AND v.email_id IS NULL ORDER BY e.id LIMIT ?`, m.Provider, m.Dimension, m.Version, a, after, limit)
+	rows, err := r.store.db.QueryContext(ctx, `SELECT e.id FROM emails e LEFT JOIN email_embeddings v ON v.account_id=e.account_id AND v.email_id=e.id AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? WHERE e.remote_deleted=0 AND e.account_id=? AND e.body_state='complete' AND e.id>? AND v.email_id IS NULL ORDER BY e.id LIMIT ?`, m.Provider, m.Dimension, m.Version, a, after, limit)
 	if err != nil {
 		return nil, storageError(err)
 	}
@@ -86,7 +86,7 @@ func (r *searchRepository) Candidates(ctx context.Context, a domain.AccountID, m
 		return page, repository.ErrInvalid
 	}
 	// Parameters only: sender is a literal substring, never Gmail query syntax or SQL.
-	query := `SELECT e.id,v.input_hash,v.vector FROM email_embeddings v JOIN emails e ON e.account_id=v.account_id AND e.id=v.email_id JOIN email_addresses sender ON sender.email_id=e.id AND sender.role='sender' WHERE v.account_id=? AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? AND e.body_state='complete' AND e.id>?`
+	query := `SELECT e.id,v.input_hash,v.vector FROM email_embeddings v JOIN emails e ON e.account_id=v.account_id AND e.id=v.email_id JOIN email_addresses sender ON sender.email_id=e.id AND sender.role='sender' WHERE e.remote_deleted=0 AND v.account_id=? AND v.provider=? AND v.dimension=? AND v.preprocessing_version=? AND e.body_state='complete' AND e.id>?`
 	args := []any{a, m.Provider, m.Dimension, m.Version, after}
 	if f.From != nil {
 		query += " AND e.received_at>=?"
@@ -142,7 +142,7 @@ func (r *searchRepository) Candidates(ctx context.Context, a domain.AccountID, m
 		}
 		for _, record := range records {
 			page.After = record.id
-			source, err := scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE account_id=? AND id=?", a, record.id))
+			source, err := scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?", a, record.id))
 			if err != nil {
 				return err
 			}
@@ -183,7 +183,7 @@ func (r *searchRepository) Current(ctx context.Context, a domain.AccountID, m se
 	}
 	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
 		var err error
-		source, err = scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE account_id=? AND id=?", a, id))
+		source, err = scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?", a, id))
 		if err != nil {
 			return err
 		}

@@ -116,7 +116,7 @@ States: idle, running, completed, error, cancelled. Optional `code` is a safe di
 }
 ```
 
-An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; schemaVersion in health now reports 7.
+An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `sync_cancel`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; schemaVersion in health now reports 12.
 
 ## Category management (protocol v1 additive extension)
 
@@ -263,3 +263,23 @@ storage_error or too_large; all content fields are empty and message is null.
 The UI clears content on stale/session errors, ignores late unmounted responses,
 and rechecks cache authorization every five seconds while open. Suggestions are
 separate from assigned categories. Reading never runs classification or embeddings.
+
+### Incremental sync status (compatible v1)
+
+`sync.cancel` accepts `{}` and returns the same status DTO as start/status. The
+native command is `sync_cancel`; it cancels the active job without clearing saved
+observations. The UI polls until the worker reports cancelled. Unknown parameters
+remain rejected. Start/cancel do not accept an account ID; the current authorized
+account session owns the job.
+
+Optional additive status fields are `mode` (initial, incremental, recovery),
+`removed` (nonnegative confirmed cache removals), `more` (another manual run is
+needed), and `snapshotLimited` (older uncached Inbox mail was outside the bounded
+snapshot). Omitted counts/flags mean zero/false. `discovered` now counts change
+observations, which may refresh one message multiple times across history records.
+`capped` retains its initial snapshot meaning. Body-unavailable warnings can coexist
+with a successfully advanced checkpoint; failed reads/writes leave unfinished work.
+No history cursor, provider IDs or email content is exposed by status.
+
+[sync-incremental-v1.json](sync-incremental-v1.json) is a shared synthetic example
+validated by Rust and TypeScript alongside the existing fields.

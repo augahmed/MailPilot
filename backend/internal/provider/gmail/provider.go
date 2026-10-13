@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,6 +94,9 @@ func (p *Provider) get(ctx context.Context, path string, q url.Values, dst any) 
 		response.Body.Close()
 		if status == 401 {
 			return provider.ErrAuthenticationRequired
+		}
+		if status == 400 {
+			return provider.ErrInvalidArgument
 		}
 		if status == 404 {
 			return provider.ErrNotFound
@@ -196,7 +200,7 @@ func (p *Provider) FetchMessageMetadata(ctx context.Context, id domain.ProviderM
 	if m.ID != string(id) {
 		return provider.MessageMetadata{}, provider.ErrMalformed
 	}
-	return provider.MessageMetadata{ProviderID: id, ProviderThreadID: domain.ProviderThreadID(m.ThreadID), ContentRevision: contentRevision(m), Labels: mappedLabels(p.account, m.LabelIDs, p.labelSnapshot())}, nil
+	return provider.MessageMetadata{InSyncScope: slices.Contains(m.LabelIDs, "INBOX"), ProviderID: id, ProviderThreadID: domain.ProviderThreadID(m.ThreadID), ContentRevision: contentRevision(m), Labels: mappedLabels(p.account, m.LabelIDs, p.labelSnapshot())}, nil
 }
 func (p *Provider) FetchMessage(ctx context.Context, id domain.ProviderMessageID) (domain.Email, error) {
 	if !validID(string(id)) {

@@ -66,7 +66,7 @@ func (r *organizationRepository) Create(ctx context.Context, p domain.Organizati
 	}
 	err = r.store.transaction(ctx, func(tx *sql.Tx) error {
 		for _, row := range p.Rows {
-			if err := exists(ctx, tx, "SELECT 1 FROM emails WHERE account_id=? AND id=? AND provider_message_id=?", p.AccountID, row.EmailID, row.ProviderID); err != nil {
+			if err := exists(ctx, tx, "SELECT 1 FROM emails WHERE content_hash<>'' AND account_id=? AND id=? AND provider_message_id=?", p.AccountID, row.EmailID, row.ProviderID); err != nil {
 				return err
 			}
 		}

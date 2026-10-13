@@ -31,6 +31,7 @@ type AuthService interface {
 type ReaderService interface {
 	ReadMail(context.Context, app.ReadMailRequest) app.ReadMailResponse
 }
+type SyncCanceller interface{ SyncCancel() mailsync.Progress }
 type MailService interface {
 	SyncStart() mailsync.Progress
 	SyncStatus() mailsync.Progress
@@ -184,6 +185,15 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 					fail(-32001, "Reader unavailable")
 				} else {
 					reply.Result = reader.ReadMail(callCtx, params)
+				}
+			case "sync.cancel":
+				canceller, ok := service.(SyncCanceller)
+				if len(req.Params) > 0 && string(req.Params) != "{}" {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Sync unavailable")
+				} else {
+					reply.Result = canceller.SyncCancel()
 				}
 			case "sync.start", "sync.status", "mail.list":
 				mailbox, ok := service.(MailService)

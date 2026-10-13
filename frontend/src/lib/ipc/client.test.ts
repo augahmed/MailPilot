@@ -245,3 +245,16 @@ it("validates semantic request scopes, filters and ranked bounded results", () =
     }).success,
   ).toBe(false);
 });
+
+it("accepts incremental status while rejecting leaked provider cursors", async () => {
+  const { syncSchema } = await import("./client");
+  const fixture =
+    await import("../../../../contracts/sync-incremental-v1.json");
+  expect(syncSchema.safeParse(fixture.default).success).toBe(true);
+  expect(
+    syncSchema.safeParse({ ...fixture.default, historyId: "private" }).success,
+  ).toBe(false);
+  expect(
+    syncSchema.safeParse({ ...fixture.default, mode: "unknown" }).success,
+  ).toBe(false);
+});

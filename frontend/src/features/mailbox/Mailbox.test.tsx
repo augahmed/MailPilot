@@ -109,3 +109,28 @@ it("shows signed, ordered risk explanations and uncertainty", async () => {
     screen.getByText(/not a probability or a guarantee/),
   ).toBeInTheDocument();
 });
+
+it("shows recovery, durable continuation and removed counts, and allows cancellation", async () => {
+  vi.mocked(syncCommand).mockResolvedValue({
+    state: "running",
+    accountId: "a",
+    limit: 500,
+    discovered: 5,
+    imported: 1,
+    updated: 2,
+    errors: 1,
+    capped: false,
+    mode: "recovery",
+    removed: 2,
+    more: true,
+    snapshotLimited: true,
+  });
+  render(<Mailbox connectionRevision={0} />);
+  expect(
+    await screen.findByText("Sync mode: Checkpoint recovery"),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/continue from saved progress/)).toBeInTheDocument();
+  expect(screen.getByText("Removed from cache")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Stop sync" }));
+  await waitFor(() => expect(syncCommand).toHaveBeenCalledWith("cancel"));
+});

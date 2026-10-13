@@ -8,6 +8,7 @@ fn main() {
             "gmail_disconnect",
             "sync_start",
             "sync_status",
+            "sync_cancel",
             "mailbox_list",
             "mailbox_read",
             "categories_manage",

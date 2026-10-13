@@ -293,6 +293,19 @@ async fn sync_command(
     .map_err(|_| "Backend task failed".to_string())?
 }
 #[tauri::command]
+async fn sync_cancel(backend: tauri::State<'_, Backend>) -> Result<SyncProgress, String> {
+    let backend = backend.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.cancel_sync(),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())?
+}
+#[tauri::command]
 async fn sync_start(backend: tauri::State<'_, Backend>) -> Result<SyncProgress, String> {
     sync_command(backend, true).await
 }
@@ -394,7 +407,7 @@ fn main() {
             app.manage(Arc::new(Mutex::new(backend)) as Backend);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, semantic_search, reply_manage])
+        .invoke_handler(tauri::generate_handler![health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, sync_cancel, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, semantic_search, reply_manage])
         .build(tauri::generate_context!())
         .expect("failed to build MailPilot desktop application");
 

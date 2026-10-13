@@ -15,7 +15,7 @@ import (
 )
 
 func classificationInputs(ctx context.Context, tx *sql.Tx, account domain.AccountID, id domain.EmailID) (domain.Email, []domain.EmailCategory, error) {
-	stored, err := scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE account_id=? AND id=?", account, id))
+	stored, err := scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?", account, id))
 	if err != nil {
 		return domain.Email{}, nil, err
 	}

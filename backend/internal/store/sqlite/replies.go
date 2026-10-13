@@ -24,7 +24,7 @@ func (r *replyRepository) Sources(ctx context.Context, a domain.AccountID, id do
 	var result []repository.StoredEmail
 	capped := false
 	if thread && selected.Email.ProviderThreadID != "" {
-		rows, e := r.store.db.QueryContext(ctx, `SELECT id FROM emails WHERE account_id=? AND provider_thread_id=? AND received_at<=? AND id<>? ORDER BY received_at DESC,id DESC LIMIT 5`, a, selected.Email.ProviderThreadID, selected.Email.ReceivedAt.UnixMilli(), id)
+		rows, e := r.store.db.QueryContext(ctx, `SELECT id FROM emails WHERE remote_deleted=0 AND account_id=? AND provider_thread_id=? AND received_at<=? AND id<>? ORDER BY received_at DESC,id DESC LIMIT 5`, a, selected.Email.ProviderThreadID, selected.Email.ReceivedAt.UnixMilli(), id)
 		if e != nil {
 			return nil, false, repository.ErrStorage
 		}
@@ -88,7 +88,7 @@ func (r *replyRepository) Create(ctx context.Context, p reply.Plan) error {
 		}
 		for _, src := range p.Sources {
 			var hash string
-			if e := tx.QueryRowContext(ctx, `SELECT content_hash FROM emails WHERE account_id=? AND id=?`, p.AccountID, src.ID).Scan(&hash); e != nil {
+			if e := tx.QueryRowContext(ctx, `SELECT content_hash FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?`, p.AccountID, src.ID).Scan(&hash); e != nil {
 				return repository.ErrNotFound
 			}
 			if hash != src.Hash {
@@ -152,7 +152,7 @@ func (r *replyRepository) Transition(ctx context.Context, a domain.AccountID, id
 			}
 			for _, src := range action.Plan.Sources {
 				var h string
-				if e = tx.QueryRowContext(ctx, `SELECT content_hash FROM emails WHERE account_id=? AND id=?`, a, src.ID).Scan(&h); e != nil || h != src.Hash {
+				if e = tx.QueryRowContext(ctx, `SELECT content_hash FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?`, a, src.ID).Scan(&h); e != nil || h != src.Hash {
 					return repository.ErrConflict
 				}
 			}

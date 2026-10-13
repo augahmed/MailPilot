@@ -440,6 +440,14 @@ struct Response {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SyncProgress {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub removed: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub more: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_limited: Option<bool>,
     pub state: String,
     pub account_id: String,
     pub limit: u32,
@@ -699,6 +707,10 @@ impl Bridge {
         Ok(begin.status)
     }
 
+    pub fn cancel_sync(&mut self) -> Result<SyncProgress, String> {
+        serde_json::from_value(self.request("sync.cancel", json!({}))?)
+            .map_err(|_| "Invalid sync response".into())
+    }
     pub fn sync(&mut self, start: bool) -> Result<SyncProgress, String> {
         let method = if start { "sync.start" } else { "sync.status" };
         serde_json::from_value(self.request(method, json!({}))?)
@@ -1071,5 +1083,20 @@ mod reader_tests {
         assert!(request.valid());
         request.account_id.clear();
         assert!(!request.valid());
+    }
+}
+
+#[cfg(test)]
+mod incremental_sync_tests {
+    use super::*;
+    #[test]
+    fn incremental_progress_contract() {
+        let raw = include_str!("../../contracts/sync-incremental-v1.json");
+        let status: SyncProgress = serde_json::from_str(raw).unwrap();
+        assert_eq!(status.mode.as_deref(), Some("incremental"));
+        assert_eq!(status.removed, Some(1));
+        let mut value: Value = serde_json::from_str(raw).unwrap();
+        value["historyId"] = json!("private-provider-cursor");
+        assert!(serde_json::from_value::<SyncProgress>(value).is_err());
     }
 }

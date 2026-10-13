@@ -125,7 +125,7 @@ func (r *actionRepository) Create(ctx context.Context, a domain.MailboxAction) (
 			return err
 		}
 		for _, item := range a.Items {
-			if err := exists(ctx, tx, "SELECT 1 FROM emails WHERE account_id=? AND id=? AND provider_message_id=?", a.AccountID, item.EmailID, item.ProviderMessageID); err != nil {
+			if err := exists(ctx, tx, "SELECT 1 FROM emails WHERE remote_deleted=0 AND account_id=? AND id=? AND provider_message_id=?", a.AccountID, item.EmailID, item.ProviderMessageID); err != nil {
 				return err
 			}
 			for _, ids := range [][]domain.ProviderLabelID{item.RequestedDelta.Add, item.RequestedDelta.Remove} {

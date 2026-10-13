@@ -12,6 +12,7 @@ import (
 	mailsync "mailpilot.local/core/internal/sync"
 )
 
+func (a *App) SyncCancel() mailsync.Progress { return a.Sync.Cancel() }
 func (a *App) SyncStart() mailsync.Progress  { return a.Sync.Start() }
 func (a *App) SyncStatus() mailsync.Progress { return a.Sync.Status() }
 

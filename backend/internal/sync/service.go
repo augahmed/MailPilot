@@ -20,31 +20,46 @@ type Session func() (domain.AccountID, context.Context, error)
 type Factory func(domain.AccountID) Reader
 
 type Progress struct {
-	State      string           `json:"state"`
-	AccountID  domain.AccountID `json:"accountId"`
-	Limit      int              `json:"limit"`
-	Discovered int              `json:"discovered"`
-	Imported   int              `json:"imported"`
-	Updated    int              `json:"updated"`
-	Errors     int              `json:"errors"`
-	Code       string           `json:"code,omitempty"`
-	Capped     bool             `json:"capped"`
+	Mode            string           `json:"mode,omitempty"`
+	Removed         int              `json:"removed,omitempty"`
+	More            bool             `json:"more,omitempty"`
+	SnapshotLimited bool             `json:"snapshotLimited,omitempty"`
+	State           string           `json:"state"`
+	AccountID       domain.AccountID `json:"accountId"`
+	Limit           int              `json:"limit"`
+	Discovered      int              `json:"discovered"`
+	Imported        int              `json:"imported"`
+	Updated         int              `json:"updated"`
+	Errors          int              `json:"errors"`
+	Code            string           `json:"code,omitempty"`
+	Capped          bool             `json:"capped"`
 }
 type Service struct {
-	gate       chan struct{}
-	mu         sync.Mutex
-	root       context.Context
-	session    Session
-	factory    Factory
-	emails     repository.EmailRepository
-	limit      int
-	progress   Progress
-	cancel     context.CancelFunc
-	generation uint64
+	checkpoints repository.SyncRepository
+	gate        chan struct{}
+	mu          sync.Mutex
+	root        context.Context
+	session     Session
+	factory     Factory
+	emails      repository.EmailRepository
+	limit       int
+	progress    Progress
+	cancel      context.CancelFunc
+	generation  uint64
 }
 
 func New(root context.Context, session Session, factory Factory, emails repository.EmailRepository, limit int) *Service {
 	return &Service{root: root, session: session, factory: factory, emails: emails, limit: limit, progress: Progress{State: "idle", Limit: limit}}
+}
+
+func (s *Service) SetCheckpoints(store repository.SyncRepository) { s.checkpoints = store }
+func (s *Service) Cancel() Progress {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cancel != nil {
+		s.cancel()
+	}
+	return s.progress
 }
 
 // SetOperationGate is configured once before starting jobs; use a capacity-one channel.
@@ -96,7 +111,12 @@ func (s *Service) run(ctx context.Context, account domain.AccountID, g uint64, r
 		if ctx.Err() != nil {
 			state = "cancelled"
 		}
-		s.update(g, func(p *Progress) { p.State = state })
+		s.update(g, func(p *Progress) {
+			p.State = state
+			if state == "cancelled" && s.checkpoints != nil {
+				p.More = true
+			}
+		})
 	}()
 	if s.gate != nil {
 		select {
@@ -105,6 +125,17 @@ func (s *Service) run(ctx context.Context, account domain.AccountID, g uint64, r
 		case <-ctx.Done():
 			return
 		}
+	}
+	if changes, ok := reader.(provider.ChangeReader); ok && s.checkpoints != nil {
+		if err := s.incremental(ctx, account, g, reader, changes); err != nil && ctx.Err() == nil {
+			state = "error"
+			code := errorCode(err)
+			if errors.Is(err, repository.ErrStorage) || errors.Is(err, repository.ErrConflict) || errors.Is(err, repository.ErrInvalid) {
+				code = "storage_error"
+			}
+			s.update(g, func(p *Progress) { p.Errors++; p.Code = code; p.More = true })
+		}
+		return
 	}
 	report := func(code string) { s.update(g, func(p *Progress) { p.Errors++; p.Code = code }) }
 	seen := map[domain.ProviderMessageID]bool{}

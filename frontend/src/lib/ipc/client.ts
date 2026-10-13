@@ -61,6 +61,10 @@ export async function gmailCommand(
 
 export const syncSchema = z
   .object({
+    mode: z.enum(["initial", "incremental", "recovery"]).optional(),
+    removed: z.number().int().nonnegative().optional(),
+    more: z.boolean().optional(),
+    snapshotLimited: z.boolean().optional(),
     state: z.enum(["idle", "running", "completed", "cancelled", "error"]),
     accountId: z.string(),
     limit: z.number().int(),
@@ -124,10 +128,14 @@ export const mailboxSchema = z
   })
   .strict();
 export type MailboxPage = z.infer<typeof mailboxSchema>;
-export async function syncCommand(start = false): Promise<SyncProgress> {
+export async function syncCommand(
+  start: boolean | "cancel" = false,
+): Promise<SyncProgress> {
   if (!isTauri()) throw new Error("Desktop app required");
   return syncSchema.parse(
-    await invoke<unknown>(start ? "sync_start" : "sync_status"),
+    await invoke<unknown>(
+      start === "cancel" ? "sync_cancel" : start ? "sync_start" : "sync_status",
+    ),
   );
 }
 export async function getMailbox(offset = 0): Promise<MailboxPage> {

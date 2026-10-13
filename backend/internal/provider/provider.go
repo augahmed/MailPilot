@@ -211,6 +211,8 @@ type EmailProvider interface {
 // MetadataReader allows cached bodies to be reused when the provider guarantees
 // ContentRevision is unchanged. Empty revision always requires a full fetch.
 type MessageMetadata struct {
+	// InSyncScope says whether an uncached message belongs to the initial import scope.
+	InSyncScope      bool
 	ProviderID       domain.ProviderMessageID
 	ProviderThreadID domain.ProviderThreadID
 	ContentRevision  string

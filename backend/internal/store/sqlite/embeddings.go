@@ -52,7 +52,7 @@ func (r *vectorStore) PutBatch(ctx context.Context, records []embedding.Record) 
 				return err
 			}
 			// Recheck the exact cleaned payload, not just a caller-supplied hash.
-			source, err := scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE account_id=? AND id=?", k.AccountID, k.EmailID))
+			source, err := scanEmail(tx.QueryRowContext(ctx, "SELECT "+emailColumns+" FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?", k.AccountID, k.EmailID))
 			if err != nil {
 				return err
 			}

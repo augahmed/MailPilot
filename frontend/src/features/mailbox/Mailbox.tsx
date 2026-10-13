@@ -65,8 +65,8 @@ export function Mailbox({
     <section className="status-card mailbox" aria-labelledby="sync-heading">
       <h2 id="sync-heading">Inbox Sync</h2>
       <p>
-        Downloads a bounded Inbox snapshot. Maximum {progress?.limit ?? "…"}{" "}
-        messages per run.
+        Imports a bounded Inbox snapshot, then checks mailbox changes. Up to{" "}
+        {progress?.limit ?? "…"} message changes per run.
       </p>
       <button
         disabled={starting || progress?.state === "running" || !page?.accountId}
@@ -76,7 +76,38 @@ export function Mailbox({
       >
         Sync inbox
       </button>
+      {progress?.state === "running" && (
+        <button
+          onClick={() => {
+            void syncCommand("cancel").catch(() => setError(true));
+          }}
+        >
+          Stop sync
+        </button>
+      )}
       <div role="status" aria-live="polite">
+        {progress?.mode && (
+          <p>
+            Sync mode:{" "}
+            {progress.mode === "initial"
+              ? "Initial import"
+              : progress.mode === "recovery"
+                ? "Checkpoint recovery"
+                : "Incremental changes"}
+          </p>
+        )}
+        {progress?.more && (
+          <p>
+            More synchronization work remains. Run sync again to continue from
+            saved progress.
+          </p>
+        )}
+        {progress?.snapshotLimited && (
+          <p>
+            The initial snapshot is a limited Inbox subset; older uncached mail
+            has not been imported.
+          </p>
+        )}
         <p>
           {progress?.state === "running"
             ? "Syncing inbox…"
@@ -102,6 +133,10 @@ export function Mailbox({
             <dd>{progress?.updated ?? 0}</dd>
           </div>
           <div>
+            <dt>Removed from cache</dt>
+            <dd>{progress?.removed ?? 0}</dd>
+          </div>
+          <div>
             <dt>Errors</dt>
             <dd>{progress?.errors ?? 0}</dd>
           </div>
@@ -118,7 +153,7 @@ export function Mailbox({
             ? "Reconnect Gmail before syncing."
             : progress.code === "body_unavailable"
               ? "Some bodies are stored separately by Gmail and were not downloaded. Their metadata is cached."
-              : "Some messages could not be imported. Check your connection and retry; cached mail is retained."}
+              : "Some changes could not be synchronized. Successful changes are saved; run sync again to retry unfinished work."}
         </p>
       )}
       {error && (

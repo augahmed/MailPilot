@@ -69,7 +69,7 @@ func (r *categoryRepository) Assign(ctx context.Context, a domain.AccountID, ema
 		return repository.ErrInvalid
 	}
 	return r.store.transaction(ctx, func(tx *sql.Tx) error {
-		if err := exists(ctx, tx, "SELECT 1 FROM emails WHERE account_id=? AND id=?", a, email); err != nil {
+		if err := exists(ctx, tx, "SELECT 1 FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?", a, email); err != nil {
 			return err
 		}
 		if err := exists(ctx, tx, "SELECT 1 FROM categories WHERE account_id=? AND id=?", a, category); err != nil {
