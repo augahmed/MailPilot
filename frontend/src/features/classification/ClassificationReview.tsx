@@ -121,7 +121,7 @@ export function ClassificationReview() {
         time. Emails with weak or ambiguous evidence remain unclassified.
       </p>
       <p className="help">
-        Rule confidence and cosine similarity are scores, not measured
+        Rule strength and cosine similarity are scores, not measured
         probabilities. Reviewing saves suggestions locally and does not assign
         categories or change Gmail.
       </p>
@@ -152,7 +152,7 @@ export function ClassificationReview() {
               <tr>
                 <th scope="col">Email</th>
                 <th scope="col">Predicted category</th>
-                <th scope="col">Confidence</th>
+                <th scope="col">Evidence score</th>
                 <th scope="col">Reasons</th>
               </tr>
             </thead>
@@ -177,7 +177,7 @@ export function ClassificationReview() {
                         <td>
                           {prediction.score_kind === "cosine_similarity"
                             ? `Cosine ${prediction.confidence.toFixed(3)}`
-                            : `${Math.round(prediction.confidence * 100)}% rule confidence`}
+                            : `Rule strength ${prediction.confidence.toFixed(2)}`}
                         </td>
                         <td>
                           <ul>

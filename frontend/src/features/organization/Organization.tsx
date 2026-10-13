@@ -352,7 +352,7 @@ export function Organization() {
                         </ol>
                       </>
                     ) : row.confidence ? (
-                      `${Math.round(row.confidence * 100)}%`
+                      `Evidence score ${row.confidence.toFixed(3)}`
                     ) : (
                       "—"
                     )}

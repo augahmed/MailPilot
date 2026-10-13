@@ -487,6 +487,85 @@ pub struct MailboxPage {
     pub code: Option<String>,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReadMailRequest {
+    pub account_id: String,
+    pub email_id: String,
+    pub offset: usize,
+    pub revision: String,
+}
+impl ReadMailRequest {
+    fn valid(&self) -> bool {
+        !self.account_id.is_empty()
+            && self.account_id.len() <= 100
+            && !self.email_id.is_empty()
+            && self.email_id.len() <= 100
+            && self.offset <= 1048576
+            && ((self.revision.is_empty() && self.offset == 0)
+                || (self.revision.len() == 64
+                    && self.revision.bytes().all(|b| b.is_ascii_hexdigit())))
+    }
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReaderAddress {
+    name: String,
+    address: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReaderAttachment {
+    filename: String,
+    mime_type: String,
+    size_bytes: Option<i64>,
+    inline: bool,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReaderLabel {
+    name: String,
+    kind: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReaderCategory {
+    name: String,
+    source: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReaderMessage {
+    subject: String,
+    sender: ReaderAddress,
+    recipients: Vec<ReaderAddress>,
+    cc: Vec<ReaderAddress>,
+    received_at: i64,
+    cached_at: i64,
+    attachments: Vec<ReaderAttachment>,
+    labels: Vec<ReaderLabel>,
+    categories: Vec<ReaderCategory>,
+    category_state: String,
+    phishing: Option<RiskAssessment>,
+    body_state: String,
+    body_format: String,
+    body_error: bool,
+    metadata_truncated: bool,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReadMailResponse {
+    account_id: String,
+    email_id: String,
+    revision: String,
+    offset: usize,
+    next_offset: usize,
+    total_bytes: usize,
+    body: String,
+    message: Option<ReaderMessage>,
+    pub code: String,
+}
+
 pub struct Bridge {
     child: Child,
     input: Option<ChildStdin>,
@@ -684,6 +763,31 @@ impl Bridge {
             serde_json::to_value(request).map_err(|_| "Invalid category request")?,
         )?)
         .map_err(|_| "Invalid category response".into())
+    }
+    pub fn read_mail(&mut self, request: ReadMailRequest) -> Result<ReadMailResponse, String> {
+        if !request.valid() {
+            return Err("Invalid reader request".into());
+        }
+        let response: ReadMailResponse = serde_json::from_value(self.request(
+            "mail.read",
+            serde_json::to_value(&request).map_err(|_| "Invalid reader request")?,
+        )?)
+        .map_err(|_| "Invalid reader response")?;
+        if response.code.is_empty()
+            && (response.message.is_none()
+                || response.account_id != request.account_id
+                || response.email_id != request.email_id
+                || response.offset != request.offset
+                || response.next_offset != response.offset + response.body.len()
+                || response.next_offset > response.total_bytes
+                || response.total_bytes > 1048576
+                || response.body.len() > 16384
+                || response.revision.len() != 64
+                || (!request.revision.is_empty() && response.revision != request.revision))
+        {
+            return Err("Invalid reader response".into());
+        }
+        Ok(response)
     }
     pub fn mailbox(&mut self, offset: u32) -> Result<MailboxPage, String> {
         if offset > 1_000_000 {
@@ -940,5 +1044,32 @@ mod search_tests {
         let mut bad = fixture["request"].clone();
         bad["url"] = json!("https://example.test");
         assert!(serde_json::from_value::<SearchRequest>(bad).is_err());
+    }
+}
+
+#[cfg(test)]
+mod reader_tests {
+    use super::*;
+    #[test]
+    fn cached_reader_contract_and_scope_validation() {
+        let fixture = include_str!("../../contracts/mail-reader-v1.json");
+        let response: ReadMailResponse = serde_json::from_str(fixture).unwrap();
+        assert_eq!(response.body.len(), response.next_offset);
+        let mut value: Value = serde_json::from_str(fixture).unwrap();
+        value["message"]["html"] = json!("<script/>");
+        assert!(serde_json::from_value::<ReadMailResponse>(value).is_err());
+        let mut request = ReadMailRequest {
+            account_id: "a".into(),
+            email_id: "e".into(),
+            offset: 0,
+            revision: String::new(),
+        };
+        assert!(request.valid());
+        request.offset = 1;
+        assert!(!request.valid());
+        request.revision = "a".repeat(64);
+        assert!(request.valid());
+        request.account_id.clear();
+        assert!(!request.valid());
     }
 }

@@ -28,6 +28,9 @@ type AuthService interface {
 	AuthCheck() auth.Status
 	AuthDisconnect() auth.Status
 }
+type ReaderService interface {
+	ReadMail(context.Context, app.ReadMailRequest) app.ReadMailResponse
+}
 type MailService interface {
 	SyncStart() mailsync.Progress
 	SyncStatus() mailsync.Progress
@@ -171,6 +174,16 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 					fail(-32001, "Categories unavailable")
 				} else {
 					reply.Result = categories.ManageCategories(callCtx, params)
+				}
+			case "mail.read":
+				var params app.ReadMailRequest
+				reader, ok := service.(ReaderService)
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Reader unavailable")
+				} else {
+					reply.Result = reader.ReadMail(callCtx, params)
 				}
 			case "sync.start", "sync.status", "mail.list":
 				mailbox, ok := service.(MailService)

@@ -9,6 +9,7 @@ fn main() {
             "sync_start",
             "sync_status",
             "mailbox_list",
+            "mailbox_read",
             "categories_manage",
             "classification_review",
             "organization_manage",

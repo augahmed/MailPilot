@@ -1,9 +1,8 @@
 import { ReplyDrafts } from "../features/replies/ReplyDrafts";
-import { SemanticSearch } from "../features/search/SemanticSearch";
+import { MailWorkspace } from "../features/reader/MailWorkspace";
 import { Organization } from "../features/organization/Organization";
 import { ClassificationReview } from "../features/classification/ClassificationReview";
 import { Categories } from "../features/categories/Categories";
-import { Mailbox } from "../features/mailbox/Mailbox";
 import { GmailConnection } from "../features/accounts/GmailConnection";
 import { useEffect, useState } from "react";
 import { getHealth, type Health } from "../lib/ipc/client";
@@ -90,11 +89,10 @@ export function App() {
       <GmailConnection
         onDisconnect={() => setConnectionRevision((value) => value + 1)}
       />
-      <Mailbox
+      <MailWorkspace
         key={connectionRevision}
         connectionRevision={connectionRevision}
       />
-      <SemanticSearch key={`search-${connectionRevision}`} />
       <ReplyDrafts key={`replies-${connectionRevision}`} />
       <Categories key={`categories-${connectionRevision}`} />
       <ClassificationReview key={`classification-${connectionRevision}`} />

@@ -1,12 +1,24 @@
 # Local semantic classification
 
-MailPilot now reviews cached email with `HybridClassifier`: a deterministic rule at or above 0.85 wins; otherwise the local embedding classifier compares the email against every enabled category description. It selects the leading category only when cosine similarity is at least 0.45 and its lead over the runner-up is greater than 0.05. Otherwise the email remains unclassified. These defaults live in Go configuration constructors; changing rules, thresholds, model identity or preprocessing changes the persisted classifier version.
+MailPilot reviews cached email with a versioned evidence-aware `HybridClassifier`. The semantic-only gate remains cosine **0.45**, with a lead strictly greater than **0.05**. The shipped rule scores remain **0.55–0.65**; they represent heuristic evidence strength, not estimated correctness probabilities.
 
-The bundled starter rules score 0.55–0.65, so they are deliberately below this new high-confidence cutoff. A deliberately configured stronger rule can bypass inference. Without an installed model, weak matches stay unclassified with an explanation. Reading, syncing, category management and risk analysis still work without embeddings. This replaces the old review behavior that accepted those weaker starter matches directly.
+The policy is:
 
-Review responses are capped at 48 KiB before framing. Oversized row evidence stays persisted but is reported as an explicit display error rather than disconnecting the bridge.
+1. Conflicting specific rule matches abstain. A semantic score cannot erase that conflict.
+2. Without a configured local model, an unambiguous rule at **0.60** or above can select a category. The broader two-condition 0.55 newsletter rule needs corroboration; three-condition rules can work offline without a model.
+3. With a model, an explicit rule exclusion vetoes the leading semantic category. There is no fallback to a runner-up after a veto.
+4. A rule at **0.55** or above and the same leading semantic category can reinforce one another when cosine is at least **0.35** and the lead exceeds **0.05**. Disagreement or a near tie abstains. Rules and cosine scores are never summed or averaged.
+5. An unambiguous rule at **0.60** can stand alone when semantic scores are below the corroboration gate. Otherwise semantic-only selection still requires **0.45 / 0.05**. Model errors remain explicit errors, not a fabricated low score or silent rule fallback.
 
-The review stores the chosen category (if any), hybrid engine/version, the actual rule/semantic classifier used, score kind, score, readable reasons and the top three semantic candidates. Cosine scores are not probabilities. Negative similarities remain visible in candidates. Ties use category IDs for stable ordering, but ties and near ties abstain. Rule winners do not run inference and have no semantic candidates. Reviews save suggestions only; Gmail organization continues to require preview, confirmation, journal, reconciliation and undo.
+These separate evidence gates fix the former 0.85 rule-threshold mismatch without globally lowering the semantic minimum. Thresholds remain trusted Go configuration, not email-controlled input. Per-category thresholds and probability calibration are deferred: the available synthetic data is too small and correlated to justify fitting them. Default categories and user descriptions are unchanged. [Measured results and remaining failures](SEMANTIC_EVALUATION.md) include the original corpus, expanded development set and reserved validation set.
+
+Rules and embeddings now use the same bounded quote/signature-trimmed body, including HTML-to-text fallback. Positive rule phrases reject a small set of immediate English negations; exclusions still match literally. This is not a general negation parser. Reply/forward subject prefixes continue to suppress starter rule matching while allowing semantic review.
+
+The review persists the hybrid engine/version, actual selected engine, decision explanation, selected category if any, score kind and top semantic candidates. Corroborated decisions use `used_classifier: HybridClassifier`, preserve the **raw cosine** in the existing `cosine_similarity` field and append the rule strength, matched conditions and decision gates to reasons. Direct rule decisions retain `rule_confidence` for wire/storage compatibility but the UI displays **Rule strength**, not a percentage. No new schema, migration, dependency or wire field is needed. Abstentions also retain metadata and explanations. Rule configuration contents and algorithm revisions are fingerprinted, so forgetting to update a human version label cannot leave changed rules looking current. Model/policy changes invalidate previous reviews and organization previews.
+
+Cosines remain ranked deterministically with category-ID tie breaks; negative candidates are retained. At least two candidates are considered internally even when presentation is configured for only one. Default presentation is three. Disabled categories cannot be selected. Classification suggestions alone never assign categories or modify Gmail; organization still requires its separate preview/confirm/journal/reconcile/undo workflow.
+
+Review responses are capped at 48 KiB before framing. Oversized evidence remains persisted but is reported as an explicit display error. Reviews use local cached data; the optional model and no-model paths need no external AI provider or key.
 
 ## Development setup
 

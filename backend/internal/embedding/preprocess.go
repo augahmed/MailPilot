@@ -32,34 +32,13 @@ func Prepare(e domain.Email) (PreparedText, error) {
 			return PreparedText{}, ErrInput
 		}
 	}
-	body := e.BodyText
-	if strings.TrimSpace(body) == "" && e.BodyHTML != nil {
-		if !utf8.ValidString(*e.BodyHTML) {
-			return PreparedText{}, ErrInput
-		}
-		var err error
-		body, err = cleanHTML(*e.BodyHTML)
-		if err != nil {
-			return PreparedText{}, ErrInput
-		}
+	body, err := CleanBody(e)
+	if err != nil {
+		return PreparedText{}, err
 	}
-	body = strings.ReplaceAll(strings.ReplaceAll(body, "\r\n", "\n"), "\r", "\n")
-	var lines []string
-	for _, line := range strings.Split(body, "\n") {
-		line = clean(line)
-		lower := strings.ToLower(line)
-		if lower == "--" || lower == "-----original message-----" || lower == "---------- forwarded message ---------" ||
-			lower == "begin forwarded message:" || lower == "sent from my iphone" || lower == "sent from my ipad" ||
-			lower == "sent from my android" || (strings.HasPrefix(lower, "on ") && strings.HasSuffix(lower, " wrote:")) {
-			break
-		}
-		if line == "" || strings.HasPrefix(line, ">") {
-			continue
-		}
-		lines = append(lines, line)
-	}
+
 	text := "Subject: " + clip(clean(e.Subject), 1024) + "\nSender: " + clip(clean(e.Sender.Name), 256) +
-		" <" + clip(clean(e.Sender.Address), 320) + ">\nBody:\n" + strings.Join(lines, "\n")
+		" <" + clip(clean(e.Sender.Address), 320) + ">\nBody:\n" + body
 	text = clip(text, MaxTextBytes)
 	return PreparedText{Text: text, Hash: fmt.Sprintf("%x", sha256.Sum256([]byte(PreprocessingVersion+"\x00"+text)))}, nil
 }
@@ -85,4 +64,39 @@ func clip(s string, n int) string {
 		n--
 	}
 	return s[:n]
+}
+
+// CleanBody supplies the same bounded, quote/signature-trimmed body to rules
+// and embeddings. It does not render HTML or fetch external resources.
+func CleanBody(e domain.Email) (string, error) {
+	if len(e.BodyText) > mail.MaxBodyBytes || !utf8.ValidString(e.BodyText) {
+		return "", ErrInput
+	}
+	body := e.BodyText
+	if strings.TrimSpace(body) == "" && e.BodyHTML != nil {
+		if !utf8.ValidString(*e.BodyHTML) {
+			return "", ErrInput
+		}
+		var err error
+		body, err = cleanHTML(*e.BodyHTML)
+		if err != nil {
+			return "", ErrInput
+		}
+	}
+	body = strings.ReplaceAll(strings.ReplaceAll(body, "\r\n", "\n"), "\r", "\n")
+	var lines []string
+	for _, line := range strings.Split(body, "\n") {
+		line = clean(line)
+		lower := strings.ToLower(line)
+		if lower == "--" || lower == "-----original message-----" || lower == "---------- forwarded message ---------" ||
+			lower == "begin forwarded message:" || lower == "sent from my iphone" || lower == "sent from my ipad" ||
+			lower == "sent from my android" || (strings.HasPrefix(lower, "on ") && strings.HasSuffix(lower, " wrote:")) {
+			break
+		}
+		if line == "" || strings.HasPrefix(line, ">") {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n"), nil
 }

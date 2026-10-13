@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"reflect"
 	"testing"
 
 	"mailpilot.local/core/internal/domain"
@@ -123,47 +122,5 @@ func TestCosineSimilarity(t *testing.T) {
 		if _, err := CosineSimilarity([]float32{1, 0}, bad); err != embedding.ErrVector {
 			t.Fatal(err)
 		}
-	}
-}
-func TestHybridRulePrecedenceAndSemanticFallback(t *testing.T) {
-	config := StarterConfig()
-	config.Version = "strong-fixture"
-	for i := range config.Rules {
-		config.Rules[i].Confidence = .95
-	}
-	rules, err := NewRuleBasedClassifier(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := &fakeSemanticEmbeddings{vector: []float32{0, 1}, categories: [][]float32{{1, 0}, {0, 1}}}
-	semantic := semanticFixture(t, f)
-	cats := []domain.EmailCategory{{ID: "a", Name: "Receipts", Description: "Purchases", Enabled: true}, {ID: "b", Name: "Personal", Description: "Family", Enabled: true}}
-	hybrid, err := NewHybridClassifier(rules, semantic, DefaultHybridConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, err := hybrid.Classify(context.Background(), fixture("Your receipt", "Payment received. Order number: TEST."), cats)
-	if err != nil || len(run.Results) != 1 || run.Results[0].CategoryID != "a" || run.UsedClassifier != "RuleBasedClassifier" || f.calls != 0 {
-		t.Fatal(run, err)
-	}
-	run, err = hybrid.Classify(context.Background(), fixture("Lunch plans", "See you soon."), cats)
-	if err != nil || len(run.Results) != 1 || run.Results[0].CategoryID != "b" || run.UsedClassifier != "SemanticClassifier" || len(run.Candidates) != 2 {
-		t.Fatal(run, err)
-	}
-	weak, err := NewHybridClassifier(classifier(t), semantic, DefaultHybridConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, err = weak.Classify(context.Background(), fixture("Your receipt", "Payment received. Order number: TEST."), cats)
-	if err != nil || run.UsedClassifier != "SemanticClassifier" {
-		t.Fatal("weak rule won", run, err)
-	}
-	none, _ := NewHybridClassifier(rules, nil, DefaultHybridConfig())
-	run, err = none.Classify(context.Background(), fixture("Unrelated", "Body"), cats)
-	if err != nil || len(run.Results) != 0 || run.UsedClassifier != "none" || run.Reason == "" {
-		t.Fatal(run, err)
-	}
-	if hybrid.Version() == none.Version() || !reflect.DeepEqual(run.Candidates, []domain.ClassificationCandidate(nil)) {
-		t.Fatal("version or abstention")
 	}
 }

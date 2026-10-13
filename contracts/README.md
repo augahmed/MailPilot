@@ -235,3 +235,31 @@ outcomes; no secret or AI prompt history is stored. Disconnect revokes consent,
 cancels work and suppresses late results. Uncertain remote writes remain in the
 journal and cannot be automatically replayed. The native smoke test exercises
 this command's unauthorized-account rejection.
+
+### Classification quality revision (compatible v1)
+
+No fields or score kinds change. `used_classifier: "HybridClassifier"` now means corroborated rule and semantic evidence; `confidence` remains the raw leading cosine under `score_kind: "cosine_similarity"`. Reasons include matched rule conditions, its separate strength and the decision gates. Direct rules retain `rule_confidence`, displayed as a strength rather than a probability percentage. Existing semantic-only and rule-only responses remain valid. New algorithm/configuration fingerprints make older assessments stale; the wire protocol version remains 1. Exclusions, conflicts and other abstentions persist as explanations with `used_classifier: "none"`. The classification UI tests include a corroborated response through the existing strict schema.
+
+### Cached message reader (compatible v1)
+
+`mailbox_read` forwards to `mail.read`. The strict request is
+`{ "accountId": "fixture-account", "emailId": "fixture-message", "offset": 0, "revision": "" }`.
+Both IDs are required and limited to 100 UTF-8 bytes. Offset is a UTF-8 byte
+boundary from 0 to 1 MiB. Continuations require the 64-character content hash
+returned as revision. Changed content returns `stale`; mismatched accounts return
+`unauthorized`. No provider fetch or mailbox write is available from this command.
+
+[mail-reader-v1.json](mail-reader-v1.json) is the synthetic success contract,
+checked by Rust and TypeScript tests. Responses carry up to 16 KiB of body text
+and at most 48 KiB of encoded JSON. `nextOffset` may advance less than 16 KiB
+because JSON escaping expands text. Continue until `nextOffset === totalBytes`.
+Metadata includes sender, To, CC, cached labels, attachment metadata, assigned
+categories, a fresh saved category suggestion and local versioned phishing analysis.
+`metadataTruncated` explicitly reports bounded metadata omissions. Timestamps are
+UTC epoch milliseconds. No HTML or attachment bytes cross this command.
+
+Errors use `code`: unauthorized, validation, not_found, stale, cancelled,
+storage_error or too_large; all content fields are empty and message is null.
+The UI clears content on stale/session errors, ignores late unmounted responses,
+and rechecks cache authorization every five seconds while open. Suggestions are
+separate from assigned categories. Reading never runs classification or embeddings.

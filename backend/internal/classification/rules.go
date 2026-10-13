@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"mailpilot.local/core/internal/domain"
+	"mailpilot.local/core/internal/embedding"
 )
 
 var (
@@ -72,7 +73,10 @@ func ParseConfig(data []byte) (RuleConfig, error) {
 	return config, nil
 }
 
-type RuleBasedClassifier struct{ config RuleConfig }
+type RuleBasedClassifier struct {
+	config  RuleConfig
+	version string
+}
 
 var _ ClassificationEngine = (*RuleBasedClassifier)(nil)
 
@@ -87,10 +91,13 @@ func NewRuleBasedClassifier(config RuleConfig) (*RuleBasedClassifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &RuleBasedClassifier{config: cloned}, nil
+	return &RuleBasedClassifier{config: cloned, version: configVersion(struct {
+		Algorithm string
+		Rules     RuleConfig
+	}{"rules-2", cloned})}, nil
 }
 func (c *RuleBasedClassifier) Name() string    { return c.config.Name }
-func (c *RuleBasedClassifier) Version() string { return c.config.Version }
+func (c *RuleBasedClassifier) Version() string { return c.version }
 func validConfig(c RuleConfig) bool {
 	if strings.TrimSpace(c.Name) == "" || len(c.Name) > 100 || strings.TrimSpace(c.Version) == "" || len(c.Version) > 100 || math.IsNaN(c.AmbiguityMargin) || c.AmbiguityMargin < 0 || c.AmbiguityMargin > 1 || len(c.Rules) == 0 || len(c.Rules) > 64 || len(c.ExcludeSubjectPrefixes) > 16 {
 		return false
@@ -144,15 +151,43 @@ type signals struct {
 	labels                        []string
 }
 
-func (s signals) matches(c Condition) bool {
+// Positive lexical evidence must be asserted, not immediately negated. This
+// bounded English check is intentionally not a general language parser. Rule
+// exclusions still match literally, including their own negation phrases.
+func phraseMatches(text, phrase string, positive bool) bool {
+	text, phrase = " "+text+" ", " "+phrase+" "
+	for offset := 0; offset < len(text); {
+		at := strings.Index(text[offset:], phrase)
+		if at < 0 {
+			return false
+		}
+		at += offset
+		negated := false
+		if positive {
+			before := text[:at]
+			for _, prefix := range []string{" no", " not", " without", " unrelated to", " not about", " not for", " not a", " not an"} {
+				if strings.HasSuffix(before, prefix) {
+					negated = true
+					break
+				}
+			}
+		}
+		if !negated {
+			return true
+		}
+		offset = at + 1
+	}
+	return false
+}
+func (s signals) matches(c Condition, positive bool) bool {
 	for _, value := range c.AnyOf {
 		switch c.Field {
 		case "subject":
-			if strings.Contains(" "+s.subject+" ", " "+words(value)+" ") {
+			if phraseMatches(s.subject, words(value), positive) {
 				return true
 			}
 		case "body":
-			if s.body != "" && strings.Contains(" "+s.body+" ", " "+words(value)+" ") {
+			if s.body != "" && phraseMatches(s.body, words(value), positive) {
 				return true
 			}
 		case "sender":
@@ -173,28 +208,54 @@ func (s signals) matches(c Condition) bool {
 	}
 	return false
 }
+
+// ruleEvidence keeps rule exclusions and ambiguity available to the hybrid.
+// They must not disappear just because the rule engine abstained.
+type ruleEvidence struct {
+	run       domain.ClassificationRun
+	excluded  map[domain.CategoryID]bool
+	ambiguous bool
+}
+
 func (c *RuleBasedClassifier) Classify(ctx context.Context, email domain.Email, categories []domain.EmailCategory) (domain.ClassificationRun, error) {
+	evidence, err := c.evaluate(ctx, email, categories)
+	return evidence.run, err
+}
+func (c *RuleBasedClassifier) evaluate(ctx context.Context, email domain.Email, categories []domain.EmailCategory) (ruleEvidence, error) {
 	if err := ctx.Err(); err != nil {
-		return domain.ClassificationRun{}, err
+		return ruleEvidence{}, err
 	}
 	if email.ID == "" || email.Validate() != nil || len(email.Subject) > 16*1024 || len(email.Sender.Address) > 1024 || len(email.Sender.Name) > 1024 || len(email.BodyText) > 1024*1024 || len(email.Labels) > 1000 || len(categories) > 1000 {
-		return domain.ClassificationRun{}, ErrInvalidInput
+		return ruleEvidence{}, ErrInvalidInput
+	}
+	seen := map[domain.CategoryID]bool{}
+	for _, category := range categories {
+		if category.ID == "" || seen[category.ID] {
+			return ruleEvidence{}, ErrInvalidInput
+		}
+		seen[category.ID] = true
 	}
 	for _, label := range email.Labels {
 		if label.AccountID != email.AccountID {
-			return domain.ClassificationRun{}, ErrInvalidInput
+			return ruleEvidence{}, ErrInvalidInput
 		}
 	}
-	run := domain.ClassificationRun{AccountID: email.AccountID, EmailID: email.ID, ClassifierName: c.Name(), ClassifierVersion: c.Version(), InputHash: InputHash(email, categories), Timestamp: time.Now().UTC().Truncate(time.Millisecond), Results: []domain.ClassificationResult{}}
+	run := domain.ClassificationRun{UsedClassifier: "none", Reason: "No specific rule matched.", AccountID: email.AccountID, EmailID: email.ID, ClassifierName: c.Name(), ClassifierVersion: c.Version(), InputHash: InputHash(email, categories), Timestamp: time.Now().UTC().Truncate(time.Millisecond), Results: []domain.ClassificationResult{}}
+	evidence := ruleEvidence{excluded: map[domain.CategoryID]bool{}}
 	subject := strings.ToLower(strings.TrimSpace(email.Subject))
 	for _, prefix := range c.config.ExcludeSubjectPrefixes {
 		if strings.HasPrefix(subject, strings.ToLower(strings.TrimSpace(prefix))) {
-			return run, nil
+			evidence.run = run
+			return evidence, nil
 		}
 	}
 	s := signals{subject: words(email.Subject)}
 	if email.BodyState == "complete" {
-		s.body = words(email.BodyText)
+		body, err := embedding.CleanBody(email)
+		if err != nil {
+			return ruleEvidence{}, ErrInvalidInput
+		}
+		s.body = words(body)
 	}
 	if address, err := mail.ParseAddress(email.Sender.Address); err == nil {
 		s.sender = strings.ToLower(address.Address)
@@ -208,7 +269,7 @@ func (c *RuleBasedClassifier) Classify(ctx context.Context, email domain.Email, 
 	candidates := map[domain.CategoryID]domain.ClassificationResult{}
 	for _, rule := range c.config.Rules {
 		if err := ctx.Err(); err != nil {
-			return domain.ClassificationRun{}, err
+			return ruleEvidence{}, err
 		}
 		var categoryID domain.CategoryID
 		matches := 0
@@ -224,18 +285,19 @@ func (c *RuleBasedClassifier) Classify(ctx context.Context, email domain.Email, 
 		}
 		excluded := false
 		for _, condition := range rule.Unless {
-			if s.matches(condition) {
+			if s.matches(condition, false) {
 				excluded = true
 				break
 			}
 		}
 		if excluded {
+			evidence.excluded[categoryID] = true
 			continue
 		}
 		reasons := []string{}
 		matched := true
 		for _, condition := range rule.All {
-			if !s.matches(condition) {
+			if !s.matches(condition, true) {
 				matched = false
 				break
 			}
@@ -244,7 +306,7 @@ func (c *RuleBasedClassifier) Classify(ctx context.Context, email domain.Email, 
 		if !matched {
 			continue
 		}
-		result := domain.ClassificationResult{AccountID: email.AccountID, EmailID: email.ID, CategoryID: categoryID, Confidence: rule.Confidence, ClassifierName: c.Name(), ClassifierVersion: c.Version(), InputHash: run.InputHash, Reasons: reasons, Timestamp: run.Timestamp}
+		result := domain.ClassificationResult{ScoreKind: "rule_confidence", AccountID: email.AccountID, EmailID: email.ID, CategoryID: categoryID, Confidence: rule.Confidence, ClassifierName: c.Name(), ClassifierVersion: c.Version(), InputHash: run.InputHash, Reasons: reasons, Timestamp: run.Timestamp}
 		previous, ok := candidates[categoryID]
 		if !ok || result.Confidence > previous.Confidence {
 			candidates[categoryID] = result
@@ -263,9 +325,15 @@ func (c *RuleBasedClassifier) Classify(ctx context.Context, email domain.Email, 
 	}
 	if best.CategoryID != "" && (len(candidates) == 1 || best.Confidence-second > c.config.AmbiguityMargin) {
 		run.Results = append(run.Results, best)
+		run.UsedClassifier = c.Name()
+		run.Reason = "One category has a specific, unambiguous rule match."
+	} else if len(candidates) > 1 {
+		evidence.ambiguous = true
+		run.Reason = "Specific rules match competing categories; no category chosen."
 	}
 	if err := ctx.Err(); err != nil {
-		return domain.ClassificationRun{}, err
+		return ruleEvidence{}, err
 	}
-	return run, nil
+	evidence.run = run
+	return evidence, nil
 }

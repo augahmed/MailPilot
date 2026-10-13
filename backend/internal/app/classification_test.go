@@ -230,7 +230,7 @@ func TestHybridReviewStoresAndExposesSemanticEvidence(t *testing.T) {
 	review.engine = hybrid
 	request := ClassificationRequest{Operation: "run", AccountID: "a"}
 	page := review.Review(context.Background(), request)
-	if page.Errors != 0 || page.Processed != 2 || page.Rows[0].Assessment == nil || page.Rows[0].Assessment.UsedClassifier != "SemanticClassifier" || len(page.Rows[0].Assessment.Candidates) != 3 || page.Rows[0].Predictions[0].ScoreKind != "cosine_similarity" {
+	if page.Errors != 0 || page.Processed != 2 || page.Rows[0].Assessment == nil || page.Rows[0].Assessment.UsedClassifier != "HybridClassifier" || len(page.Rows[0].Assessment.Candidates) != 3 || page.Rows[0].Predictions[0].ScoreKind != "cosine_similarity" {
 		t.Fatal(page)
 	}
 	old, err := store.Classifications().Get(context.Background(), "a", receipt.ID)

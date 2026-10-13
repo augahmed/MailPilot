@@ -1,3 +1,4 @@
+import type { OpenMail } from "../../lib/ipc/reader";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   semanticSearch,
@@ -18,7 +19,7 @@ const messages = {
   response_too_large:
     "The result exceeds the supported display size. Try fewer results.",
 };
-export function SemanticSearch() {
+export function SemanticSearch({ onOpen }: { onOpen?: OpenMail } = {}) {
   const [response, setResponse] = useState<SemanticSearchResponse | null>(null);
   const [query, setQuery] = useState("");
   const [sender, setSender] = useState("");
@@ -315,7 +316,19 @@ export function SemanticSearch() {
         <ol aria-label="Semantic search results">
           {response.rows.map((row) => (
             <li key={row.emailId}>
-              <h3>{row.subject || "(No subject)"}</h3>
+              <h3>
+                <button
+                  onClick={(event) =>
+                    onOpen?.(
+                      response.accountId,
+                      row.emailId,
+                      event.currentTarget,
+                    )
+                  }
+                >
+                  {row.subject || "(No subject)"}
+                </button>
+              </h3>
               <p>
                 {row.sender || "Unknown sender"} ·{" "}
                 <time dateTime={new Date(row.receivedAt).toISOString()}>

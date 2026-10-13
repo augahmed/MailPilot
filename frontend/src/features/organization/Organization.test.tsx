@@ -92,7 +92,9 @@ it("shows exact operations and requires explicit confirmation for application", 
     screen.getByText(/Create label: MailPilot\/Receipts/),
   ).toBeInTheDocument();
   expect(screen.getByRole("cell", { name: "INBOX, Keep" })).toBeInTheDocument();
-  expect(screen.getByRole("cell", { name: "60%" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("cell", { name: "Evidence score 0.600" }),
+  ).toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("checkbox", {
       name: "I confirm these Gmail label changes.",

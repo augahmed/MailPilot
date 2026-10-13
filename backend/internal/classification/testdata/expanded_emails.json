@@ -1,0 +1,676 @@
+[
+  {
+    "id": "job-applications-01",
+    "subject": "Application confirmation",
+    "body": "Thank you for applying for the operations position. Your application will be reviewed by the hiring team.",
+    "category": "Job Applications",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "job-applications-02",
+    "subject": "Update on your application",
+    "body": "We have filled the warehouse role. Unfortunately your candidacy will not proceed. Thank you for taking the time to apply.",
+    "category": "Job Applications",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "job-applications-03",
+    "subject": "We received your application",
+    "body": "Your application for the designer position is now in our hiring queue. No further action is required.",
+    "category": "Job Applications",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "job-applications-04",
+    "subject": "Resume received",
+    "body": "The recruitment office has logged your CV for the analyst vacancy. You will hear from us after shortlisting.",
+    "category": "Job Applications",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "job-applications-05",
+    "subject": "Application status",
+    "body": "We received your application to the support position. The recruiter is still reviewing submissions.",
+    "category": "Job Applications",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "job-applications-06",
+    "subject": "Position withdrawn",
+    "body": "You recently applied for our editor vacancy. Recruitment has been cancelled and all applications have been closed.",
+    "category": "Job Applications",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "job-applications-07",
+    "subject": "Thank you for applying",
+    "body": "Your application for the laboratory position has reached our hiring team. We expect to announce decisions next month.",
+    "category": "Job Applications",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "job-interviews-01",
+    "subject": "Interview confirmation",
+    "body": "Our hiring manager has accepted your availability. Join the interview at the scheduled time using the meeting link.",
+    "category": "Job Interviews",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "job-interviews-02",
+    "subject": "Next step: technical discussion",
+    "body": "As a candidate for our developer vacancy, please reserve a slot to meet the engineering panel and discuss your coding experience.",
+    "category": "Job Interviews",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "job-interviews-03",
+    "subject": "Schedule your interview",
+    "body": "Your application has progressed. The recruiter needs your availability to schedule the interview.",
+    "category": "Job Interviews",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "job-interviews-04",
+    "subject": "Interview scheduled",
+    "body": "The hiring team has placed your second interview on the calendar. Please bring examples of your work.",
+    "category": "Job Interviews",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "job-interviews-05",
+    "subject": "Panel moved to Thursday",
+    "body": "Your job interview with our recruitment panel has been rescheduled. The calendar invitation contains the revised interview time.",
+    "category": "Job Interviews",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "job-interviews-06",
+    "subject": "Invitation to interview",
+    "body": "Our hiring manager is available next week. Reply with your availability so we can schedule your interview.",
+    "category": "Job Interviews",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "job-interviews-07",
+    "subject": "Prepare for the hiring exercise",
+    "body": "Your interview for the architect role includes a design assessment. Meet our interviewers online and walk through the attached instructions.",
+    "category": "Job Interviews",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "school-01",
+    "subject": "Lab report deadline",
+    "body": "Chemistry students must submit the lab report before class on Monday. Your instructor will grade it as coursework.",
+    "category": "School",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "school-02",
+    "subject": "Seminar room change",
+    "body": "Tomorrow's literature class will meet in room 204. Bring the assigned reading and your university student card.",
+    "category": "School",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "school-03",
+    "subject": "Enrollment appointment",
+    "body": "Your academic advisor has opened registration for next term. Select your courses before the enrollment deadline.",
+    "category": "School",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "school-04",
+    "subject": "Feedback on your essay",
+    "body": "I have returned your graded history assignment in the course portal. Please revise the references before our next class.",
+    "category": "School",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "school-05",
+    "subject": "Examination timetable",
+    "body": "Your mathematics final is scheduled for Wednesday. The university examination office has published room assignments for enrolled students.",
+    "category": "School",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "school-06",
+    "subject": "School trip permission",
+    "body": "Our classroom will visit the science museum. Please return the permission form to your child's teacher by Friday.",
+    "category": "School",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "school-07",
+    "subject": "Study group tonight",
+    "body": "Classmates, shall we review the lecture notes and work through the physics homework before tomorrow's tutorial?",
+    "category": "School",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "finance-01",
+    "subject": "Checking statement available",
+    "body": "Your monthly banking statement lists deposits, withdrawals and the closing balance for your checking account.",
+    "category": "Finance",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "finance-02",
+    "subject": "Annual tax form",
+    "body": "The brokerage has issued your annual dividend and investment tax document. Use it when completing your income tax return.",
+    "category": "Finance",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "finance-03",
+    "subject": "Loan repayment schedule",
+    "body": "Your mortgage account has a revised interest rate. Review the outstanding loan balance and upcoming monthly repayments.",
+    "category": "Finance",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "finance-04",
+    "subject": "Credit card account notice",
+    "body": "The minimum payment for your credit card statement is due next week. Check your current balance and statement period.",
+    "category": "Finance",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "finance-05",
+    "subject": "Transfer completed",
+    "body": "Funds have moved from your savings account to your checking account. Your bank balances now reflect the transfer.",
+    "category": "Finance",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "finance-06",
+    "subject": "Retirement portfolio review",
+    "body": "Your quarterly pension investment statement is ready, including fund holdings and investment performance.",
+    "category": "Finance",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "finance-07",
+    "subject": "Overdraft notice",
+    "body": "Your checking account balance is below zero. The bank has applied the account's overdraft terms; review your recent withdrawals.",
+    "category": "Finance",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "receipts-01",
+    "subject": "Payment receipt",
+    "body": "Amount paid: 38 dollars. Transaction ID: TEST-C01. Keep this receipt for the completed purchase.",
+    "category": "Receipts",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "receipts-02",
+    "subject": "Your receipt",
+    "body": "Payment successful. Order number: TEST-C02. This confirms payment for the replacement charger.",
+    "category": "Receipts",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "receipts-03",
+    "subject": "Parcel dispatched",
+    "body": "Your purchased desk lamp has left our warehouse. Track this order's shipment with tracking reference TEST-C03.",
+    "category": "Receipts",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "receipts-04",
+    "subject": "Refund processed",
+    "body": "The store has refunded the returned boots from order TEST-C04 to your original payment method. Keep this confirmation.",
+    "category": "Receipts",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "receipts-05",
+    "subject": "Order confirmation",
+    "body": "Total paid: 72 dollars. Receipt number: TEST-C05. Your books will ship tomorrow.",
+    "category": "Receipts",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "receipts-06",
+    "subject": "Delivery complete",
+    "body": "Your order of kitchen towels was delivered today. This shipping update relates to purchase TEST-C06.",
+    "category": "Receipts",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "receipts-07",
+    "subject": "Payment confirmation",
+    "body": "Your card was charged 19 dollars. Invoice number: TEST-C07. Thank you for renewing your paid subscription.",
+    "category": "Receipts",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "newsletters-01",
+    "subject": "Monthly roundup",
+    "body": "This month's editorial selections cover astronomy and wildlife. Manage your subscription to this recurring publication below.",
+    "category": "Newsletters",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "newsletters-02",
+    "subject": "Weekly digest",
+    "body": "In this issue we discuss new books and author essays. Unsubscribe if you no longer want our weekly edition.",
+    "category": "Newsletters",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "newsletters-03",
+    "subject": "The gardening letter",
+    "body": "Our regular subscriber bulletin brings seasonal growing advice and selected articles. Manage preferences for future editions.",
+    "category": "Newsletters",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "newsletters-04",
+    "subject": "Community newsletter",
+    "body": "This week in our community: local headlines and upcoming events. Manage your subscription or unsubscribe below.",
+    "category": "Newsletters",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "newsletters-05",
+    "subject": "Summer sale for subscribers",
+    "body": "Our promotional mailing list has this week's offers on outdoor equipment. Unsubscribe to stop these recurring marketing messages.",
+    "category": "Newsletters",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "newsletters-06",
+    "subject": "Your reading roundup",
+    "body": "Welcome back to the weekly editorial digest for subscribers. We selected five essays. Manage preferences at the bottom.",
+    "category": "Newsletters",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "newsletters-07",
+    "subject": "Finance newsletter",
+    "body": "Our monthly publication reviews banking trends and interviews fund managers. Read this issue's articles or unsubscribe from the mailing list.",
+    "category": "Newsletters",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "personal-01",
+    "subject": "Sunday walk?",
+    "body": "Hi cousin, would you like to join the family for a walk after lunch? The children would love to see you.",
+    "category": "Personal",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "personal-02",
+    "subject": "Thinking of you",
+    "body": "Hey friend, I hope your move went well. I miss our chats. Call when you have a quiet evening.",
+    "category": "Personal",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "personal-03",
+    "subject": "Birthday picnic",
+    "body": "Hi sis, let's celebrate Dad's birthday together at the park. Can you bring a blanket for the family picnic?",
+    "category": "Personal",
+    "split": "development",
+    "case": "positive"
+  },
+  {
+    "id": "personal-04",
+    "subject": "Dinner at our place",
+    "body": "We would love to have you and your partner over on Saturday. Let us know what time works. Love, your friends.",
+    "category": "Personal",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "personal-05",
+    "subject": "A quick hello",
+    "body": "Hi Grandma, the kids enjoyed your visit. We have planted the flowers you brought and will send pictures soon.",
+    "category": "Personal",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "personal-06",
+    "subject": "Can you feed the cat?",
+    "body": "Hey brother, we're away this weekend. Could you pop round to feed our cat? We'll return the favor next month.",
+    "category": "Personal",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "personal-07",
+    "subject": "Coffee and a catch-up",
+    "body": "Hey old friend, it's been ages. Are you free to meet for coffee and tell me how things are going?",
+    "category": "Personal",
+    "split": "validation",
+    "case": "positive"
+  },
+  {
+    "id": "negated-application",
+    "subject": "Application received",
+    "body": "We have not received your application for the engineer position. This automated error is not a submission acknowledgment.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "application-software",
+    "subject": "Application confirmation",
+    "body": "Your application for a graphics software license has been received. This is a license activation ticket, unrelated to employment.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "application-template",
+    "subject": "Application template",
+    "body": "This writing exercise contains the example sentence: we received your application for the position. Replace it before publishing the template.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "interview-research",
+    "subject": "Interview invitation",
+    "body": "You are a candidate for a research interview about shopping habits. Send your availability to schedule the study session.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "interview-podcast",
+    "subject": "Interview with a hiring manager",
+    "body": "We are recording a podcast interview with a hiring manager. The recruiter guest will share advice; this is a media booking.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "interview-mock",
+    "subject": "Interview invitation",
+    "body": "Our recruiter will schedule a mock interview for practice. This coaching session is not connected to an employment vacancy.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "receipt-estimate",
+    "subject": "Your receipt",
+    "body": "This is an estimate. Total paid will appear here once you buy. Order number is only a placeholder, and no payment has been taken.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "receipt-failed",
+    "subject": "Payment confirmation",
+    "body": "Payment has failed. Amount paid: zero. Order number: TEST-N01. There is no completed purchase.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "receipt-template",
+    "subject": "Receipt template",
+    "body": "Sample receipt: payment received, order number TEST-N02. This is a design mockup with no actual transaction.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "newsletter-design",
+    "subject": "Newsletter design",
+    "body": "Please review the newsletter template. It contains the words manage preferences and unsubscribe as sample footer text.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "newsletter-invoice",
+    "subject": "Newsletter invoice question",
+    "body": "Our designer asks whether the newsletter invoice should show an unsubscribe link. This is a work discussion about a layout.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "unsubscribe-alert",
+    "subject": "Security code",
+    "body": "Your one-time access code expires in five minutes. Unsubscribe from optional account alerts in settings.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "mixed-bank-order",
+    "subject": "Bank account and order update",
+    "body": "Your bank statement shows the checking balance. Separately, your shop order has shipped and its paid invoice is available. Review both independent updates.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "mixed-school-personal",
+    "subject": "Class notes and family plans",
+    "body": "Your coursework essay is due on Friday. Also, our family picnic is Sunday; please tell Grandma whether you can come. These are separate reminders.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "mixed-hiring",
+    "subject": "Application received and interview invitation",
+    "body": "We received your application for the developer position. Our hiring team needs your availability to schedule an interview for a separate role.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "mixed-news-receipt",
+    "subject": "Weekly digest and your receipt",
+    "body": "In this issue: editorial stories for subscribers; unsubscribe below. Separately, payment received, order number TEST-N03 confirms your purchase.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "quoted-receipt",
+    "subject": "Your receipt",
+    "body": "Please investigate why this example appeared in our help page.\n> Payment received. Order number: EXAMPLE.\nIt is quoted documentation, not a purchase.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "quoted-application",
+    "subject": "Application received",
+    "body": "Can you proofread this template?\n> We received your application for the position.\nIt has not been sent to any candidate.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "negated-interview",
+    "subject": "Interview invitation",
+    "body": "This is not an interview invitation. The hiring manager has no availability to schedule a meeting; the calendar mail was sent in error.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "negated-receipt",
+    "subject": "Your receipt",
+    "body": "This is not a receipt. The phrase payment received next to order number is part of a troubleshooting guide.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "blank",
+    "subject": "",
+    "body": "",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "metadata-only",
+    "subject": "Your receipt",
+    "body": "Payment received. Order number: TEST-N04.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative",
+    "body_state": "unavailable"
+  },
+  {
+    "id": "truncated",
+    "subject": "Interview invitation",
+    "body": "Our hiring team needs your availability to schedule a meeting.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative",
+    "body_state": ""
+  },
+  {
+    "id": "incident",
+    "subject": "Production database unavailable",
+    "body": "On-call operators should inspect the failed deployment and restore the service. The incident bridge is open.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "password",
+    "subject": "Reset your password",
+    "body": "Someone requested an account password reset. Ignore this message if it was not you.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "meeting-work",
+    "subject": "Project planning session",
+    "body": "Please review the sprint backlog before our internal engineering standup. Assign owners for outstanding tickets.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "health",
+    "subject": "Appointment reminder",
+    "body": "Your dental checkup is tomorrow at ten. Call the clinic reception if you need to reschedule.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "travel",
+    "subject": "Gate change",
+    "body": "The departure gate for your flight has changed. Proceed to gate B12; boarding begins shortly.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "legal",
+    "subject": "Document signature needed",
+    "body": "Our legal department needs your signature on the revised service agreement before the contract can take effect.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "delivery-work",
+    "subject": "Shipment processing incident",
+    "body": "Warehouse operators: investigate missing tracking scans in the fulfillment pipeline. This internal incident concerns the shipping service, not your order.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "research-school",
+    "subject": "Coursework classifier design",
+    "body": "Engineers should evaluate the classifier for phrases like university class and homework deadline. This ticket describes software requirements.",
+    "category": null,
+    "split": "development",
+    "case": "hard_negative"
+  },
+  {
+    "id": "finance-software",
+    "subject": "Bank statement parser failure",
+    "body": "The integration test cannot parse the checking account balance field. Developers should debug the financial document parser.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "friend-marketing-work",
+    "subject": "Personal invitation template review",
+    "body": "Design team, edit the sample greeting hello friend and family dinner invitation in our product demo. No gathering is planned.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "ambiguous-vague",
+    "subject": "An update",
+    "body": "Your request is being processed. We will send further details when they become available.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  },
+  {
+    "id": "wrong-domain-keywords",
+    "subject": "Position and application errors",
+    "body": "The window position in our software application is incorrect. Please review the UI bug and deployment logs.",
+    "category": null,
+    "split": "validation",
+    "case": "hard_negative"
+  }
+]

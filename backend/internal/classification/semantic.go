@@ -37,15 +37,23 @@ func NewSemanticClassifier(e SemanticEmbeddings, c SemanticConfig) (*SemanticCla
 		return nil, ErrInvalidConfig
 	}
 	return &SemanticClassifier{e, c, configVersion(struct {
+		Algorithm                            string
 		Provider                             string
 		Dimension                            int
 		Preprocessing, CategoryPreprocessing string
 		Policy                               SemanticConfig
-	}{e.ProviderName(), e.Dimension(), embedding.PreprocessingVersion, embedding.CategoryPreprocessingVersion, c})}, nil
+	}{"semantic-2", e.ProviderName(), e.Dimension(), embedding.PreprocessingVersion, embedding.CategoryPreprocessingVersion, c})}, nil
 }
 func (c *SemanticClassifier) Name() string    { return "SemanticClassifier" }
 func (c *SemanticClassifier) Version() string { return c.version }
 func (c *SemanticClassifier) Classify(ctx context.Context, e domain.Email, categories []domain.EmailCategory) (domain.ClassificationRun, error) {
+	run, err := c.classify(ctx, e, categories)
+	if len(run.Candidates) > c.config.TopCandidates {
+		run.Candidates = run.Candidates[:c.config.TopCandidates]
+	}
+	return run, err
+}
+func (c *SemanticClassifier) classify(ctx context.Context, e domain.Email, categories []domain.EmailCategory) (domain.ClassificationRun, error) {
 	run := newRun(c, e, categories)
 	run.UsedClassifier = "none"
 	if err := ctx.Err(); err != nil {
@@ -104,7 +112,7 @@ func (c *SemanticClassifier) Classify(ctx context.Context, e domain.Email, categ
 		}
 		return candidates[i].CategoryID < candidates[j].CategoryID
 	})
-	run.Candidates = append(run.Candidates, candidates[:min(len(candidates), c.config.TopCandidates)]...)
+	run.Candidates = append(run.Candidates, candidates[:min(len(candidates), max(2, c.config.TopCandidates))]...)
 	best := candidates[0]
 	if best.Similarity < c.config.MinimumSimilarity {
 		run.Reason = fmt.Sprintf("Best cosine similarity %.3f is below the %.3f minimum.", best.Similarity, c.config.MinimumSimilarity)

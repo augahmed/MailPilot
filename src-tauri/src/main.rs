@@ -5,8 +5,8 @@ mod replies;
 
 use bridge::{
     AuthStatus, Bridge, CategoryPage, CategoryRequest, ClassificationPage, ClassificationRequest,
-    Health, MailboxPage, OrganizationRequest, OrganizationResponse, ReplyRequest, ReplyResponse,
-    SearchRequest, SearchResponse, SyncProgress,
+    Health, MailboxPage, OrganizationRequest, OrganizationResponse, ReadMailRequest,
+    ReadMailResponse, ReplyRequest, ReplyResponse, SearchRequest, SearchResponse, SyncProgress,
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -21,6 +21,7 @@ struct SmokeTest {
     completed: AtomicBool,
     auth_completed: AtomicBool,
     mailbox_completed: AtomicBool,
+    reader_completed: AtomicBool,
     categories_completed: AtomicBool,
     classification_completed: AtomicBool,
     organization_completed: AtomicBool,
@@ -33,6 +34,7 @@ impl SmokeTest {
         self.completed.load(Ordering::SeqCst)
             && self.auth_completed.load(Ordering::SeqCst)
             && self.mailbox_completed.load(Ordering::SeqCst)
+            && self.reader_completed.load(Ordering::SeqCst)
             && self.categories_completed.load(Ordering::SeqCst)
             && self.classification_completed.load(Ordering::SeqCst)
             && self.organization_completed.load(Ordering::SeqCst)
@@ -299,6 +301,36 @@ async fn sync_status(backend: tauri::State<'_, Backend>) -> Result<SyncProgress,
     sync_command(backend, false).await
 }
 #[tauri::command]
+async fn mailbox_read(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+    request: ReadMailRequest,
+) -> Result<ReadMailResponse, String> {
+    let backend = backend.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.read_mail(request),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())??;
+    let smoke = app.state::<SmokeTest>();
+    if smoke.enabled
+        && result.code == "unauthorized"
+        && !smoke.reader_completed.swap(true, Ordering::SeqCst)
+    {
+        eprintln!(
+            "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_reader_ok\"}}"
+        );
+        if smoke.complete() {
+            app.exit(0);
+        }
+    }
+    Ok(result)
+}
+#[tauri::command]
 async fn mailbox_list(
     app: tauri::AppHandle,
     backend: tauri::State<'_, Backend>,
@@ -323,6 +355,9 @@ async fn mailbox_list(
         eprintln!(
             "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_mailbox_ok\"}}"
         );
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.eval(r#"window.__TAURI_INTERNALS__.invoke('mailbox_read', {request:{accountId:'smoke',emailId:'smoke',offset:0,revision:''}}).catch(() => {});"#);
+        }
         if smoke.complete() {
             app.exit(0);
         }
@@ -340,7 +375,7 @@ fn main() {
         }))
         .setup(|app| {
             let smoke_test = std::env::args().any(|arg| arg == "--smoke-test");
-            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), search_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false) });
+            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), reader_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), search_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false) });
             if smoke_test {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
@@ -359,7 +394,7 @@ fn main() {
             app.manage(Arc::new(Mutex::new(backend)) as Backend);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, mailbox_list, categories_manage, classification_review, organization_manage, semantic_search, reply_manage])
+        .invoke_handler(tauri::generate_handler![health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, semantic_search, reply_manage])
         .build(tauri::generate_context!())
         .expect("failed to build MailPilot desktop application");
 

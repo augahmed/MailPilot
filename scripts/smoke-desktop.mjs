@@ -38,6 +38,7 @@ try {
       !diagnostics.includes('"event":"frontend_health_ok"') ||
       !diagnostics.includes('"event":"frontend_auth_ok"') ||
       !diagnostics.includes('"event":"frontend_mailbox_ok"') ||
+      !diagnostics.includes('"event":"frontend_reader_ok"') ||
       !diagnostics.includes('"event":"frontend_categories_ok"') ||
       !diagnostics.includes('"event":"frontend_classification_ok"') ||
       !diagnostics.includes('"event":"frontend_organization_ok"') ||
@@ -50,7 +51,7 @@ try {
       );
     }
     console.log(
-      "Native WebView → Tauri → Go → SQLite health, Gmail status, mailbox, category, classification, organization, semantic search and reply authorization checks passed; core shut down cleanly.",
+      "Native WebView → Tauri → Go → SQLite health, Gmail status, mailbox, cached reader, category, classification, organization, semantic search and reply authorization checks passed; core shut down cleanly.",
     );
   } finally {
     clearTimeout(deadline);

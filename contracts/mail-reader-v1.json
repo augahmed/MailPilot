@@ -1,0 +1,45 @@
+{
+  "accountId": "fixture-account",
+  "emailId": "fixture-message",
+  "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "offset": 0,
+  "nextOffset": 12,
+  "totalBytes": 12,
+  "body": "Hello reader",
+  "code": "",
+  "message": {
+    "subject": "Synthetic cached mail",
+    "sender": {
+      "name": "Sender",
+      "address": "sender@example.test"
+    },
+    "recipients": [
+      {
+        "name": "Reader",
+        "address": "reader@example.test"
+      }
+    ],
+    "cc": [],
+    "receivedAt": 1000,
+    "cachedAt": 2000,
+    "attachments": [],
+    "labels": [
+      {
+        "name": "INBOX",
+        "kind": "system"
+      }
+    ],
+    "categories": [],
+    "categoryState": "not_reviewed",
+    "phishing": {
+      "score": 0,
+      "risk": "low",
+      "version": "fixture-v1",
+      "reasons": []
+    },
+    "bodyState": "complete",
+    "bodyFormat": "plain_text",
+    "bodyError": false,
+    "metadataTruncated": false
+  }
+}

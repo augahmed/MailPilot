@@ -16,6 +16,7 @@ type Database interface {
 }
 
 type App struct {
+	Reader         *CachedReader
 	Replies        *ReplyService
 	Search         *MailboxSearch
 	RiskEngine     *risk.Engine

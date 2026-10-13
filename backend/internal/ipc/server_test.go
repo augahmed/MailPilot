@@ -294,3 +294,33 @@ func TestSemanticSearchStrictContractAndAllowlist(t *testing.T) {
 		}
 	}
 }
+
+type readerService struct{ healthy }
+
+func (readerService) ReadMail(context.Context, app.ReadMailRequest) app.ReadMailResponse {
+	return app.ReadMailResponse{Code: "unauthorized"}
+}
+func TestReaderStrictIPC(t *testing.T) {
+	input := `{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":1}}
+{"jsonrpc":"2.0","id":"2","method":"mail.read","params":{"accountId":"a","emailId":"e","offset":0,"revision":""}}
+{"jsonrpc":"2.0","id":"3","method":"mail.read","params":{"accountId":"a","emailId":"e","offset":0,"revision":"","fetch":true}}
+{"jsonrpc":"2.0","id":"4","method":"mail.read","params":{"accountId":"a","emailId":"e","offset":1,"revision":""}}
+`
+	var output bytes.Buffer
+	if err := Serve(context.Background(), strings.NewReader(input), &output, func(context.Context) (HealthService, error) { return readerService{}, nil }); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 4 {
+		t.Fatal("missing responses")
+	}
+	if !strings.Contains(lines[1], `"code":"unauthorized"`) {
+		t.Fatal("reader command not dispatched")
+	}
+	for _, line := range lines[2:] {
+		var r response
+		if err := json.Unmarshal([]byte(line), &r); err != nil || r.Error == nil || r.Error.Code != -32602 {
+			t.Fatal("invalid reader request accepted")
+		}
+	}
+}

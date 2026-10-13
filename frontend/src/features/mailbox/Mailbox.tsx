@@ -1,3 +1,4 @@
+import type { OpenMail } from "../../lib/ipc/reader";
 import { useEffect, useRef, useState } from "react";
 import {
   getMailbox,
@@ -8,8 +9,10 @@ import {
 
 export function Mailbox({
   connectionRevision,
+  onOpen,
 }: {
   connectionRevision: number;
+  onOpen?: OpenMail;
 }) {
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [page, setPage] = useState<MailboxPage | null>(null);
@@ -153,7 +156,13 @@ export function Mailbox({
                 <tr key={row.id}>
                   <td>{row.sender || "Unknown sender"}</td>
                   <td>
-                    {row.subject || "(No subject)"}
+                    <button
+                      onClick={(event) =>
+                        onOpen?.(page.accountId, row.id, event.currentTarget)
+                      }
+                    >
+                      {row.subject || "(No subject)"}
+                    </button>
                     {row.bodyState === "unavailable" && (
                       <small>Body unavailable</small>
                     )}

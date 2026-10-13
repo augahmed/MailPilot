@@ -163,6 +163,7 @@ func run() int {
 		synchronization.SetOperationGate(gate)
 		application.Organization = organization
 		application.Classification = app.NewClassificationReview(authentication.Session, engine, store.Emails(), store.Categories(), store.Classifications())
+		application.Reader = app.NewCachedReader(authentication.Session, store.Emails(), application.Classification, riskEngine)
 		return application, nil
 	})
 	if err != nil && ctx.Err() == nil {

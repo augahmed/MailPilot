@@ -183,7 +183,7 @@ Connect an account and use **Refresh categories** to manage its local definition
 
 After connecting and syncing an account, open **Classification review** and choose **Classify this page**. MailPilot reviews up to five cached emails, saves the results, and shows each email’s predicted category, confidence and reasons. Use the previous/next review-page controls to cover more downloaded messages. **Refresh reviews** loads saved assessments without running the classifier. Reading results uses local SQLite and requires no AI provider/key.
 
-The hybrid classifier first accepts deterministic rules at strength 0.85 or above, then falls back to locally computed category-description cosine similarity. The existing conservative starter rules cover Job Applications, Job Interviews, Receipts and Newsletters. They require multiple signals and use confidence scores of 55–65%; these scores are heuristic strengths rather than measured probabilities. The starter scores fall below the new high-confidence cutoff. Weak, conflicting or incomplete evidence can leave mail unclassified; without a local model, weak matches abstain. Renamed, disabled or custom categories have no starter mapping; rule configuration is centralized in [starter_rules.json](backend/internal/classification/starter_rules.json) and can be supplied through validated Go configuration. Changes to that configuration require a new classifier version.
+The hybrid classifier treats rule strength and cosine similarity as separate evidence. Specific unambiguous starter rules at 0.60 or above work without a local model; broader 0.55 rules require agreement with the leading semantic category. Agreement can select at cosine 0.35 with a lead above 0.05; semantic-only selection still requires 0.45 and that same margin. Conflicting rules, rule/model disagreement, near ties and explicit exclusions abstain. Scores are not probabilities. Rules and embeddings share quote/signature-trimmed text, and rules ignore limited immediate negations. Rule configuration contents and algorithm/policy versions are fingerprinted. Existing category definitions are unchanged; renamed, disabled or custom categories have no starter name mapping.
 
 Category definitions and label changes can make previous predictions stale; rerun the page to refresh them. Partial storage failures report successful saves and row errors separately. Classification saves suggestions only: it does not assign categories, modify Gmail or use an LLM. The explicitly configured local MiniLM provider computes and caches embeddings during manual hybrid review. See [semantic setup](docs/SEMANTIC_CLASSIFICATION.md) and [measured synthetic evaluation](docs/SEMANTIC_EVALUATION.md). The existing account session is required to access retained cached mail; reconnect and refresh after disconnect. Automated tests use synthetic mail and temporary databases.
 
@@ -225,3 +225,11 @@ preview and approve creating a Gmail draft. MailPilot never sends mail.
 See [reply drafting and recovery](docs/REPLY_DRAFTING.md) and
 [provider security boundaries](docs/GENERATIVE_AI.md). Tests use FakeAIProvider
 and synthetic Gmail responses; no paid API calls or live mailbox writes are needed.
+
+Cached message subjects in the mailbox and semantic search now open a reader with
+sender, To/CC, timestamp, body, attachment metadata, cached Gmail labels,
+MailPilot categories and phishing explanations. Back returns to the existing
+results. Reading uses local cached text, including text extracted from HTML-only
+messages; email links remain inactive and remote content is never loaded. Long
+bodies offer “Load more cached text.” Missing content is reported without a Gmail
+fetch. Attachment downloads and rich HTML display are not implemented.

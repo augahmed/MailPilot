@@ -12,6 +12,7 @@
     "allow-sync-start",
     "allow-sync-status",
     "allow-mailbox-list",
+    "allow-mailbox-read",
     "allow-categories-manage",
     "allow-classification-review",
     "allow-organization-manage",
