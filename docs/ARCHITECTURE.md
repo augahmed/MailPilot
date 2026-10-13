@@ -488,15 +488,15 @@ Diagnostics contain operation name, duration, safe error code and random correla
 | 3 — Secure Gmail read | OS keyring, browser PKCE OAuth, bounded initial/delta sync, disconnect (OAuth, bounded import and manual delta sync implemented). | Real-account testing only after keyring and redaction work; verify consent rejection, refresh, locked store, rate limits, expired cursor, interruption, scope completeness and offline restart. |
 | 4 — Safe organization | Built-in suggestions, explicit organization enablement, classification-driven label previews, missing MailPilot label creation, journal and undo. | Dry-run makes zero writes; stale previews rejected; crash-after-remote-write and partial-batch tests pass; undo leaves unrelated labels intact and reports conflicts. |
 | 5 — MVP completion | Explained risk rules, cache controls, recovery UX and release packaging. | Synthetic benign/malicious fixtures, parser fuzzing, security-boundary tests, accessibility check, realistic mailbox performance measurements, privacy docs and signed builds for each claimed platform. |
-| 6 — Optional AI | Provider/consent foundation and OpenAI adapter implemented; desktop settings, reviewed reply drafting and authorized IPC implemented; summary/answer UI remains planned. | Entire MVP passes with no AI key; no external request before approval; injection cannot trigger actions; credential and data-use review complete. |
-| 7 — Local semantic search | Local model and exact cosine search implemented; chunk indexing, benchmark-selected ANN and hybrid ranking remain planned. | Search relevance/latency measured on synthetic corpus; model migration, deletion propagation and offline fallback tested. |
+| 6 — Optional AI | Provider/consent foundation and OpenAI adapter implemented; desktop settings, reviewed reply drafting and authorized IPC implemented; Ask with cited answers is now implemented; summary UI remains planned. | Entire MVP passes with no AI key; no external request before approval; injection cannot trigger actions; credential and data-use review complete. |
+| 7 — Local semantic search | Local model and exact cosine search implemented; subject/passage chunk indexing implemented; ANN and hybrid retrieval ranking remain deferred. | Search relevance/latency measured on synthetic corpus; model migration, deletion propagation and offline fallback tested. |
 | 8 — Expansion | Additional providers, multiple-account UI, richer organization or rendering. | Add capabilities and migrations for actual needs; preserve existing privacy and action guarantees. |
 
 Meaningful tests target boundaries and failure modes, not getters or implementation mirroring. Provider tests use fakes/recorded synthetic responses; no live personal mailbox in CI. Separate opt-in live Gmail smoke tests use a dedicated test account and deliberately confirmed label changes. Publish measured startup, sync throughput, search latency and memory on a documented fixture corpus before claiming production readiness.
 
 ## 11. Explicitly outside the MVP
 
-- Desktop AI summary/answer workflows, agentic automation and auto-send. Reviewed reply generation and separately approved Gmail draft creation were subsequently requested and are implemented.
+- Desktop AI summary workflows, agentic automation and auto-send. Ask with cited answers was subsequently requested and is implemented. Reviewed reply generation and separately approved Gmail draft creation were subsequently requested and are implemented.
 - External embedding services, background model downloads and later hybrid/ANN search. Explicit development installation, local semantic classification and exact cosine search were subsequently requested and implemented.
 - Outlook/IMAP adapters and simultaneous multi-account UX; the schema and boundaries already isolate accounts.
 - HTML email rendering, remote images, attachment download/preview/execution, OCR and malware scanning.
@@ -530,3 +530,27 @@ risk cache but cannot classify mail, call an AI provider or mutate Gmail. No
 schema migration or new dependency is needed. Native smoke tests exercise the
 new WebView command's unauthorized-account path using a disposable profile;
 synthetic backend and UI tests cover successful content rendering and paging.
+
+### Implemented Ask MailPilot
+
+The subsequently requested Ask workflow composes the existing local semantic
+retriever with a separate bounded evidence builder (`internal/ask`) and the existing
+`AIProvider.AnswerWithContext` consent boundary. Explicit sender/date filters apply
+locally. At most five retrieved sources contribute cleaned passage neighborhoods;
+8,000 encoded context bytes are disclosed before a single-use generation approval.
+No unrelated thread expansion, attachment access, remote retrieval, tool execution
+or mailbox write is available to this use case.
+
+The fixed answer policy treats mail as untrusted data and explicitly defends against
+injected instructions. Every accepted claim must cite a known source and include a
+verbatim passage quote; Go rejects malformed/uncited output. This verifies provenance,
+not semantic truth. Escaped answers offer application-owned buttons into the cached
+reader. Insufficient evidence produces an explicit abstention. Source revisions,
+account authorization, session cancellation, expiry and consent replay are checked.
+
+Ask reuses account-scoped reply AI settings and OS key storage. The new allowlisted
+`ask.manage` command has strict Go/Rust/TypeScript DTOs; consent, context, source maps
+and output are memory-only, cleared on disconnect/settings changes. Retrieval remains
+local; only the explicitly approved bounded request goes to the configured provider.
+No storage migration or new dependency is needed. See [Ask MailPilot](ASK_MAILPILOT.md)
+for bounds, threat-model limitations and synthetic/native validation coverage.

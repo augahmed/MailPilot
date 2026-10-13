@@ -27,6 +27,13 @@ vi.mock("../search/SemanticSearch", () => ({
     </section>
   ),
 }));
+vi.mock("../ask/AskMailPilot", () => ({
+  AskMailPilot: ({ onOpen }: { onOpen: OpenMail }) => (
+    <button onClick={(e) => onOpen("a", "ask-email", e.currentTarget)}>
+      Open cited email
+    </button>
+  ),
+}));
 vi.mock("./MailReader", () => ({
   MailReader: ({ onBack, source }: { onBack: () => void; source: string }) => (
     <button onClick={onBack}>Back to {source}</button>
@@ -49,4 +56,8 @@ it("returns to the same mailbox page and search query with focus restored", asyn
   fireEvent.click(screen.getByText("Open search message"));
   fireEvent.click(screen.getByText("Back to search results"));
   expect(screen.getByLabelText("Saved search")).toHaveValue("invoice");
+  const citation = screen.getByText("Open cited email");
+  fireEvent.click(citation);
+  fireEvent.click(screen.getByText("Back to Ask MailPilot"));
+  await waitFor(() => expect(citation).toHaveFocus());
 });

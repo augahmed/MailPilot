@@ -1,0 +1,50 @@
+{
+  "request": {
+    "operation": "prepare",
+    "accountId": "synthetic-account",
+    "question": "Which recruiter offered two technical interviews?",
+    "sender": "",
+    "from": null,
+    "until": null,
+    "previewId": "",
+    "jobId": "",
+    "approved": false
+  },
+  "response": {
+    "accountId": "synthetic-account",
+    "state": "answered",
+    "jobId": "",
+    "previewId": "",
+    "expiresAt": 0,
+    "provider": "fake",
+    "model": "fake-v1",
+    "external": false,
+    "context": "",
+    "instruction": "",
+    "policy": "",
+    "version": "ask-context-v1",
+    "partial": false,
+    "truncated": false,
+    "sources": [
+      {
+        "ref": "S1",
+        "emailId": "synthetic-email",
+        "subject": "Interview plan",
+        "sender": "Recruiter <recruiter@example.test>",
+        "receivedAt": 1780000000000,
+        "evidence": "You will have two technical interviews."
+      }
+    ],
+    "answer": {
+      "insufficient": false,
+      "claims": [
+        {
+          "text": "The recruiter offered two technical interviews.",
+          "source": "S1",
+          "quote": "You will have two technical interviews."
+        }
+      ]
+    },
+    "code": ""
+  }
+}

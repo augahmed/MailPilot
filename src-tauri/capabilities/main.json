@@ -18,6 +18,7 @@
     "allow-classification-review",
     "allow-organization-manage",
     "allow-semantic-search",
-    "allow-reply-manage"
+    "allow-reply-manage",
+    "allow-ask-manage"
   ]
 }

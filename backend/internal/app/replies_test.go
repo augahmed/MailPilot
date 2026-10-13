@@ -24,6 +24,7 @@ type FakeAIProvider struct {
 	requests []ai.Request
 	block    chan struct{}
 	err      error
+	answer   func(context.Context, ai.Request) (ai.Result, error)
 }
 
 func (f *FakeAIProvider) GenerateDraft(ctx context.Context, r ai.Request) (ai.Result, error) {
@@ -40,7 +41,13 @@ func (f *FakeAIProvider) GenerateDraft(ctx context.Context, r ai.Request) (ai.Re
 func (f *FakeAIProvider) SummarizeThread(context.Context, ai.Request) (ai.Result, error) {
 	return ai.Result{}, errors.New("unexpected summary")
 }
-func (f *FakeAIProvider) AnswerWithContext(context.Context, ai.Request) (ai.Result, error) {
+func (f *FakeAIProvider) AnswerWithContext(ctx context.Context, r ai.Request) (ai.Result, error) {
+	f.mu.Lock()
+	f.requests = append(f.requests, r)
+	f.mu.Unlock()
+	if f.answer != nil {
+		return f.answer(ctx, r)
+	}
 	return ai.Result{}, errors.New("unexpected answer")
 }
 func (f *FakeAIProvider) count() int { f.mu.Lock(); defer f.mu.Unlock(); return len(f.requests) }

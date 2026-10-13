@@ -233,3 +233,11 @@ results. Reading uses local cached text, including text extracted from HTML-only
 messages; email links remain inactive and remote content is never loaded. Long
 bodies offer “Load more cached text.” Missing content is reported without a Gmail
 fetch. Attachment downloads and rich HTML display are not implemented.
+
+### Ask MailPilot
+
+After indexing cached mail and configuring the optional AI provider under Draft a reply,
+use **Ask MailPilot** to retrieve evidence locally, review the exact outbound context,
+and approve an answer with citations that open cached emails. Sender/date filters
+are optional. Answers can abstain and cannot modify mail. See [Ask MailPilot](docs/ASK_MAILPILOT.md)
+for privacy boundaries, context limits and validation coverage.

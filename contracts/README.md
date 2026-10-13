@@ -298,3 +298,21 @@ new passage path. Counts/scanned remain email counts, not vector counts.
 
 Reindexing is explicit after the migration; classification vectors are independent.
 Both legacy and additive result shapes remain accepted by updated clients.
+
+## Ask MailPilot v1
+
+`ask.manage` / native `ask_manage` uses [ask-v1.json](ask-v1.json). Operations are
+`status`, `prepare`, `generate`, `cancel`, and `clear`. Prepare takes an account,
+question (1,000 UTF-8 bytes), optional sender (256 bytes), and inclusive `from` /
+exclusive `until` millisecond UTC filters. It returns a bounded job; poll status.
+Generate requires the exact preview ID, active account and `approved: true`;
+no question/context can be substituted at generation. Cancel identifies the active
+job. Unknown fields and mailbox action operations are rejected.
+
+Responses expose state, provider/model, `ask-context-v1`, source aliases/local email
+IDs, partial/truncation flags, preview expiry, and the exact policy/question/context.
+Context is at most 8,000 bytes; up to five sources have 1,400-byte evidence fields.
+Answers contain `insufficient` and up to six claims, each with bounded `text`, known
+`source`, and exact supporting `quote`. Source revision hashes remain internal.
+No secrets, provider message IDs, model tools, arbitrary navigation URLs or persisted
+conversation are exposed. The cached reader reauthorizes every citation open.

@@ -6,7 +6,7 @@ The Go backend now supports `AIProvider.GenerateDraft`, `SummarizeThread`, and
 return untrusted plain text. Generating a draft does not create a Gmail draft,
 send mail, or change mailbox state.
 
-The desktop now exposes optional OpenAI settings and [reviewed reply drafting](REPLY_DRAFTING.md). AI remains disabled until configured; reading, sync, rules, risk scoring and local semantic search remain independent. Summary and contextual-answer UI are not implemented.
+The desktop now exposes optional OpenAI settings and [reviewed reply drafting](REPLY_DRAFTING.md). AI remains disabled until configured; reading, sync, rules, risk scoring and local semantic search remain independent. [Ask MailPilot](ASK_MAILPILOT.md) now adds reviewed retrieval context and cited answers using the same settings and consent boundary. Summary UI remains unimplemented.
 
 ## Composition and configuration
 

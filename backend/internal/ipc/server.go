@@ -40,6 +40,10 @@ type MailService interface {
 type CategoryService interface {
 	ManageCategories(context.Context, app.CategoryRequest) app.CategoryPage
 }
+type AskService interface {
+	AskMail(context.Context, app.AskRequest) app.AskResponse
+}
+
 type ReplyService interface {
 	Reply(context.Context, app.ReplyRequest) app.ReplyResponse
 }
@@ -134,6 +138,16 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 					fail(-32001, "Organization unavailable")
 				} else {
 					reply.Result = organization.Organize(callCtx, params)
+				}
+			case "ask.manage":
+				var params app.AskRequest
+				ask, ok := service.(AskService)
+				if !ok {
+					fail(-32601, "Method not found")
+				} else if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else {
+					reply.Result = ask.AskMail(callCtx, params)
 				}
 			case "reply.manage":
 				var params app.ReplyRequest

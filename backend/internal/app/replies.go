@@ -78,7 +78,11 @@ func (a *App) Reply(ctx context.Context, p ReplyRequest) ReplyResponse {
 		r.Code = "unauthorized"
 		return r
 	}
-	return a.Replies.Handle(ctx, p)
+	r := a.Replies.Handle(ctx, p)
+	if a.Ask != nil && r.State == "configuring" && r.Code == "" && (p.Operation == "configure" || p.Operation == "disable") {
+		a.Ask.Clear()
+	}
+	return r
 }
 func replyCode(e error) string {
 	if e == nil {

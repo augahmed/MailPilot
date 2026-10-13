@@ -16,6 +16,7 @@ type Database interface {
 }
 
 type App struct {
+	Ask            *AskService
 	Reader         *CachedReader
 	Replies        *ReplyService
 	Search         *MailboxSearch
@@ -42,6 +43,9 @@ func (a *App) Health(ctx context.Context) domain.Health {
 
 func (a *App) AuthStatus() auth.Status { return a.Auth.Status() }
 func (a *App) AuthBegin() auth.BeginResult {
+	if a.Ask != nil {
+		a.Ask.Clear()
+	}
 	if a.Replies != nil {
 		a.Replies.Clear()
 	}
@@ -55,6 +59,9 @@ func (a *App) AuthBegin() auth.BeginResult {
 }
 func (a *App) AuthCheck() auth.Status { return a.Auth.Check() }
 func (a *App) AuthDisconnect() auth.Status {
+	if a.Ask != nil {
+		a.Ask.Clear()
+	}
 	if a.Replies != nil {
 		a.Replies.Clear()
 	}

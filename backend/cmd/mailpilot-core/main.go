@@ -64,7 +64,11 @@ func run() int {
 	var organization *app.Organization
 	var mailboxSearch *app.MailboxSearch
 	var replies *app.ReplyService
+	var askService *app.AskService
 	defer func() {
+		if askService != nil {
+			askService.Close()
+		}
 		if replies != nil {
 			replies.Close()
 		}
@@ -143,7 +147,8 @@ func run() int {
 		if searchEmbeddings != nil {
 			searchEmbeddings = &search.PassageEmbeddings{Base: searchEmbeddings, Emails: store.Emails(), Vectors: store.PassageVectors()}
 		}
-		mailboxSearch = app.NewMailboxSearch(ctxRoot, authentication.Session, search.New(store.SearchIndex(), searchEmbeddings, engine), store.Categories())
+		retrieval := search.New(store.SearchIndex(), searchEmbeddings, engine)
+		mailboxSearch = app.NewMailboxSearch(ctxRoot, authentication.Session, retrieval, store.Categories())
 		application.Search = mailboxSearch
 		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {
 			return gmail.NewProvider(account, authentication)
@@ -152,13 +157,16 @@ func run() int {
 		keys := func(account domain.AccountID) credentials.SecretStore {
 			return credentials.NewAPIKeyStore(cfg.DataDir+"\x00"+string(account), "openai")
 		}
-		replies = app.NewReplyService(ctxRoot, authentication.Session, store.Replies(), store.Emails(), func(account domain.AccountID) app.ReplyProvider { return gmail.NewProvider(account, authentication) }, keys, func(account domain.AccountID, model string) (ai.AIProvider, ai.Identity, error) {
+		aiFactory := func(account domain.AccountID, model string) (ai.AIProvider, ai.Identity, error) {
 			p, err := openai.New(keys(account), model)
 			if err != nil {
 				return nil, ai.Identity{}, err
 			}
 			return p, p.Identity(), nil
-		})
+		}
+		askService = app.NewAskService(ctxRoot, authentication.Session, retrieval, store.Replies(), store.Emails(), aiFactory)
+		application.Ask = askService
+		replies = app.NewReplyService(ctxRoot, authentication.Session, store.Replies(), store.Emails(), func(account domain.AccountID) app.ReplyProvider { return gmail.NewProvider(account, authentication) }, keys, aiFactory)
 		replies.SetOperationGate(gate)
 		application.Replies = replies
 		organization.SetRiskEngine(riskEngine)
