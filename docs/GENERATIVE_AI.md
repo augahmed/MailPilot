@@ -6,10 +6,7 @@ The Go backend now supports `AIProvider.GenerateDraft`, `SummarizeThread`, and
 return untrusted plain text. Generating a draft does not create a Gmail draft,
 send mail, or change mailbox state.
 
-This phase implements the provider and consent foundation. It adds no desktop
-settings screen, generation UI, IPC command, automatic retrieval, or background
-calls. The current desktop therefore remains disabled for generative AI. Existing
-reading, sync, rules, risk scoring and local semantic search remain independent.
+The desktop now exposes optional OpenAI settings and [reviewed reply drafting](REPLY_DRAFTING.md). AI remains disabled until configured; reading, sync, rules, risk scoring and local semantic search remain independent. Summary and contextual-answer UI are not implemented.
 
 ## Composition and configuration
 
@@ -38,11 +35,8 @@ identity must remain immutable while a service is in use.
 `credentials.SecretStore` exposes `Load`, `Save`, and `Delete` for one scoped secret.
 The concrete `APIKeyStore` uses the existing OS keyring library in a namespace
 separate from Gmail OAuth. Slots are isolated by application-data profile and
-provider. There is no file, SQLite, environment-variable or command-argument key
-fallback. Save accepts the existing redacted `credentials.Secret` wrapper. A future
-settings form must submit briefly held input through a narrow typed command,
-clear it immediately, and never return a saved key through a read API. This phase
-does not introduce an alternate insecure key-entry mechanism. OS keyring calls
+provider; the desktop reply use case additionally scopes by account. There is no file, SQLite, environment-variable or command-argument key
+fallback. Save accepts the existing redacted `credentials.Secret` wrapper. The settings form submits briefly held input through the narrow typed reply command, clears it immediately, and never returns a saved key through a read API. OS keyring calls
 are synchronous; context is checked before and after the OS operation, but cannot
 interrupt an OS credential-store prompt already in progress.
 
@@ -62,11 +56,10 @@ as policy plus two user messages; the context message has the fixed prefix
 `Untrusted email context:` followed by a newline. There are no hidden email
 headers, attachments, retrieved sources, prior conversations, or tools.
 
-A future application use case must authorize the current account/session before
-both `Prepare` and `Execute`, fetch only account-owned sources, show every preview
-field (using `Text.Reveal()` only for this explicit presentation), and obtain a
-separate user confirmation. The service is not an authentication mechanism. These
-are Go-only APIs; none is exposed to JavaScript yet.
+The reply application use case authorizes the current account/session before
+both `Prepare` and `Execute`, fetches only account-owned sources, shows every preview
+field (using `Text.Reveal()` only for this explicit presentation), and obtains a
+separate user confirmation. The service is not an authentication mechanism. The UI uses a validated, fixed reply.manage command rather than direct provider access.
 
 Approvals expire after five minutes, are bound to one service configuration and
 account, and are consumed before dispatch, even if the request fails. Only one
@@ -78,13 +71,13 @@ revoke previews, release pending input, cancel work, and suppress late output.
 Cancellation cannot recall data already received by an external provider. Retrying
 requires a new preview and confirmation.
 
-Requests and results stay in memory. `ai.Text` and `credentials.Secret` redact
+AI requests and unreviewed results stay in memory. Once the user requests a Gmail draft preview, the reviewed body and routing are persisted in the local action journal for safe recovery. `ai.Text` and `credentials.Secret` redact
 ordinary formatting, structured logs and generic JSON serialization. The adapter
 has no prompt/body logging, tracing or log opt-in. It reports fixed neutral error
 codes, never raw HTTP, keyring or provider error details. Explicitly extracting
-text into a string is sensitive and must not be logged or persisted by consumers.
+text into a string is sensitive and must not be logged; only explicitly reviewed draft plans are persisted by this workflow.
 Prompts do not confer action rights; model responses have no tools or mailbox
-mutation access and must later be rendered as escaped text for human review.
+mutation access and are rendered as escaped text for human review.
 
 ## OpenAI adapter
 
@@ -118,6 +111,4 @@ key rotation/failure, redirects, request/response limits, refusals, incomplete
 output, concurrency, and log/serialization redaction.
 
 No live OpenAI test was performed. Model availability and generation quality
-remain dependent on the selected model and the user's project. The later UI and
-account-authorized generation use cases need their own IPC, consent-presentation,
-session-lifecycle and native integration validation before desktop exposure.
+remain dependent on the selected model and the user's project. Reply workflow tests additionally cover IPC validation, both approvals, source/account isolation, editing, session cancellation, journal recovery and the native unauthorized-command boundary.

@@ -196,3 +196,42 @@ The main-window `semantic_search` native command maps only to `search.semantic`.
 Responses carry accountId, jobId, operation, state (`idle`, `indexing`, `searching`, `completed`, `cancelled`, `error`), counts `{cached, eligible, indexed}`, processed/errors/scanned, partial/capped/excerptFallback, rows and optional safe code. Count invariants are indexed ≤ eligible ≤ cached; processed/errors/scanned are bounded by 10,000. Rows appear only for a completed query: at most 20 unique emailIds, descending finite cosine similarity -1…1, sender ≤81 Unicode characters, subject ≤121, receivedAt in epoch milliseconds, excerpt ≤161. Ties use date descending then ID ascending. Source bodies/HTML, query text and vectors are not echoed. Caps/errors are explicit; unauthorized responses carry no account/mail rows. Codes: unauthorized, validation, conflict, cancelled, embedding_unavailable, storage_error, busy, response_too_large. Responses are capped at 48 KiB before framing.
 
 Index/query start background local jobs and return immediately; status/cancel remain under ordinary IPC deadlines. Category filters match explicit assignments or fresh choices under the current classifier, not stale predictions. No provider operation or external inference is reachable. The desktop smoke check now also verifies this command denies mailbox access without an authorized account.
+
+## Reviewed reply drafting (protocol v1 additive extension)
+
+The main-window `reply_manage` command maps only to `reply.manage`.
+[reply-drafting-v1.json](reply-drafting-v1.json) is the shared Go/Rust/TypeScript
+compatibility fixture. Ship the strict host, frontend and core together.
+
+Requests use operation, accountId, emailId, includeThread, instruction, tone,
+previewId, jobId, actionId, approved, body, model and apiKey. Operations are status,
+configure, disable, prepare, generate, preview_draft, create, reconcile, resolve,
+undo_preview and cancel. Unknown fields/operations and unrelated nonempty fields
+are rejected. IDs are at most 100 UTF-8 bytes, instruction 1,000, reviewed body
+6,000, model 128, inbound API key 2,048. Tones are Professional, Friendly, Concise
+and Formal. Status may omit account identity; every other operation requires the
+authorized account. No sending or destructive operation is accepted.
+
+Prepare selects cached context locally. Generate requires the exact AI preview
+ID and approved=true; preview_draft requires the current review ID and edited
+body; create requires the saved action ID, digest and approved=true, with no
+replacement body. Resolve requires a completed reconciliation and explicit
+approval. Cancel requires the current job ID. Settings, generation, creation and
+reconciliation run as bounded cancellable jobs polled through status.
+
+Responses contain accountId, state, configured, provider, model, external, jobId,
+previewId, reviewId, expiresAt (UTC epoch milliseconds), context, instruction,
+policy, to, subject, body, sourceCount, truncated, actionId, draftId, reconciled,
+undoAvailable and a fixed safe code. There is no API key response field.
+Context is at most 6,000 bytes, instruction 1,500, policy 1,000, recipient 320,
+subject 512, body 6,000 and sourceCount 0–5; total responses are capped at 48 KiB.
+States are idle, configuring, ai_preview, generating, editing, draft_preview,
+creating, reconciling, created, uncertain, conflict, resolved and error.
+UndoAvailable is always false; undo_preview reports undo_unavailable.
+
+Preview contents are sensitive and rendered only as escaped text. Pending AI
+consent is memory-only. Migration 11 persists reviewed Gmail draft plans and
+outcomes; no secret or AI prompt history is stored. Disconnect revokes consent,
+cancels work and suppresses late results. Uncertain remote writes remain in the
+journal and cannot be automatically replayed. The native smoke test exercises
+this command's unauthorized-account rejection.

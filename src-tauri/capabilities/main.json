@@ -15,6 +15,7 @@
     "allow-categories-manage",
     "allow-classification-review",
     "allow-organization-manage",
-    "allow-semantic-search"
+    "allow-semantic-search",
+    "allow-reply-manage"
   ]
 }

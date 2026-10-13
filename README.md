@@ -13,7 +13,7 @@ Backend connected
 Database connected
 ```
 
-Gmail OAuth, OS-secure refresh-token storage, and connection controls are implemented. Follow [Gmail development setup](docs/GMAIL_SETUP.md) to connect a dedicated test account. Bounded manual Inbox import and a cached mailbox summary are implemented. User-defined categories, local rule classification, reviewed Gmail label organization and structured offline phishing feature extraction are implemented. Phishing scoring/review and local semantic classification/search are implemented; external AI remains unimplemented. The local application works without an account or external service. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
+Gmail OAuth, OS-secure refresh-token storage, and connection controls are implemented. Follow [Gmail development setup](docs/GMAIL_SETUP.md) to connect a dedicated test account. Bounded manual Inbox import and a cached mailbox summary are implemented. User-defined categories, local rule classification, reviewed Gmail label organization and structured offline phishing feature extraction are implemented. Phishing scoring/review and local semantic classification/search are implemented; optional reviewed AI reply drafting is implemented. The local application works without an account or external service. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
 
 ## Prerequisites
 
@@ -215,8 +215,13 @@ Retrieval never sends mail to an external inference service or runs a Gmail keyw
 
 ## Optional generative AI
 
-The backend provides an optional, consent-gated AIProvider and an isolated OpenAI
-adapter with OS credential storage. The current desktop has no generation UI or
-AI key settings screen and remains disabled for generation. See
-[provider setup and security boundaries](docs/GENERATIVE_AI.md). Tests use synthetic
-fakes and never require paid API calls.
+Open **Draft a reply → Optional AI settings** to choose an OpenAI model available
+to your project and save its API key in the OS credential store. AI is disabled
+until configured. Select a cached email, optionally include earlier cached thread
+messages, choose a tone and add an instruction. Review the exact external AI
+payload before approving generation; edit the proposed reply, then separately
+preview and approve creating a Gmail draft. MailPilot never sends mail.
+
+See [reply drafting and recovery](docs/REPLY_DRAFTING.md) and
+[provider security boundaries](docs/GENERATIVE_AI.md). Tests use FakeAIProvider
+and synthetic Gmail responses; no paid API calls or live mailbox writes are needed.

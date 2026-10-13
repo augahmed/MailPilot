@@ -634,3 +634,11 @@ export async function semanticSearch(
     await invoke<unknown>("semantic_search", { request: parameters }),
   );
 }
+
+export {
+  manageReplies,
+  replyRequestSchema,
+  replyResponseSchema,
+  type ReplyRequest,
+  type ReplyResponse,
+} from "./reply";

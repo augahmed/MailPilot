@@ -16,6 +16,7 @@ type Database interface {
 }
 
 type App struct {
+	Replies        *ReplyService
 	Search         *MailboxSearch
 	RiskEngine     *risk.Engine
 	Auth           *auth.Manager
@@ -40,6 +41,9 @@ func (a *App) Health(ctx context.Context) domain.Health {
 
 func (a *App) AuthStatus() auth.Status { return a.Auth.Status() }
 func (a *App) AuthBegin() auth.BeginResult {
+	if a.Replies != nil {
+		a.Replies.Clear()
+	}
 	if a.Search != nil {
 		a.Search.Clear()
 	}
@@ -50,6 +54,9 @@ func (a *App) AuthBegin() auth.BeginResult {
 }
 func (a *App) AuthCheck() auth.Status { return a.Auth.Check() }
 func (a *App) AuthDisconnect() auth.Status {
+	if a.Replies != nil {
+		a.Replies.Clear()
+	}
 	if a.Search != nil {
 		a.Search.Clear()
 	}

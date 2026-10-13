@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import {
   semanticSearch,
+  manageReplies,
   organize,
   reviewClassifications,
   manageCategories,
@@ -14,6 +15,7 @@ import {
 
 vi.mock("../lib/ipc/client", () => ({
   semanticSearch: vi.fn(),
+  manageReplies: vi.fn(),
   organize: vi.fn(),
   reviewClassifications: vi.fn(),
   manageCategories: vi.fn(),
@@ -25,6 +27,31 @@ vi.mock("../lib/ipc/client", () => ({
 describe("desktop status", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(manageReplies).mockResolvedValue({
+      accountId: "",
+      state: "idle",
+      configured: false,
+      provider: "",
+      model: "",
+      external: false,
+      jobId: "",
+      previewId: "",
+      reviewId: "",
+      expiresAt: 0,
+      context: "",
+      instruction: "",
+      policy: "",
+      to: "",
+      subject: "",
+      body: "",
+      sourceCount: 0,
+      truncated: false,
+      actionId: "",
+      draftId: "",
+      reconciled: false,
+      undoAvailable: false,
+      code: "unauthorized",
+    });
     vi.mocked(semanticSearch).mockResolvedValue({
       accountId: "",
       jobId: "",

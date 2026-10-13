@@ -7,13 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"mailpilot.local/core/internal/domain"
 )
 
 var (
+	ErrConflict               = errors.New("provider state conflict")
 	ErrUnavailable            = errors.New("provider unavailable")
 	ErrMalformed              = errors.New("invalid provider message")
 	ErrRateLimited            = errors.New("provider rate limited")
@@ -120,8 +124,12 @@ type LabelManager interface {
 // DraftInput is deliberately separate from a received Email: no forged receive
 // time, remote ID, or arbitrary raw headers. Sender is the authenticated account.
 // Empty recipients/body are allowed for incomplete drafts. No attachment upload
-// or remote-thread association is promised by this initial contract.
+// is exposed. Reply metadata is explicit and validated, never arbitrary headers.
 type DraftInput struct {
+	ThreadID      domain.ProviderThreadID
+	MessageID     string // Application-generated RFC Message-ID for read-only reconciliation.
+	InReplyTo     string
+	References    string
 	Recipients    []domain.EmailAddress
 	CCRecipients  []domain.EmailAddress
 	BCCRecipients []domain.EmailAddress
@@ -132,13 +140,31 @@ type DraftInput struct {
 
 // Validate rejects header injection in outgoing draft metadata. Incoming Email
 // validation remains permissive so malformed or hostile mail can be inspected.
+var messageIDPattern = regexp.MustCompile(`^<[A-Za-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[A-Za-z0-9.-]+>$`)
+
+func ValidMessageID(id string) bool { return len(id) <= 250 && messageIDPattern.MatchString(id) }
 func (d DraftInput) Validate() error {
+	if len(d.Subject) > 512 || !utf8.ValidString(d.Subject) || strings.ContainsFunc(d.Subject, unicode.IsControl) || len(d.BodyText) > 16384 || !utf8.ValidString(d.BodyText) || strings.ContainsRune(d.BodyText, '\x00') || len(d.Recipients)+len(d.CCRecipients)+len(d.BCCRecipients) > 20 {
+		return ErrInvalidArgument
+	}
+	if d.MessageID != "" && !ValidMessageID(d.MessageID) || d.InReplyTo != "" && !ValidMessageID(d.InReplyTo) || len(d.References) > 1500 {
+		return ErrInvalidArgument
+	}
+	for _, id := range strings.Fields(d.References) {
+		if !ValidMessageID(id) {
+			return ErrInvalidArgument
+		}
+	}
+	if strings.ContainsAny(d.References, "\r\n") || len(d.ThreadID) > 1024 || strings.ContainsAny(string(d.ThreadID), "/\\?#\r\n") || d.ThreadID != "" && (d.InReplyTo == "" || d.References == "") {
+		return ErrInvalidArgument
+	}
+
 	if strings.ContainsAny(d.Subject, "\r\n") {
 		return fmt.Errorf("%w: draft subject contains a line break", ErrInvalidArgument)
 	}
 	for _, group := range [][]domain.EmailAddress{d.Recipients, d.CCRecipients, d.BCCRecipients} {
 		for _, address := range group {
-			if strings.ContainsAny(address.Name+address.Address, "\r\n") {
+			if len(address.Address) > 320 || len(address.Name) > 256 || strings.ContainsFunc(address.Name+address.Address, unicode.IsControl) {
 				return fmt.Errorf("%w: draft address contains a line break", ErrInvalidArgument)
 			}
 			parsed, err := mail.ParseAddress(address.Address)
@@ -158,9 +184,15 @@ type DraftReference struct {
 
 type DraftCreator interface {
 	// CreateDraft stores a draft remotely; it never sends. This is a mailbox write
-	// requiring future preview/confirmation/journaling. Do not blindly retry after
+	// requiring preview/confirmation/journaling. Do not blindly retry after
 	// ambiguous failures: providers may have created a draft before disconnection.
 	CreateDraft(context.Context, DraftInput) (DraftReference, error)
+}
+
+// DraftFinder reconciles only an application-generated draft identity. No
+// general provider search string, sending or deletion capability is exposed.
+type DraftFinder interface {
+	FindDraft(context.Context, DraftInput) (DraftReference, error)
 }
 
 // EmailProvider is the full adapter boundary. Consumers should accept only the

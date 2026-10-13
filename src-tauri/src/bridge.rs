@@ -1,3 +1,4 @@
+pub use crate::replies::{ReplyRequest, ReplyResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -636,6 +637,20 @@ impl Bridge {
             serde_json::to_value(request).map_err(|_| "Invalid organization request")?,
         )?)
         .map_err(|_| "Invalid organization response".into())
+    }
+    pub fn reply(&mut self, request: ReplyRequest) -> Result<ReplyResponse, String> {
+        if !request.valid() {
+            return Err("Invalid reply request".into());
+        }
+        let result: ReplyResponse = serde_json::from_value(self.request(
+            "reply.manage",
+            serde_json::to_value(request).map_err(|_| "Invalid reply request")?,
+        )?)
+        .map_err(|_| "Invalid reply response")?;
+        if !result.valid() {
+            return Err("Invalid reply response".into());
+        }
+        Ok(result)
     }
     pub fn search(&mut self, request: SearchRequest) -> Result<SearchResponse, String> {
         if !request.valid() {

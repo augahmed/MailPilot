@@ -35,7 +35,7 @@ func NewProvider(account domain.AccountID, tokens TokenSource) *Provider {
 	return &Provider{account: account, tokens: tokens, baseURL: "https://gmail.googleapis.com/gmail/v1/users/me", client: &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func (*Provider) Capabilities() provider.Capabilities {
-	return provider.Capabilities{CreateLabels: true, ModifyLabels: true}
+	return provider.Capabilities{CreateLabels: true, ModifyLabels: true, CreateDrafts: true}
 }
 
 // Keep credential/cancellation checks consistent across read and write paths.
@@ -249,9 +249,6 @@ func (p *Provider) ListLabels(ctx context.Context, page provider.PageOptions) (p
 }
 func (*Provider) FetchThread(context.Context, domain.ProviderThreadID, provider.PageOptions) (domain.EmailThread, error) {
 	return domain.EmailThread{}, provider.ErrUnsupported
-}
-func (*Provider) CreateDraft(context.Context, provider.DraftInput) (provider.DraftReference, error) {
-	return provider.DraftReference{}, provider.ErrUnsupported
 }
 
 func (p *Provider) labelSnapshot() map[string]domain.EmailLabel {

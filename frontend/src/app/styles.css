@@ -208,3 +208,21 @@ button {
   margin-block: 1.25rem;
   overflow-wrap: anywhere;
 }
+
+.reply-drafts pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.reply-drafts label {
+  display: block;
+  margin: 0.75rem 0;
+}
+.reply-drafts textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+.reply-drafts select {
+  max-width: 100%;
+}

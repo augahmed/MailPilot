@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"mailpilot.local/core/internal/ai"
+	"mailpilot.local/core/internal/ai/openai"
 	"mailpilot.local/core/internal/app"
 	"mailpilot.local/core/internal/auth"
 	"mailpilot.local/core/internal/classification"
@@ -61,7 +63,11 @@ func run() int {
 	var synchronization *mailsync.Service
 	var organization *app.Organization
 	var mailboxSearch *app.MailboxSearch
+	var replies *app.ReplyService
 	defer func() {
+		if replies != nil {
+			replies.Close()
+		}
 		if mailboxSearch != nil {
 			mailboxSearch.Close()
 		}
@@ -140,6 +146,18 @@ func run() int {
 			return gmail.NewProvider(account, authentication)
 		}, store.Emails(), store.Categories(), store.Classifications(), store.Organization(), engine)
 		gate := make(chan struct{}, 1)
+		keys := func(account domain.AccountID) credentials.SecretStore {
+			return credentials.NewAPIKeyStore(cfg.DataDir+"\x00"+string(account), "openai")
+		}
+		replies = app.NewReplyService(ctxRoot, authentication.Session, store.Replies(), store.Emails(), func(account domain.AccountID) app.ReplyProvider { return gmail.NewProvider(account, authentication) }, keys, func(account domain.AccountID, model string) (ai.AIProvider, ai.Identity, error) {
+			p, err := openai.New(keys(account), model)
+			if err != nil {
+				return nil, ai.Identity{}, err
+			}
+			return p, p.Identity(), nil
+		})
+		replies.SetOperationGate(gate)
+		application.Replies = replies
 		organization.SetRiskEngine(riskEngine)
 		organization.SetOperationGate(gate)
 		synchronization.SetOperationGate(gate)

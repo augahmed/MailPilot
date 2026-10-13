@@ -36,6 +36,9 @@ type MailService interface {
 type CategoryService interface {
 	ManageCategories(context.Context, app.CategoryRequest) app.CategoryPage
 }
+type ReplyService interface {
+	Reply(context.Context, app.ReplyRequest) app.ReplyResponse
+}
 type SearchService interface {
 	SearchMailbox(context.Context, app.SearchRequest) app.SearchResponse
 }
@@ -127,6 +130,16 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 					fail(-32001, "Organization unavailable")
 				} else {
 					reply.Result = organization.Organize(callCtx, params)
+				}
+			case "reply.manage":
+				var params app.ReplyRequest
+				replies, ok := service.(ReplyService)
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Replies unavailable")
+				} else {
+					reply.Result = replies.Reply(callCtx, params)
 				}
 			case "search.semantic":
 				var params app.SearchRequest
