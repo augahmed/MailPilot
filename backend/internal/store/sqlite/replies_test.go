@@ -17,7 +17,7 @@ import (
 func draftPlan(t *testing.T, s *Store, a domain.AccountID) reply.Plan {
 	t.Helper()
 	ctx := context.Background()
-	e := retrievalEmail(a, "draft-source", "Meeting", "Synthetic request", "sender@example.test", 12)
+	e := legacyEmail(a, "draft-source", "Meeting", "Synthetic request", "sender@example.test", 12)
 	e.ProviderThreadID = "thread"
 	e.Headers = []domain.EmailHeader{{Name: "Message-ID", Value: "<parent@example.test>"}}
 	saveEmail(t, s, e)
@@ -111,11 +111,11 @@ func TestReplySourcesBoundedAndSettingsHaveNoKeys(t *testing.T) {
 	p := draftPlan(t, s, a)
 	ctx := context.Background()
 	for i := 0; i < 7; i++ {
-		e := retrievalEmail(a, "earlier"+strings.Repeat("x", i), "Earlier", "Synthetic earlier context", "sender@example.test", 10)
+		e := legacyEmail(a, "earlier"+strings.Repeat("x", i), "Earlier", "Synthetic earlier context", "sender@example.test", 10)
 		e.ProviderThreadID = "thread"
 		saveEmail(t, s, e)
 	}
-	e := retrievalEmail(b, "foreign", "Private", "Not related", "foreign@example.test", 10)
+	e := legacyEmail(b, "foreign", "Private", "Not related", "foreign@example.test", 10)
 	e.ProviderThreadID = "thread"
 	saveEmail(t, s, e)
 	rows, capped, err := s.Replies().Sources(ctx, a, p.EmailID, true)

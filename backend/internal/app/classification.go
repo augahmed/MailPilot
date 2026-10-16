@@ -7,7 +7,6 @@ import (
 
 	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/domain"
-	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/repository"
 )
 
@@ -34,15 +33,10 @@ type ClassificationDTO struct {
 	Reasons           []string `json:"reasons"`
 	Timestamp         int64    `json:"timestamp"`
 }
-type ClassificationCandidateDTO struct {
-	CategoryID   string  `json:"category_id"`
-	CategoryName string  `json:"category_name"`
-	Similarity   float64 `json:"similarity"`
-}
 type ClassificationAssessmentDTO struct {
-	UsedClassifier string                       `json:"used_classifier"`
-	Reason         string                       `json:"reason"`
-	Candidates     []ClassificationCandidateDTO `json:"candidates"`
+	UsedClassifier string     `json:"used_classifier"`
+	Reason         string     `json:"reason"`
+	Candidates     []struct{} `json:"candidates"`
 }
 type ClassificationRow struct {
 	Assessment  *ClassificationAssessmentDTO `json:"assessment,omitempty"`
@@ -96,9 +90,7 @@ func classificationCode(err error) string {
 		return "conflict"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return "cancelled"
-	case errors.Is(err, embedding.ErrProvider), errors.Is(err, embedding.ErrVector), errors.Is(err, embedding.ErrUnavailable):
-		return "embedding_unavailable"
-	case errors.Is(err, classification.ErrInvalidInput), errors.Is(err, embedding.ErrInput):
+	case errors.Is(err, classification.ErrInvalidInput):
 		return "invalid_message"
 	default:
 		return "storage_error"
@@ -176,10 +168,7 @@ func (s *ClassificationReview) Review(ctx context.Context, p ClassificationReque
 			row.Timestamp = &timestamp
 			row.State = "unclassified"
 			if run.Reason != "" {
-				row.Assessment = &ClassificationAssessmentDTO{UsedClassifier: run.UsedClassifier, Reason: run.Reason, Candidates: []ClassificationCandidateDTO{}}
-				for _, candidate := range run.Candidates {
-					row.Assessment.Candidates = append(row.Assessment.Candidates, ClassificationCandidateDTO{string(candidate.CategoryID), shortText(names[candidate.CategoryID], 100), candidate.Similarity})
-				}
+				row.Assessment = &ClassificationAssessmentDTO{UsedClassifier: run.UsedClassifier, Reason: run.Reason, Candidates: []struct{}{}}
 			}
 			if len(run.Results) > 0 {
 				row.State = "classified"

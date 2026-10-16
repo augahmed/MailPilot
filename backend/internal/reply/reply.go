@@ -9,11 +9,12 @@ import (
 	"net/mail"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"mailpilot.local/core/internal/ai"
 	"mailpilot.local/core/internal/domain"
-	"mailpilot.local/core/internal/embedding"
+	mailtext "mailpilot.local/core/internal/mail"
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/repository"
 )
@@ -103,7 +104,7 @@ func Build(rows []repository.StoredEmail, selected domain.EmailID, tone, instruc
 			copy := e
 			target = &copy
 		}
-		prepared, err := embedding.Prepare(e)
+		prepared, err := legacyContext(e)
 		if err != nil {
 			return ai.Request{}, nil, provider.DraftInput{}, false, repository.ErrInvalid
 		}
@@ -111,8 +112,8 @@ func Build(rows []repository.StoredEmail, selected domain.EmailID, tone, instruc
 		if e.ID == selected {
 			limit = 1800
 		}
-		truncated = truncated || len(prepared.Text) > limit
-		parts = append(parts, e.ReceivedAt.UTC().Format(time.RFC3339)+"\n"+Clip(prepared.Text, limit))
+		truncated = truncated || len(prepared) > limit
+		parts = append(parts, e.ReceivedAt.UTC().Format(time.RFC3339)+"\n"+Clip(prepared, limit))
 		sources = append(sources, Source{e.ID, row.ContentHash})
 	}
 	if target == nil {
@@ -149,4 +150,31 @@ func Build(rows []repository.StoredEmail, selected domain.EmailID, tone, instruc
 	}
 	payload := ai.Request{Instruction: ai.NewText(text), Context: ai.NewText(strings.Join(parts, "\n\n")), MaxOutputTokens: 1200}
 	return payload, sources, draft, truncated, payload.Validate()
+}
+
+// legacyContext preserves the old bounded formatter for unreachable draft code.
+// It performs no inference, hashing, retrieval or network access.
+func legacyContext(e domain.Email) (string, error) {
+	for _, value := range []string{e.Subject, e.Sender.Name, e.Sender.Address, e.BodyText} {
+		if len(value) > mailtext.MaxBodyBytes || !utf8.ValidString(value) {
+			return "", repository.ErrInvalid
+		}
+	}
+	body, err := mailtext.CleanBody(e)
+	if err != nil {
+		return "", repository.ErrInvalid
+	}
+	clean := func(value string) string {
+		value = strings.Map(func(r rune) rune {
+			if unicode.IsControl(r) || unicode.IsSpace(r) {
+				return ' '
+			}
+			if unicode.Is(unicode.Cf, r) {
+				return -1
+			}
+			return r
+		}, value)
+		return strings.Join(strings.Fields(value), " ")
+	}
+	return Clip("Subject: "+Clip(clean(e.Subject), 1024)+"\nSender: "+Clip(clean(e.Sender.Name), 256)+" <"+Clip(clean(e.Sender.Address), 320)+">\nBody:\n"+body, 16384), nil
 }

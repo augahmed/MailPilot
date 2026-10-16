@@ -12,8 +12,6 @@ const errors = {
   cancelled: "Review stopped. Successfully saved assessments remain available.",
   invalid_message:
     "This message or assessment exceeds the supported review limits.",
-  embedding_unavailable:
-    "This saved semantic assessment is retired. Run a new deterministic review.",
   storage_error: "Could not load or save a local assessment. Try again.",
 };
 const states = {
@@ -175,9 +173,7 @@ export function ClassificationReview() {
                           </small>
                         </td>
                         <td>
-                          {prediction.score_kind === "cosine_similarity"
-                            ? `Cosine ${prediction.confidence.toFixed(3)}`
-                            : `Rule strength ${prediction.confidence.toFixed(2)}`}
+                          {`Rule strength ${prediction.confidence.toFixed(2)}`}
                         </td>
                         <td>
                           <ul>
@@ -185,7 +181,6 @@ export function ClassificationReview() {
                               <li key={index}>{reason}</li>
                             ))}
                           </ul>
-                          <Candidates assessment={row.assessment} />
                           <small>
                             Reviewed{" "}
                             <time
@@ -221,7 +216,6 @@ export function ClassificationReview() {
                             ? row.assessment?.reason ||
                               "No supported category has enough evidence."
                             : "Use Classify this page to run the local classifier."}
-                        <Candidates assessment={row.assessment} />
                       </td>
                     </tr>
                   )}
@@ -254,25 +248,5 @@ export function ClassificationReview() {
         </button>
       </div>
     </section>
-  );
-}
-
-function Candidates({
-  assessment,
-}: {
-  assessment: ClassificationPage["rows"][number]["assessment"];
-}) {
-  if (!assessment?.candidates.length) return null;
-  return (
-    <details>
-      <summary>Top category candidates</summary>
-      <ol>
-        {assessment.candidates.map((candidate) => (
-          <li key={candidate.category_id}>
-            {candidate.category_name}: cosine {candidate.similarity.toFixed(3)}
-          </li>
-        ))}
-      </ol>
-    </details>
   );
 }

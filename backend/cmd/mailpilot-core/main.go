@@ -110,11 +110,8 @@ func run() int {
 		if err != nil {
 			return nil, err
 		}
-		// Preserve the existing conservative rule gate; no semantic provider is composed.
-		engine, err := classification.NewHybridClassifier(rules, nil, classification.DefaultHybridConfig())
-		if err != nil {
-			return nil, err
-		}
+		// The deterministic engine owns the conservative direct-rule gate.
+		engine := rules
 		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {
 			return gmail.NewProvider(account, authentication)
 		}, store.Emails(), store.Categories(), store.Classifications(), store.Organization(), engine)

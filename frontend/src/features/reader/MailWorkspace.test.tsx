@@ -17,23 +17,6 @@ vi.mock("../mailbox/Mailbox", () => ({
     );
   },
 }));
-vi.mock("../search/SemanticSearch", () => ({
-  SemanticSearch: ({ onOpen }: { onOpen: OpenMail }) => (
-    <section>
-      <input aria-label="Saved search" />
-      <button onClick={(e) => onOpen("a", "s", e.currentTarget)}>
-        Open search message
-      </button>
-    </section>
-  ),
-}));
-vi.mock("../ask/AskMailPilot", () => ({
-  AskMailPilot: ({ onOpen }: { onOpen: OpenMail }) => (
-    <button onClick={(e) => onOpen("a", "ask-email", e.currentTarget)}>
-      Open cited email
-    </button>
-  ),
-}));
 vi.mock("./MailReader", () => ({
   MailReader: ({ onBack, source }: { onBack: () => void; source: string }) => (
     <button onClick={onBack}>Back to {source}</button>

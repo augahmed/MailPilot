@@ -225,10 +225,10 @@ export function Organization() {
       <h2 id="organization-heading">Gmail organization</h2>
       <p>
         Select suggestions, then review live Gmail labels before applying.
-        Classification scores reflect rule strength or embedding similarity.
-        Phishing scores are heuristics, not proof of phishing or a guarantee of
-        safety. Applying adds a label only; messages are never deleted,
-        archived, or moved to Spam.
+        Classification scores reflect deterministic rule strength. Phishing
+        scores are heuristics, not proof of phishing or a guarantee of safety.
+        Applying adds a label only; messages are never deleted, archived, or
+        moved to Spam.
       </p>
       <p className="help">
         The selection table uses cached labels. Dry Run and previews read live

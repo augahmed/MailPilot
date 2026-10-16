@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import {
-  semanticSearch,
   manageReplies,
   organize,
   reviewClassifications,
@@ -14,7 +13,6 @@ import {
 } from "../lib/ipc/client";
 
 vi.mock("../lib/ipc/client", () => ({
-  semanticSearch: vi.fn(),
   manageReplies: vi.fn(),
   organize: vi.fn(),
   reviewClassifications: vi.fn(),
@@ -50,21 +48,6 @@ describe("desktop status", () => {
       draftId: "",
       reconciled: false,
       undoAvailable: false,
-      code: "unauthorized",
-    });
-    vi.mocked(semanticSearch).mockResolvedValue({
-      accountId: "",
-      jobId: "",
-      operation: "",
-      state: "idle",
-      counts: { cached: 0, eligible: 0, indexed: 0 },
-      processed: 0,
-      errors: 0,
-      scanned: 0,
-      partial: false,
-      capped: false,
-      excerptFallback: false,
-      rows: [],
       code: "unauthorized",
     });
     vi.mocked(organize).mockResolvedValue({
@@ -146,7 +129,6 @@ describe("desktop status", () => {
     }
     expect(screen.queryByLabelText(/Optional instruction/i)).toBeNull();
     expect(screen.queryByLabelText(/Include earlier cached/i)).toBeNull();
-    expect(semanticSearch).not.toHaveBeenCalled();
     expect(
       screen.getByRole("heading", { name: "Classification review" }),
     ).toBeInTheDocument();

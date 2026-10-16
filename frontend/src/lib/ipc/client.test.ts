@@ -176,76 +176,6 @@ it("accepts reviewed phishing organization evidence and rejects under-threshold 
   ).toBe(false);
 });
 
-import semanticFixture from "../../../../contracts/classification-semantic-v1.json";
-it("validates semantic evidence and candidate rankings while retaining the old contract", () => {
-  expect(
-    classificationPageSchema.safeParse(semanticFixture.response).success,
-  ).toBe(true);
-  const row = semanticFixture.response.rows[0];
-  if (!row) throw new Error("Missing fixture");
-  for (const candidates of [
-    row.assessment.candidates.slice().reverse(),
-    [...row.assessment.candidates, row.assessment.candidates[0]],
-    [{ category_id: "different", category_name: "Different", similarity: 0.6 }],
-  ]) {
-    expect(
-      classificationPageSchema.safeParse({
-        ...semanticFixture.response,
-        rows: [{ ...row, assessment: { ...row.assessment, candidates } }],
-      }).success,
-    ).toBe(false);
-  }
-});
-
-import searchFixture from "../../../../contracts/search-semantic-v1.json";
-import {
-  semanticSearchRequestSchema,
-  semanticSearchResponseSchema,
-} from "./client";
-it("validates semantic request scopes, filters and ranked bounded results", () => {
-  expect(
-    semanticSearchRequestSchema.safeParse(searchFixture.request).success,
-  ).toBe(true);
-  expect(
-    semanticSearchResponseSchema.safeParse(searchFixture.response).success,
-  ).toBe(true);
-  for (const change of [
-    { topK: 21 },
-    { query: "" },
-    { from: 10, until: 5 },
-    { operation: "status" },
-    { url: "https://example.test" },
-    { query: "😀".repeat(251) },
-  ]) {
-    expect(
-      semanticSearchRequestSchema.safeParse({
-        ...searchFixture.request,
-        ...change,
-      }).success,
-    ).toBe(false);
-  }
-  const row = searchFixture.response.rows[0]!;
-  for (const rows of [
-    [{ ...row, similarity: 1.1 }],
-    [{ ...row, similarity: NaN }],
-    searchFixture.response.rows.slice().reverse(),
-    [row, row],
-  ]) {
-    expect(
-      semanticSearchResponseSchema.safeParse({
-        ...searchFixture.response,
-        rows,
-      }).success,
-    ).toBe(false);
-  }
-  expect(
-    semanticSearchResponseSchema.safeParse({
-      ...searchFixture.response,
-      code: "unauthorized",
-    }).success,
-  ).toBe(false);
-});
-
 it("accepts incremental status while rejecting leaked provider cursors", async () => {
   const { syncSchema } = await import("./client");
   const fixture =
@@ -259,23 +189,11 @@ it("accepts incremental status while rejecting leaked provider cursors", async (
   ).toBe(false);
 });
 
-it("accepts passage search metadata and bounds the displayed passage", async () => {
-  const { semanticSearchResponseSchema } = await import("./client");
-  const fixture = await import("../../../../contracts/search-semantic-v1.json");
-  const result = {
-    ...fixture.default.response,
-    rows: fixture.default.response.rows.map((row) => ({
-      ...row,
-      passageKind: "body",
-      passageIndex: 5,
-      excerpt: "x".repeat(240),
-    })),
-  };
-  expect(semanticSearchResponseSchema.safeParse(result).success).toBe(true);
+// Archival examples must not silently become active model-specific UI state.
+it("rejects retired semantic assessments at the active classification boundary", async () => {
+  const fixture =
+    await import("../../../../contracts/classification-semantic-v1.json");
   expect(
-    semanticSearchResponseSchema.safeParse({
-      ...result,
-      rows: result.rows.map((row) => ({ ...row, passageKind: "html" })),
-    }).success,
+    classificationPageSchema.safeParse(fixture.default.response).success,
   ).toBe(false);
 });

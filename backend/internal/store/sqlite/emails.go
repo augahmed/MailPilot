@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"mailpilot.local/core/internal/domain"
-	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/repository"
 )
 
@@ -102,19 +101,8 @@ func upsertEmail(ctx context.Context, tx *sql.Tx, e domain.Email) (domain.EmailI
 		}
 	}
 	if oldHash != "" && oldHash != hash {
-		if err := invalidatePassages(ctx, tx, e, id); err != nil {
-			return "", err
-		}
-		// Keep vectors for unchanged cleaned text (for example, quoted-chain or
-		// recipient changes); remove stale derived data in this same transaction.
-		prepared, prepareErr := embedding.Prepare(e)
-		if prepareErr != nil {
-			prepared.Hash = "" // Ineligible content invalidates every cached vector.
-		}
-		if _, err = tx.ExecContext(ctx, "DELETE FROM email_embeddings WHERE account_id=? AND email_id=? AND (input_hash<>? OR preprocessing_version<>?)", e.AccountID, id, prepared.Hash, embedding.PreprocessingVersion); err != nil {
-			return "", err
-		}
-		for _, table := range []string{"classification_results", "classification_runs", "phishing_results"} {
+		// Historical derived indexes remain inert; invalidate changed content atomically.
+		for _, table := range []string{"email_embeddings", "email_passage_vectors", "email_retrieval_indexes", "classification_results", "classification_runs", "phishing_results"} {
 			if _, err = tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE account_id=? AND email_id=?", e.AccountID, id); err != nil {
 				return "", err
 			}

@@ -1,7 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { askMail } from "./ask";
-import { semanticSearch } from "./search";
 import { manageReplies } from "./reply";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -9,17 +7,6 @@ vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => true,
 }));
 beforeEach(() => vi.clearAllMocks());
-
-it("never invokes retired Ask, semantic search or vector indexing commands", async () => {
-  await expect(
-    askMail({ operation: "prepare", accountId: "a", question: "mailbox Q&A" }),
-  ).rejects.toThrow("retired");
-  for (const operation of ["status", "query", "index", "cancel"] as const)
-    await expect(
-      semanticSearch({ operation, accountId: "a", query: "private" }),
-    ).rejects.toThrow("retired");
-  expect(invoke).not.toHaveBeenCalled();
-});
 
 it("blocks even explicitly approved reply generation and draft creation before IPC", async () => {
   for (const request of [

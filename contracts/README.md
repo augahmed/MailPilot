@@ -194,19 +194,15 @@ Risk candidate/preview rows propose the exact `Potential Phishing` label and inc
 
 Migration 7 retains old category plans; optional phishing evidence is stored in the immutable plan JSON. Old fixtures without source/evidence remain valid. Ship the updated core, strict host DTOs and frontend together. No new native command or permission was added.
 
-## Hybrid semantic classification (protocol v1 additive extension)
+## Retired semantic contracts (historical protocol-v1 fixtures)
 
-[classification-semantic-v1.json](classification-semantic-v1.json) extends the existing review fixture. Predictions may carry `score_kind: "rule_confidence" | "cosine_similarity"`. Reviewed classified/unclassified rows may carry `assessment: {used_classifier, reason, candidates}`; other states carry none. Candidates contain category_id, category_name and finite similarity from -1 to 1, at most five, ordered descending with category-ID tie breaks and no duplicate IDs. Semantic winner ID/score must match the first candidate. Reasons are nonempty and capped at 160 bytes; used_classifier is capped at 100 bytes. Missing additive fields remain compatible with old responses. `embedding_unavailable` is an additional safe row/page error code. Current runtime returns three candidates and distinguishes actual classifier from the hybrid engine/version stored on predictions.
-
-Manual `classification.review` uses a 30-second core deadline and 32-second native response deadline for local inference; all other commands retain their existing deadlines. No new command or arbitrary worker invocation is added. Account authorization, bounded five-email pages and zero mailbox writes are unchanged.
-
-## Local semantic search (protocol v1 additive extension)
-
-The main-window `semantic_search` native command maps only to `search.semantic`. [search-semantic-v1.json](search-semantic-v1.json) is the shared synthetic example. Request fields are operation (`status`, `index`, `query`, `cancel`), accountId, jobId, query, topK, sender, categoryId, from/until (nullable UTC epoch milliseconds). Missing Go/Rust nullable fields denote no date filter; the client sends explicit nulls. Index/query require an authorized matching account and no jobId; cancel requires the current jobId. Status/cancel/index reject query/filter/top-K fields; query requires nonblank text ≤1,000 UTF-8 bytes and topK 1–20. Sender is ≤256 bytes, IDs ≤100 bytes. Dates are bounded to 1970–10000 with from < until, start inclusive/end exclusive. Unknown fields and operations are rejected; no endpoint, Gmail query language, model path or generic backend invocation is accepted.
-
-Responses carry accountId, jobId, operation, state (`idle`, `indexing`, `searching`, `completed`, `cancelled`, `error`), counts `{cached, eligible, indexed}`, processed/errors/scanned, partial/capped/excerptFallback, rows and optional safe code. Count invariants are indexed ≤ eligible ≤ cached; processed/errors/scanned are bounded by 10,000. Rows appear only for a completed query: at most 20 unique emailIds, descending finite cosine similarity -1…1, sender ≤81 Unicode characters, subject ≤121, receivedAt in epoch milliseconds, excerpt ≤241. Ties use date descending then ID ascending. Source bodies/HTML, query text and vectors are not echoed. Caps/errors are explicit; unauthorized responses carry no account/mail rows. Codes: unauthorized, validation, conflict, cancelled, embedding_unavailable, storage_error, busy, response_too_large. Responses are capped at 48 KiB before framing.
-
-Index/query start background local jobs and return immediately; status/cancel remain under ordinary IPC deadlines. Category filters match explicit assignments or fresh choices under the current classifier, not stale predictions. No provider operation or external inference is reachable. The desktop smoke check now also verifies this command denies mailbox access without an authorized account.
+[classification-semantic-v1.json](classification-semantic-v1.json) and
+[search-semantic-v1.json](search-semantic-v1.json) remain archival synthetic examples.
+Their query/index services, handlers, DTOs and UI are deleted. They do not define
+active commands. Active classification accepts deterministic `rule_confidence`
+scores and an empty `assessment.candidates` compatibility array. Historical SQLite
+candidate/score data remains decodable, but old engine versions are stale and
+are not exposed as current predictions. No `embedding_unavailable` error is emitted.
 
 ## Reviewed reply drafting (protocol v1 additive extension)
 
@@ -246,10 +242,6 @@ outcomes; no secret or AI prompt history is stored. Disconnect revokes consent,
 cancels work and suppresses late results. Uncertain remote writes remain in the
 journal and cannot be automatically replayed. The native smoke test exercises
 this command's unauthorized-account rejection.
-
-### Classification quality revision (compatible v1)
-
-No fields or score kinds change. `used_classifier: "HybridClassifier"` now means corroborated rule and semantic evidence; `confidence` remains the raw leading cosine under `score_kind: "cosine_similarity"`. Reasons include matched rule conditions, its separate strength and the decision gates. Direct rules retain `rule_confidence`, displayed as a strength rather than a probability percentage. Existing semantic-only and rule-only responses remain valid. New algorithm/configuration fingerprints make older assessments stale; the wire protocol version remains 1. Exclusions, conflicts and other abstentions persist as explanations with `used_classifier: "none"`. The classification UI tests include a corroborated response through the existing strict schema.
 
 ### Cached message reader (compatible v1)
 
@@ -295,35 +287,9 @@ No history cursor, provider IDs or email content is exposed by status.
 [sync-incremental-v1.json](sync-incremental-v1.json) is a shared synthetic example
 validated by Rust and TypeScript alongside the existing fields.
 
-### Search passage results (compatible v1)
+### Retired Ask and passage-search examples
 
-Production search results may include `passageKind: "subject" | "body"` and
-`passageIndex` (zero-based ordinal within the normalized source document, 0–8191).
-The existing `emailId` identifies the source for the cached reader. `excerpt` is
-the actual winning cleaned passage, with a 240-character display bound plus a
-possible ellipsis; no HTML is returned. Similarity remains raw cosine, now for the
-winning persisted passage. One result per email is returned; identical winning
-passages in the same thread are collapsed. No thread IDs, vectors or normalized
-hashes cross IPC. `excerptFallback` remains for compatibility and is false on the
-new passage path. Counts/scanned remain email counts, not vector counts.
-
-Reindexing is explicit after the migration; classification vectors are independent.
-Both legacy and additive result shapes remain accepted by updated clients.
-
-## Ask MailPilot v1
-
-`ask.manage` / native `ask_manage` uses [ask-v1.json](ask-v1.json). Operations are
-`status`, `prepare`, `generate`, `cancel`, and `clear`. Prepare takes an account,
-question (1,000 UTF-8 bytes), optional sender (256 bytes), and inclusive `from` /
-exclusive `until` millisecond UTC filters. It returns a bounded job; poll status.
-Generate requires the exact preview ID, active account and `approved: true`;
-no question/context can be substituted at generation. Cancel identifies the active
-job. Unknown fields and mailbox action operations are rejected.
-
-Responses expose state, provider/model, `ask-context-v1`, source aliases/local email
-IDs, partial/truncation flags, preview expiry, and the exact policy/question/context.
-Context is at most 8,000 bytes; up to five sources have 1,400-byte evidence fields.
-Answers contain `insufficient` and up to six claims, each with bounded `text`, known
-`source`, and exact supporting `quote`. Source revision hashes remain internal.
-No secrets, provider message IDs, model tools, arbitrary navigation URLs or persisted
-conversation are exposed. The cached reader reauthorizes every citation open.
+The [Ask fixture](ask-v1.json) and semantic-search fixture above remain historical
+examples only. Their frontend schemas, application services and native handlers
+are removed; `ask.manage` and `search.semantic` always reject as unknown methods.
+They provide no arbitrary prompt, model configuration or indexing entry point.

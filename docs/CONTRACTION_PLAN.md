@@ -1,9 +1,18 @@
 # MailPilot contraction plan
 
-Status: repository-specific execution proposal, 2026-10-16. Documentation only.
-The user's latest active scope is authoritative. No code changes, package removal,
-new features, migrations, dependency installation or live-account actions are
-authorized by this planning task.
+Status: execution plan authored 2026-10-16. The inventory below records the
+pre-contraction repository; deleted paths remain here as historical disposition
+records. Subsequent implementation requests authorized active-entry-point
+contraction and semantic/model deletion, now implemented.
+
+Completed: Ask/search application and UI code, embedding/MiniLM/Python/ONNX,
+semantic/hybrid classifiers, vector/passage adapters, downloader, Python dependency
+locks and their exclusive tests/corpora are removed. Pure text cleanup was moved to
+`internal/mail`; deterministic classification directly enforces the existing 0.60
+gate. All 13 migrations, historical vector schemas, cached mail, journal evidence,
+AI provider/consent/settings foundation and narrow draft recovery remain.
+Keyword search, selected-email summary and Chrome have not been implemented.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the current composition.
 
 ## Basis and scope precedence
 

@@ -212,12 +212,6 @@ export {
   type OrganizationRequest,
   type OrganizationResponse,
 } from "./organization";
-export {
-  semanticSearchRequestSchema,
-  semanticSearchResponseSchema,
-  semanticSearch,
-  type SemanticSearchResponse,
-} from "./search";
 
 export {
   manageReplies,

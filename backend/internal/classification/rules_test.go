@@ -35,7 +35,7 @@ func TestStarterRulesAndFalsePositives(t *testing.T) {
 		{"application", "Application received", "We received your application for the engineering position.", "Job Applications"},
 		{"interview", "Interview invitation", "Our hiring team would like your availability to schedule a meeting.", "Job Interviews"},
 		{"receipt", "Your receipt", "Payment received. Order number: SYNTHETIC-123.", "Receipts"},
-		{"digest", "Weekly digest", "In this issue: campus news. Manage your subscription or unsubscribe.", "Newsletters"},
+		{"digest", "Weekly digest", "In this issue: campus news. Manage your subscription or unsubscribe.", ""},
 		{"case and punctuation", "PAYMENT CONFIRMATION", "TOTAL PAID: $12.00; TRANSACTION-ID: fixture.", "Receipts"},
 		{"unrelated", "Saturday plans", "Would you like to have lunch?", ""},
 		{"single job keyword", "Job opportunities", "A few new jobs and positions are open.", ""},
@@ -135,7 +135,7 @@ func TestAbstentionAndLabelRules(t *testing.T) {
 	}
 }
 func TestConfigurableSenderAndDomainSignals(t *testing.T) {
-	config := RuleConfig{Name: "test", Version: "1", Rules: []Rule{{ID: "exact-sender", CategoryName: "School", Confidence: .4, All: []Condition{
+	config := RuleConfig{Name: "test", Version: "1", Rules: []Rule{{ID: "exact-sender", CategoryName: "School", Confidence: .65, All: []Condition{
 		{Field: "sender", AnyOf: []string{"office@school.example.test"}, Reason: "The sender address matches the configured school office."},
 		{Field: "sender_domain", AnyOf: []string{"school.example.test"}, Reason: "The sender domain exactly matches the configured school domain."},
 	}}}}

@@ -105,17 +105,10 @@ pub struct ClassificationPrediction {
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ClassificationCandidate {
-    pub category_id: String,
-    pub category_name: String,
-    pub similarity: f64,
-}
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ClassificationAssessment {
     pub used_classifier: String,
     pub reason: String,
-    pub candidates: Vec<ClassificationCandidate>,
+    pub candidates: [(); 0],
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -815,6 +808,15 @@ mod category_tests {
 mod classification_tests {
     use super::*;
     #[test]
+    fn active_review_rejects_retired_candidate_state() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../contracts/classification-semantic-v1.json"
+        ))
+        .unwrap();
+        assert!(serde_json::from_value::<ClassificationPage>(fixture["response"].clone()).is_err());
+    }
+
+    #[test]
     fn classification_contract_and_strict_requests() {
         let fixture: Value =
             serde_json::from_str(include_str!("../../contracts/classification-v1.json")).unwrap();
@@ -910,23 +912,6 @@ mod phishing_organization_tests {
         invalid.action_id = "action".into();
         invalid.digest = "a".repeat(64);
         assert!(!invalid.valid());
-    }
-    #[test]
-    fn semantic_classification_contract() {
-        let fixture: Value = serde_json::from_str(include_str!(
-            "../../contracts/classification-semantic-v1.json"
-        ))
-        .unwrap();
-        let page: ClassificationPage = serde_json::from_value(fixture["response"].clone()).unwrap();
-        assert_eq!(
-            page.rows[0].assessment.as_ref().unwrap().candidates.len(),
-            2
-        );
-        assert_eq!(
-            page.rows[0].predictions[0].score_kind.as_deref(),
-            Some("cosine_similarity")
-        );
-        assert_eq!(serde_json::to_value(page).unwrap(), fixture["response"]);
     }
 }
 

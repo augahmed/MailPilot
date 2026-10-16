@@ -2,50 +2,57 @@
 
 Status: implementation baseline, initially proposed on 2026-10-10. The desktop bootstrap is now authorized and implemented; later product phases below remain planned.
 
-Planning update, 2026-10-16: the user supports simplifying the product, adding a
-Chrome companion beside Gmail and retaining one bounded optional AI feature, and
-has requested planning only. [The focused product plan](PRODUCT_PLAN.md) proposes
-desktop reading/search/organization, local phishing explanations and selected-email
-AI summaries, with a small Chrome side panel using the same Go core. Its detailed
-requirements and architectural choices remain proposals; no feature retirement or
-extension implementation has been authorized by that planning request. The sections
-below continue to record existing implementation and its earlier roadmap. See
-section 12 for the proposed boundary changes.
+Active scope follows [AGENTS.md](../AGENTS.md), the [focused product plan](PRODUCT_PLAN.md)
+and [contraction plan](CONTRACTION_PLAN.md). The user authorized staged contraction;
+selected-email summaries, keyword search, additional AI providers and Chrome remain
+future work rather than implemented capabilities.
 
-### Active entry-point contraction (implemented 2026-10-16)
+### Runtime contraction (implemented 2026-10-16)
 
-The desktop no longer mounts Ask, semantic search/indexing or reply drafting.
-`ask.manage`/`search.semantic` and their native handlers/permissions are removed.
-Go startup no longer constructs MiniLM, embeddings, retrieval, Ask or a semantic
-classifier. Model environment settings are ignored and model flags are rejected.
-The deterministic review retains the existing no-model rule policy (0.60 gate)
-through a nil-semantic compatibility wrapper; shared text/vector implementation
-packages remain for a later deletion pass. Gmail draft creation is unsupported
-at the adapter itself and its capability is false.
+Ask, semantic retrieval/classification, embeddings, vector/passage indexing,
+MiniLM/Python/ONNX and model setup implementations are removed. No install,
+startup, shutdown or test step needs a model runtime. The Go composition uses
+`RuleBasedClassifier` directly with the existing 0.60 direct-rule gate, ambiguity
+and exclusion rules. Pure bounded quote/signature/HTML cleanup lives in `internal/mail`.
+Rule algorithm/configuration fingerprints change, so old assessments are stale;
+listing never silently reruns classification. Explicit review is required for new
+classification-based organization previews. Existing label recovery remains independent.
 
-`reply.manage` is restricted to status, existing provider settings configure/disable,
-and historical action reconcile/resolve/cancel. The composed maintenance service
-has no email-context reader or draft-creator factory and cannot restore old previews
-as editable sessions. Recovery loads immutable journal data and makes GET-only
-Gmail checks, with explicit local acknowledgment after reconciliation. Settings
-use the existing shared AI store and OS keyring; recovery does not require an AI
-adapter/key. Summary/provider abstractions and the existing OpenAI adapter remain;
-no new summary, provider or Chrome workflow is implemented by this change.
+The frontend and native/Go allowlists expose neither Ask/search/indexing nor
+reply generation, new Gmail drafts, thread summaries or arbitrary prompts.
+`reply.manage` only supports provider settings and historical action recovery.
+Its composed service has no context-reader or draft-creator factory. Gmail creation
+returns unsupported and advertises no draft-creation capability. Recovery reads
+Gmail and records outcomes without replaying writes. Shared AI settings, OS keys,
+consent/provider abstraction and OpenAI adapter remain; older internal generation
+methods remain unreachable pending separate AI/draft contraction.
 
-All 13 migrations, journal evidence and necessary recovery codecs remain unchanged.
-Older feature descriptions below are implementation history, not permission to
-expose retired capabilities. AGENTS.md is the active scope contract. Keyword search
-and cold-start offline authorization remain gaps documented in the contraction plan.
+All 13 checksummed migrations and journal evidence are preserved byte-for-byte.
+`email_embeddings`, `category_embeddings`, `email_passage_vectors` and
+`email_retrieval_indexes` remain historical/inert. No runtime reads, populates or
+rebuilds their vectors. Changed email content deletes only affected derived rows
+in the import transaction; unchanged reimports/reopen retain them. Confirmed remote
+deletion and the historical category invalidation trigger retain existing cleanup.
+Historical classification score/candidate codecs remain for stored metadata.
+The active review wire shape retains an empty `assessment.candidates` array for
+compatibility, with only deterministic scores exposed.
+
+No cached message, account, journal, user interpreter or downloaded model directory
+is removed by this contraction. SQLite remains unencrypted sensitive local data.
 
 ### Bootstrap implementation status
 
 The current code implements the Go entry point, domain/use-case/adapter boundaries, non-secret configuration, structured stderr logging, React status UI, native Tauri lifecycle, bounded private JSON-RPC handshake/health/shutdown, and SQLite initialization. `config` and `logging` are small supporting packages added to the target layout. Bounded manual Inbox synchronization and a cached mailbox summary view are implemented; manual incremental history synchronization is now implemented; background scheduling and push notifications remain planned. Gmail OAuth and OS credential storage are implemented as described in section 5.
 
-The subsequent domain phase implements provider-neutral email values and an account-bound `EmailProvider` contract with validation and tests (section 4). The Google OAuth/profile adapter is implemented; the Gmail EmailProvider now implements paginated Inbox listing, message retrieval and label reads, namespaced user-label creation, and narrow message membership changes. Thread retrieval remains unsupported; explicitly approved reply-draft creation and read-only reconciliation are implemented.
+The subsequent domain phase implements provider-neutral email values and an account-bound `EmailProvider` contract with validation and tests (section 4). The Google OAuth/profile adapter is implemented; the Gmail EmailProvider now implements paginated Inbox listing, message retrieval and label reads, namespaced user-label creation, and narrow message membership changes. Thread retrieval and new draft creation are unsupported; read-only historical draft reconciliation remains.
 
-Schema migration 1 creates the ledger/settings foundation. Migration 2 now adds the local mail, category, analysis and action-journal schema described in section 6. Repository implementations and temporary-database tests are in place; bounded Gmail imports are implemented. Migration 3 adds content_revision and body_state to emails. Migration 4 adds user-defined category metadata and defaults. Migration 5 adds structured classification evidence and complete assessment records, including abstentions; manual rule-based classification and a review UI are implemented. Migration 6 extends mailbox_actions with immutable organization plans, per-write step evidence and account-scoped email/category references. Classification-driven Gmail organization, dry run and confirmed undo are implemented. Migration 7 allows category-free risk proposals in the same journal. Migration 8 adds the explicitly requested optional embedding foundation and local vector cache. The subsequently requested generative-AI provider and consent foundation is now implemented; selected-message/thread reply drafting now has desktop settings, consent UI and typed IPC. The subsequently requested local semantic search is now implemented as described below. Migration 9 implements the subsequently requested hybrid semantic category classifier, category vector cache and ranked assessment evidence. Migration 10 adds the scoped SQLite index for local cosine mailbox search. Migration 11 adds account-scoped AI settings without secrets and an immutable reply-draft journal. Database health is a real query, and the frontend exposes connection failures.
+The schema contains migrations 001–013. Mail/cache, category, classification/risk,
+organization journal, AI settings, historical draft journal and sync checkpoints
+remain. Migrations 008–010 and 013 also define historical vector caches/indexes;
+their schema persists without an active semantic runtime. Health queries SQLite,
+and the frontend reports connection failures.
 
-The thin Rust host uses `std::process` for its fixed bundled sidecar, avoiding a shell plugin entirely. Only the main window’s allowlisted health, Gmail connection, sync, cached-mail, category management, classification review, Gmail organization local semantic-search and reply-drafting commands are permitted. A single-instance plugin controls desktop ownership; standalone Go runs are development tools and should use a separate data directory when running beside the desktop app. The bounded bootstrap protocol is sequential and uses bounded background jobs for authentication, sync and organization, with polling and organization cancellation; it does not implement streaming notifications. See `contracts/README.md` for the versioned wire contract.
+The thin Rust host uses `std::process` for its fixed bundled sidecar, avoiding a shell plugin entirely. Only the main window’s allowlisted health, Gmail connection, sync, cached-mail, category management, classification review, Gmail organization and restricted AI-settings/historical-recovery commands are permitted. A single-instance plugin controls desktop ownership; standalone Go runs are development tools and should use a separate data directory when running beside the desktop app. The bounded bootstrap protocol is sequential and uses bounded background jobs for authentication, sync and organization, with polling and organization cancellation; it does not implement streaming notifications. See `contracts/README.md` for the versioned wire contract.
 
 Implemented dependencies and native build instructions are in `README.md` and locked manifests. The Go OAuth2 and keyring libraries are now used; unneeded Gmail SDK, AI, vector, query-cache and browser-automation dependencies remain deferred. Generated icons come from a checked-in SVG. Native smoke mode exercises the real WebView-to-SQLite path using a disposable profile and graceful shutdown. Public signing, notarization, installers beyond the tested macOS app bundle, and Windows/Linux qualification remain release work.
 
@@ -70,11 +77,10 @@ Non-negotiable behavior:
 flowchart TB
   UI[React + TypeScript / Tauri WebView] -->|allowlisted commands| Shell[Thin Tauri Rust host]
   Shell <-->|private stdin/stdout / versioned JSON RPC| Core[Bundled Go core]
-  Core --> DB[(SQLite + FTS5)]
+  Core --> DB[(SQLite cache + journals)]
   Core --> Keys[OS credential store]
   Core -->|OAuth and mailbox sync / HTTPS| Gmail[Gmail API]
   Core -. explicit consent per request .-> AI[External AI adapter]
-  Core -. explicit local jobs .-> Vector[Optional local MiniLM worker]
   Shell -->|OAuth / explicitly opened links| Browser[System browser]
 ```
 
@@ -114,11 +120,9 @@ MailPilot/
 │       │   └── migrations/
 │       ├── mail/               # MIME decoding and bounded normalization
 │       ├── risk/               # Deterministic local rules and explanations
-│       ├── embedding/          # Optional provider contract, preprocessing and vector cache service
 │       ├── classification/     # Local rule engine and versioned starter rules
 │       ├── organize/           # Later label-change plans
 │       ├── actions/            # Preview, confirmation, journal, recovery, undo
-│       ├── search/             # Local cosine retrieval, filters and passage selection
 │       └── ai/                 # Optional text generation, consent service and isolated OpenAI adapter
 ├── frontend/
 │   ├── package.json
@@ -267,7 +271,7 @@ Progress exposes initial/incremental/recovery mode, observations discovered, imp
 
 Expired, invalid or unavailable history (404/400 or invalid stored ID) captures a new baseline and starts a durable recovery phase. It checks **every cached identity**, using keyset pagination across bounded jobs, with metadata GETs and full reads only when the content revision requires them. Only explicit history deletions or per-message GET 404s clear cached content. After reconciliation, it refreshes the bounded Inbox snapshot and replays the new baseline on the next run. Capped/error listings never infer removals. Very long recovery can itself outlive history retention and safely repeat. There is no claim to restore events already outside Gmail retention for older uncached mail.
 
-Confirmed remote deletion clears bodies, subjects, addresses, attachments, memberships, classifications, phishing assessments and vectors atomically. A hidden `remote_deleted` identity row preserves foreign keys from immutable organization/reply journals. Mailbox, reader, category/classification, vector search and reply-context queries exclude it. This changes local cache state only; sync exposes no remote deletion/write operation. Journal snapshots and backups retain their existing retention behavior; this is not forensic erasure.
+Confirmed remote deletion clears bodies, subjects, addresses, attachments, memberships, classifications, phishing assessments and vectors atomically. A hidden `remote_deleted` identity row preserves foreign keys from immutable organization/reply journals. Mailbox, reader, category/classification and legacy reply-context queries exclude it. This changes local cache state only; sync exposes no remote deletion/write operation. Journal snapshots and backups retain their existing retention behavior; this is not forensic erasure.
 
 The original reader-only provider path remains a bounded refresh fallback for adapters without change support. Production Gmail always wires the durable SyncRepository. [Gmail synchronization](https://developers.google.com/workspace/gmail/api/guides/sync) and [history.list](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.history/list) define the provider behavior. No new dependency or OAuth scope is required.
 
@@ -287,7 +291,7 @@ The local persistence layer is implemented independently of Gmail synchronizatio
 
 ### Migrations and storage conventions
 
-- Migration 1 remains unchanged. Migration 2 adds mail persistence. On open, the embedded migration runner checks the complete sequential version history and SHA-256 checksums, rejects future/altered/incomplete histories, and applies pending migrations transactionally. Fresh databases and existing older databases upgrade through all pending migrations (currently version 10). Failures roll back the pending DDL and ledger updates together.
+- Migration 1 remains unchanged. Migration 2 adds mail persistence. On open, the embedded migration runner checks the complete sequential version history and SHA-256 checksums, rejects future/altered/incomplete histories, and applies pending migrations transactionally. Fresh databases and existing older databases upgrade through all pending migrations (currently version 13). Failures roll back the pending DDL and ledger updates together.
 - `schema_migrations(version PK, checksum, applied_at)` and `settings(key PK, value_json, updated_at)` retain their original structure. The repository layer does not offer an arbitrary settings/secret write API.
 - All timestamps are integer UTC epoch **milliseconds**. Domain values return as UTC `time.Time`, with sub-millisecond precision intentionally truncated. This includes received, created, updated, assessed, expiration, confirmation and completion times. Optional times are SQL NULL, not sentinel dates.
 - Local IDs are opaque cryptographically random strings allocated by Go's standard library, or explicit stable IDs supplied by a trusted caller. Migration 4’s default-category inserts use SQLite randomblob(16) hexadecimal IDs so account creation and seeding remain atomic. Provider identifiers remain opaque text. `(account_id, provider_message_id)` uniquely identifies a remote email; identical provider IDs in different accounts remain independent. An existing identity cannot be rebound to a different local ID.
@@ -346,7 +350,7 @@ Applied item results require an actual delta and after-state consistent with the
 
 Undo is a separate confirmed action referencing the original action, using verified actual deltas to construct compensating changes and checking live remote state again. This foundational repository remains available for existing-ID label deltas. The implemented organization workflow below extends the same mailbox_actions parent journal to also represent not-yet-created labels. SQLite and Gmail cannot form one atomic transaction.
 
-Email/action deletion APIs are deliberately absent until cache removal, journal retention and recoverable credential cleanup are implemented together. Foreign keys retain journal evidence. Migration 8 adds a local embedding cache as described below. Migration 10 adds the account/model index for exact cosine search. Migration 12 subsequently adds durable sync checkpoints and remote-deletion tombstones; migration 13 adds retrieval passage vectors. FTS/ANN indexes, full-text search APIs and additional providers remain future work.
+Email/action deletion APIs are deliberately absent until cache removal, journal retention and recoverable credential cleanup are implemented together. Foreign keys retain journal evidence. Migration 8 adds a local embedding cache as described below. Migration 10 adds the account/model index for exact cosine search. Migration 12 subsequently adds durable sync checkpoints and remote-deletion tombstones; migration 13 adds retrieval passage vectors. Local keyword search and additional AI adapters remain future work; ANN/vector search is retired.
 
 ### Implemented safe Gmail organization
 
@@ -374,13 +378,13 @@ Temporary on-disk SQLite tests start from clean databases and also construct a g
 
 All starter phrases, exclusions, evidence reasons, category mappings, scores and ambiguity policy live in [starter_rules.json](../backend/internal/classification/starter_rules.json). Rules are configurable through validated Go RuleConfig/JSON construction, with no runtime email-controlled configuration, arbitrary regex or UI rule language. Changing a rule configuration requires a new classifier version. The constructor copies configuration to prevent later mutation. Match fields are sender address, exact sender domain, whole-word subject/body phrases and exact mailbox label names; the Go engine never interprets Gmail label IDs. Sender/domain signals are configurable but starter rules avoid assuming a domain proves identity. Only cached plain text marked complete is eligible as body evidence. Input sizes and rule complexity are bounded; cancellation is honored.
 
-Starter Job Applications rules require application acknowledgment/status wording, recipient-directed application wording and hiring context. Job Interviews require an invitation/scheduling subject, hiring context and scheduling/joining details. Receipts require confirmation wording, completed-payment evidence and a transaction/order reference. Newsletters require recurring newsletter/digest language and subscription controls, or a matching existing label with recurring editorial evidence and subscription controls. Exclusions suppress common advice/templates, school/loan applications, non-hiring interviews and incomplete/failed payments. Replies/forwards abstain. Default confidence ranges from 0.55 to 0.65. Competing category scores within the configured 0.15 margin abstain; disabled, missing or ambiguously named categories do not receive predictions. Renamed/custom categories need an explicitly configured name mapping; descriptions are preserved for future semantic classification and are not interpreted by this engine.
+Starter Job Applications rules require application acknowledgment/status wording, recipient-directed application wording and hiring context. Job Interviews require an invitation/scheduling subject, hiring context and scheduling/joining details. Receipts require confirmation wording, completed-payment evidence and a transaction/order reference. Newsletters require recurring newsletter/digest language and subscription controls, or a matching existing label with recurring editorial evidence and subscription controls. Exclusions suppress common advice/templates, school/loan applications, non-hiring interviews and incomplete/failed payments. Replies/forwards abstain. Default confidence ranges from 0.55 to 0.65. Competing category scores within the configured 0.15 margin abstain; disabled, missing or ambiguously named categories do not receive predictions. Renamed/custom categories need an explicitly configured name mapping; descriptions remain editable local data and are not interpreted by this engine. An unambiguous result must also meet the 0.60 direct-rule gate; a 0.55 rule alone abstains.
 
 Migration 5 retains earlier prediction evidence, adds classifier_name/reasons_json, and adds classification_runs so reviewed-but-unclassified differs from not-yet-reviewed. `ClassificationRepository.Replace` atomically replaces a complete email assessment and its predictions, including removing older predictions when a rerun abstains. It verifies a SHA-256 fingerprint of sender, subject, plain body/completeness, sorted label names/kinds and sorted category definitions (IDs/names/descriptions/enabled/update times) inside the same SQLite transaction. It rejects changed snapshots, cross-account/disabled categories, older assessments, invalid confidence, missing reasons or mismatched result metadata. All classification reads recheck freshness. Category edits intentionally retain earlier evidence and deletion protection but make its run stale; label renames and membership changes do likewise. Existing content-hash rules for phishing remain separate. The all-category fingerprint deliberately favors simple, conservative invalidation: unrelated category edits can require rerunning reviews.
 
 Go’s bounded classification review use case authorizes the current account session, rejects classifier output that changes account/email identity, and processes at most five cached emails per manual request under the existing IPC deadline. It reports successful saves and per-row errors truthfully; partial success persists. `classification_review` maps only to `classification.review` with list/run operations. List operations never execute the engine. Review displays sender/subject, predicted category, confidence, reasons, classifier/version and timestamp; it also shows unclassified, not reviewed, stale and missing-body states. Reads poll local state while the view is open; classification runs only from Classify this page. Disconnect/remount clears displayed mail and ignores late responses.
 
-Classification writes analysis metadata only. It never assigns local categories, changes Gmail labels, sends/deletes mail or accesses an LLM. The later hybrid engine invokes local embeddings explicitly during manual review. Gmail imports remain independent. The heuristics are intentionally narrow and can miss valid messages; no accuracy calibration or production-readiness claim is made. Synthetic unit/integration tests cover positive and false-positive cases, abstention/ambiguity, malformed configuration, exact sender/domain matching, disabled categories, fingerprints, migration/restart, atomic replacement, isolation, stale labels/definitions/versions, partial failures, strict IPC, escaped presentation and disconnect races. Native smoke coverage verifies the new bridge authorization path without a real mailbox.
+Classification writes analysis metadata only. It never assigns local categories, changes Gmail labels, sends/deletes mail or accesses an LLM. Gmail imports remain independent. The heuristics are intentionally narrow and can miss valid messages; no accuracy calibration or production-readiness claim is made. Synthetic unit/integration tests cover positive and false-positive cases, abstention/ambiguity, malformed configuration, exact sender/domain matching, disabled categories, fingerprints, migration/restart, atomic replacement, isolation, stale labels/definitions/versions, partial failures, strict IPC, escaped presentation and disconnect races. Native smoke coverage verifies the new bridge authorization path without a real mailbox.
 
 ### Implemented phishing organization
 
@@ -406,52 +410,12 @@ Authorized `mail.list` lazily assesses up to ten displayed cached messages local
 
 AI-assisted reply text is now implemented for user review/editing; selected-message summaries and AI label suggestions remain future work. An explicit preview shows provider, model, selected fields, recipients/addresses included, and exact transmitted text. One confirmation authorizes one immutable payload; selecting new messages or changing content requires a new preview. Do not transmit credentials, whole-mailbox context, attachments, or logs. AI output is untrusted text with no tool privileges and cannot call mutation or send interfaces. Email prompt injection must not override application policy. Avoid retaining prompt/response history by default. External endpoint configuration must be intentional and validated; never derive endpoints from email content. Review provider retention and Google data-use restrictions before enabling this feature. [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy).
 
-### Implemented embedding foundation
+### Retired derived indexes
 
-The subsequent embedding-layer request authorizes `internal/embedding` and migration [008_embeddings.sql](../backend/internal/store/sqlite/migrations/008_embeddings.sql). `EmbeddingProvider` exposes context-bearing `EmbedText` and `EmbedBatch`, plus `Dimension` and `ProviderName`. Provider names must identify immutable model revisions and vector-affecting settings, not just a vendor; dimensions alone cannot identify a vector space. Batch results preserve input order. Finite, nonzero float32 vectors and exact dimensions/counts are validated before any cache write. Adapter failures become content-free errors; cancellation/deadline identity is preserved.
-
-`Prepare` deterministically constructs subject, sender display name/address, and cleaned cached body. Sender metadata is descriptive and unverified. Plain text is preferred; HTML-only input removes blockquotes and conventional quoted/signature containers before local extraction, without fetching links/images. Existing normalized plain text may have lost HTML quote structure; the plain-text rules still apply. Version `email-text-v1` normalizes whitespace/control characters, removes quote-prefixed lines, and stops at conventional English reply/forward markers, signature separators and mobile signatures. Ordinary closings and inline replies are retained. Subject/sender fields and final UTF-8 text are capped (16 KiB total); inputs are bounded to the existing 1 MiB body limit. Unavailable bodies fail explicitly; unknown/empty bodies remain representable. Heuristic trimming is not a complete multilingual reply parser and can omit meaningful forwarded text. There is no attachment extraction or chunking in this phase.
-
-`NewLocalService` requires an explicitly injected trusted on-device provider, a narrow email reader, and `VectorStore`. The initial embedding foundation installed no concrete model; the subsequently requested local MiniLM adapter and manual hybrid review integration are described below. No remote adapter or background sync/startup inference is installed. Production remains functional without an embedding provider. This constructor is a trusted Go composition boundary, not a sandbox for arbitrary adapters; adding an external implementation requires a separate exact-payload approval path before wiring it. Callers must authorize the account; storage enforces account/email ownership. Selected batches contain at most 32 distinct IDs, execute serially per service with a cancellable gate and a 30-second deadline, and send only cache misses to the provider. Providers must honor context cancellation. No automatic retries occur and no database transaction spans inference. Multiple independent service instances/processes can compute the same miss; single-flight behavior is per service.
-
-`Store.Vectors()` implements the consumer-owned `VectorStore` abstraction using explicit SQLite queries. `email_embeddings` stores little-endian float32 blobs, provider/model identity, dimensions, preprocessing version and SHA-256 prepared-text hash under a composite account/email foreign key. It contains no duplicate prepared plaintext and offers no nearest-neighbor/search API. The cache persists across restarts. Provider/model/dimension/version changes miss the cache. Save batches validate all outputs before writing and commit atomically; source content hashes and prepared payloads are checked inside the transaction so changed/deleted sources reject late results. Provider calls are outside that transaction. Email snapshot updates remove stale vectors transactionally, but preserve them when cleaned text is unchanged (including excluded signatures, quoted chains, recipients or label changes). Deleting an email cascades its vectors; account cleanup must first remove its emails under the existing journal/retention constraints. Old model variants remain until email purge or relevant content change; no model-retention UI is implemented.
-
-Vectors are sensitive derived mail data stored with the existing private database, WAL and backups; they are not encrypted and deletion is not forensic erasure. The foundation adds no dependencies and changes no wire schemas. Synthetic tests cover preprocessing, output bounds, provider substitution/failure, caching/restart, mixed hit/miss batches, account isolation, optimistic conflicts, atomic writes, cancellation, invalid vectors and purge propagation. They do not establish semantic relevance or model performance.
-
-### Implemented hybrid semantic category classification
-
-The implemented `SemanticClassifier` and `HybridClassifier` use the existing four-method `EmbeddingProvider` unchanged. Enabled category descriptions share the email vector space; cosine uses float64 accumulation, vector validation and deterministic category-ID tie breaks. The classification-quality revision replaces the old ineffective 0.85 rule gate with separate evidence policies: an unambiguous specific rule at 0.60 can select without a model; rule strength at least 0.55 plus an agreeing semantic leader at cosine at least 0.35 and margin strictly above 0.05 can reinforce a choice. The semantic-only gate remains 0.45 / 0.05. With a configured model, rule/model disagreement and semantic near ties abstain; low semantic evidence can leave a specific rule decisive. Competing rule matches and explicit rule exclusions are retained rather than erased by fallback. No model error is silently converted into a rule-only decision.
-
-Rule matching now shares bounded quote/signature removal and HTML fallback with embedding preparation; the embedding payload and cache preprocessing version are unchanged. Limited immediate English negation no longer supplies positive rule evidence. Rule configuration content and explicit algorithm revisions join model/policy fingerprints, invalidating prior assessments and organization previews on behavior changes. Neither rule strength nor cosine is a probability. Per-category threshold fitting is deferred for insufficient independent evidence; default categories and user definitions are unchanged. No LLM, network access, dependency or schema change is added. [Detailed policy](SEMANTIC_CLASSIFICATION.md) explains decision gates and limits.
-
-The model-specific `internal/embedding/minilm` adapter uses checksum-pinned `sentence-transformers/all-MiniLM-L6-v2` ONNX files with a fixed Python worker compiled into Go. This is an intentional optional inference boundary: Go still owns all product behavior, account ownership, database/cache operations and decisions; Python performs tokenization and CPU model execution only. It adds no hosted service or generic frontend command. ONNX Runtime, Tokenizers and NumPy form an optional locked development runtime instead of the full PyTorch/sentence-transformers stack. Attention-masked mean pooling and L2 normalization produce 384-dimensional vectors; tokenization caps input at 256 wordpieces. Model installation is explicit, offline inference never downloads, and telemetry is disabled. Private stdin/stdout carries bounded text/vectors, never process arguments or files. Trusted non-secret absolute interpreter/model paths configure the adapter at startup; portable packaging of this optional runtime remains release work. [Development setup and dependency review](SEMANTIC_CLASSIFICATION.md) describe exact artifacts, checksums, licenses, platform limits and commands.
-
-Migration [009_semantic_classification.sql](../backend/internal/store/sqlite/migrations/009_semantic_classification.sql) adds account/category-scoped `category_embeddings`, description/enabled-state invalidation and cascade purge, plus actual-classifier/reason/top-candidate metadata on classification_runs and score_kind on classification_results. Email and category cache misses are keyed by provider/model, dimension, preprocessing version and prepared-text hash; unchanged inputs never regenerate vectors. Category write batches recheck current enabled descriptions and commit atomically; no transaction spans inference. Assessment fingerprints now include HTML fallback in addition to previous inputs, so prior reviews require recomputation. Candidate IDs are checked against enabled same-account categories, selected similarity must match the leading candidate, and all values/rankings are validated. Category edits, changed email inputs and engine/model/policy changes make assessments stale. Local category assignments and Gmail membership remain independent.
-
-The same manual classification review command now returns additive score_kind and assessment fields, with bounded reasons and candidates; Go, Rust, strict TypeScript and [synthetic v1 fixtures](../contracts/classification-semantic-v1.json) preserve compatibility with earlier v1 responses. Review UI distinguishes cosine from rule strength without probability percentages and exposes candidates for semantic decisions and abstentions. Corroborated decisions retain raw cosine under the existing score kind and record rule evidence in reasons with actual classifier `HybridClassifier`. Saved classifier version/name still binds organization previews to the current hybrid engine; existing Gmail confirmation/journal/reconcile/undo invariants remain intact. Local inference failure is an explicit row error, never a fabricated low score or overwritten assessment. Classification review alone receives a 30-second Go deadline/32-second native response deadline; other commands retain the original 5/7-second limits. The bridge remains sequential, so a running review can delay other requests.
-
-Fake-provider regressions cover reinforcement, no-model operation, rule/model disagreement, multi-rule ambiguity, exclusions, quotes/signatures, immediate negation, hidden runner-up ambiguity, version invalidation, incomplete bodies, inference failures and cancellation. Real local evaluation now contains 102 synthetic messages (63 positives and 39 expected abstentions), including a reserved 48-message validation split. On all 102, coverage rises from 24.5% to 27.5%, assigned precision from 76.0% to 89.3%, and accuracy from 51.0% to 59.8%. Reserved validation coverage stays 25.0%, precision rises from 66.7% to 83.3% and accuracy from 50.0% to 58.3%. The original unchanged 18-message corpus improves from 44.4%/87.5%/55.6% to 50.0%/88.9%/61.1% (coverage/precision/accuracy). Finance and Personal still have zero recall in this corpus. [Full evaluation](SEMANTIC_EVALUATION.md) gives denominators, per-category metrics, score-bin diagnostics and remaining errors. No production calibration claim is made.
-
-### Implemented local semantic mailbox search
-
-The subsequent search request adds the **Search your mailbox** UI and `internal/search` exact cosine retrieval over the existing local email-vector cache. Migration [010_semantic_search.sql](../backend/internal/store/sqlite/migrations/010_semantic_search.sql) adds an account/provider/dimension/preprocessing/email index without editing previous migrations. No vector database or dependency is introduced. The subsequent retrieval-quality revision uses migration 13 and separate subject/body passage vectors described below. Go ranks at most 10,000 filtered indexed candidates in pages of 32, keeps top-K (1–20), and sorts ties by date then email ID. Sender/date/category filters stay local; category matches explicit local assignments or fresh saved choices from the current classifier. Account ownership, vector dimensions/finiteness, prepared-text hashes, current source content and filter membership are rechecked. Transactional content invalidation/cascade purge remain authoritative; corrupt derived vectors are skipped, reported and removed for later explicit rebuilding.
-
-Manual indexing uses the configured MiniLM provider, skips existing current-model vectors and requires complete cached bodies. One cancellable index/query job runs per service. Index runs are capped at 10,000 missing emails/ten minutes and resume through skipped saved entries on later explicit runs; query jobs have a one-minute deadline. Job starts/status/cancel remain short IPC calls, with no model inference on the bridge thread. Account-session loss cancels work and clears/suppresses results; shutdown joins workers before SQLite closes. Model calls share the existing cancellable embedding gate and bounded private worker. Search introduces no Gmail traffic, external inference, endpoint configuration, background uploads, LLM, provider keyword query or mailbox mutation.
-
-The main-window allowlisted `semantic_search` command maps to `search.semantic` with strict `status/index/query/cancel` DTOs. [The v1 fixture](../contracts/search-semantic-v1.json) is shared by Go, Rust and TypeScript tests. Results include sender, subject, received date, cosine score and a bounded excerpt copied from cleaned mail. Production search scores persisted subject/body passages directly and returns the winning cleaned text with optional passage kind/index metadata. The previous in-memory excerpt fallback remains only on the legacy baseline path. UI exposes index coverage, incomplete bodies, errors/caps, progress and cancellation, supports paginated category filters, and resets sensitive state on disconnect. Query vectors remain in memory; passage vectors are persisted locally and no query history is persisted. Response/frame limits include JSON escaping.
-
-The persistent index is an exact linear scan, not an ANN or full-text index. Large/capped searches return explicitly partial top-K results over the examined candidates. Production retrieval now uses versioned 240-byte subject/body passages with small overlaps, preserving content beyond the old token/byte cutoff. Classification keeps its existing single-message representation. Hybrid FTS ranking and larger-scale qualification remain future work. Gmail keyword search remains separate and unimplemented. [Usage, boundaries and verification](SEMANTIC_SEARCH.md) document precise filters, lifecycle, retention, coverage and limits. Fake-provider tests cover ranking, filters, caching/restart, stale data, isolation, corruption, purge and cancellation. A real opt-in four-message/four-query synthetic MiniLM regression ranked the relevant message first in 4/4 cases; this is not a representative relevance claim. Native smoke adds the actual search-command authorization path without real Gmail access.
-
-
-### Retrieval passage index revision
-
-Migration 13 adds `email_passage_vectors` and `email_retrieval_indexes` under composite account/email foreign keys. `email-passages-v1` is separate from classification preprocessing. Deterministic retrieval cleanup retains unquoted inline answers, removes conventional quote/signature structures, and recovers HTML quote boundaries when cached plain text is exactly its extracted alternative. Ordinary closings remain. These are bounded heuristics, not a universal reply parser.
-
-Normalized content hashes key per-email/model passage vectors. Index jobs infer only missing hashes and atomically mark the complete document after checking the current source hash. Source changes preserve unchanged chunk vectors while invalidating the complete manifest and obsolete vectors. Physical deletion cascades; sync tombstones explicitly clear both new tables. No inference or network request occurs in a database transaction. Source limits, 8,192 passages per document, model batches of 32, cancellation and existing job deadlines bound the work. No merged thread-level embedding is introduced.
-
-Retrieval takes the best passage cosine per source and returns its cleaned text, kind and ordinal. Identical winning passages in the same provider thread are deduplicated without merging unrelated threads by subject. Source/filter freshness is checked before returning results. The UI can open the source in the existing cached reader. New fields are optional compatible v1 metadata; the excerpt display limit expands from 160 to 240 characters. Existing classification vectors are not automatically a complete search index; the user explicitly reindexes cached mail after upgrading.
-
-The 40-message/22-query synthetic evaluation improves top-1 from 59.1% to 81.8% and query-level top-3 recall from 63.6% to 100%. Generic advice and matching subjects still outrank some specific answers. Exact scanning is retained: 1,000 synthetic messages with 384-dimensional vectors took 162.6 ms/query on Apple M2 in the local profile. No ANN engine, network vector database, external inference or new dependency is introduced. [Retrieval report and reproduction](SEMANTIC_SEARCH.md) document metrics, definitions, performance and limitations.
+Semantic classifiers, embedding/model adapters, workers, query/index services and
+vector persistence APIs have been deleted. The historical tables described above
+remain solely for migration compatibility. No Python environment or model artifacts
+are needed. [Retirement notes](SEMANTIC_CLASSIFICATION.md) supersede old setup guides.
 
 ### Implemented optional generative-AI provider foundation
 
@@ -459,19 +423,25 @@ The 40-message/22-query synthetic evaluation improves top-1 from 59.1% to 81.8% 
 
 `credentials.SecretStore` and its OS-backed `APIKeyStore` isolate keys by profile/provider, separate from Gmail OAuth. No key is loaded from plaintext settings, database, environment or arguments. Each dispatch loads the current key; missing/unavailable storage fails closed. Secret and AI text wrappers redact generic serialization and diagnostics. Responses and transport errors are normalized to fixed errors without remote details. Requests are cancellable, bounded to one active call per adapter and a one-minute deadline, with no redirects, environment-selected proxy, retries, streaming or tools. `store: false` is explicit but does not guarantee zero external retention.
 
-The provider-neutral consent service holds one immutable account-bound preview, discloses provider/model/policy/input, expires approval after five minutes, consumes it before dispatch, and revokes/cancels/suppresses late output on Clear. Application callers must separately authorize account ownership and the active session before preparing/executing. The reply use case now authorizes the active account/session, selects bounded cached context, and exposes a settings form and exact-request consent preview through reply.manage. Generated text has no action privileges. A separate immutable preview and approval authorize Gmail draft creation; sending remains unavailable. Existing search, embedding, classification, sync and risk paths do not invoke generation.
+The provider-neutral consent service holds one immutable account-bound preview,
+discloses provider/model/policy/input, expires approval after five minutes, consumes
+it before dispatch, and revokes/cancels/suppresses late output on Clear. Account
+and session authorization belongs to application callers. Generation methods
+remain internal legacy implementation only; `reply.manage` exposes settings and
+historical recovery, never context selection or generation approval. No retained
+mail, sync, classification, organization or risk operation invokes AI. The future
+summary workflow must be restricted to one explicitly approved cached email.
 
 [Generative-AI setup, limits and security contract](GENERATIVE_AI.md) describe trusted Go composition, OS key provisioning, the full outbound text framing, safe errors, cancellation/retention limits and the implemented reply workflow. Synthetic FakeAIProvider, HTTP transport and keyring tests cover substitution, no-provider operation, consent/replay/isolation, redaction, key failure/rotation, malformed output and cancellation. No paid API calls are made during validation.
 
-### Implemented AI-assisted reply drafting
+### Historical draft recovery
 
-The reply use case and `internal/reply` build a deterministic payload from the selected cached email, optionally including at most four earlier cached messages from that same account/thread. It never retrieves unrelated messages, attachments or remote images. Complete cached bodies are required; the UI explains cache coverage and truncation. Existing embedding preprocessing removes quoted chains/signatures; selected text is capped at 1,800 UTF-8 bytes, earlier messages at 1,000 each. Tone and optional instruction accompany the disclosed context. The four tones are Professional, Friendly, Concise and Formal.
-
-The desktop shows the exact policy, instruction and framed context, external provider/model, recipient, subject and expiry before one explicit generation approval. Generated plain text remains editable; it never authorizes a mailbox write. A second five-minute preview binds the reviewed body and reply routing to a digest. The Go core checks source hashes and refetches the selected message before journaling dispatch. Gmail receives one plain-text draft creation request through EmailProvider; no automatic retry, sending or deletion is exposed.
-
-Migration 11 stores only model/enabled settings, immutable draft plans, source references and outcome evidence. API keys use SecretStore in profile/account/provider-scoped OS slots; submission clears the frontend input immediately. AI consent/context and unreviewed output are memory-only. Reviewed draft previews persist body/recipient/subject for recovery and are sensitive mailbox data, covered by the same private app-data, backup and non-encryption limitations as cached mail. Source foreign keys prevent silent purges while journal evidence exists.
-
-A separate draft journal is used because creation has different recovery semantics from reversible label membership changes. Dispatch records in_flight before any write and persists an uncertain outcome after failures, cancellation or crashes. Read-only reconciliation searches the app-generated RFC Message-ID and verifies thread, recipients, headers and body. Missing matches are not proof of non-creation. Changed/duplicate drafts remain conflicts; another creation requires explicit manual resolution after reconciliation. The UI truthfully reports that undo is unavailable: remove the draft in Gmail. No destructive provider capability was added to simulate reversibility. Settings, generation and recovery are cancellable bounded jobs; shutdown joins them, and disconnect revokes consent and suppresses late UI results. See [reply drafting](REPLY_DRAFTING.md).
+The immutable migration-11 draft journal, source references, plan digests and
+read-only Gmail reconciliation remain. Settings use the shared AI store and
+profile/account/provider-scoped OS keyring. Recovery requires no model or AI key.
+New creation and generation are rejected even with approval. Interrupted outcomes
+must be reconciled before explicit local acknowledgment; no automatic retry or
+remote undo is offered. See [historical draft behavior](REPLY_DRAFTING.md).
 
 ## 8. Dependencies and rationale
 
@@ -523,29 +493,23 @@ Diagnostics contain operation name, duration, safe error code and random correla
 | 3 — Secure Gmail read | OS keyring, browser PKCE OAuth, bounded initial/delta sync, disconnect (OAuth, bounded import and manual delta sync implemented). | Real-account testing only after keyring and redaction work; verify consent rejection, refresh, locked store, rate limits, expired cursor, interruption, scope completeness and offline restart. |
 | 4 — Safe organization | Built-in suggestions, explicit organization enablement, classification-driven label previews, missing MailPilot label creation, journal and undo. | Dry-run makes zero writes; stale previews rejected; crash-after-remote-write and partial-batch tests pass; undo leaves unrelated labels intact and reports conflicts. |
 | 5 — MVP completion | Explained risk rules, cache controls, recovery UX and release packaging. | Synthetic benign/malicious fixtures, parser fuzzing, security-boundary tests, accessibility check, realistic mailbox performance measurements, privacy docs and signed builds for each claimed platform. |
-| 6 — Optional AI | Provider/consent foundation and OpenAI adapter implemented; desktop settings, reviewed reply drafting and authorized IPC implemented; Ask with cited answers is now implemented; summary UI remains planned. | Entire MVP passes with no AI key; no external request before approval; injection cannot trigger actions; credential and data-use review complete. |
-| 7 — Local semantic search | Local model and exact cosine search implemented; subject/passage chunk indexing implemented; ANN and hybrid retrieval ranking remain deferred. | Search relevance/latency measured on synthetic corpus; model migration, deletion propagation and offline fallback tested. |
-| 8 — Expansion | Additional providers, multiple-account UI, richer organization or rendering. | Add capabilities and migrations for actual needs; preserve existing privacy and action guarantees. |
+| 6 — Optional AI | Shared provider/consent foundation and settings retained; selected-email summary workflow remains planned. | Ordinary use works without AI; only an explicitly approved selected-email payload may leave the device. |
+| 7 — Chrome companion (later) | Use the existing running desktop core and database owner. | Validate native transport, pairing and isolation before implementation. |
 
 Meaningful tests target boundaries and failure modes, not getters or implementation mirroring. Provider tests use fakes/recorded synthetic responses; no live personal mailbox in CI. Separate opt-in live Gmail smoke tests use a dedicated test account and deliberately confirmed label changes. Publish measured startup, sync throughput, search latency and memory on a documented fixture corpus before claiming production readiness.
 
-## 11. Explicitly outside the MVP
+## 11. Explicitly outside the active scope
 
-- Desktop AI summary workflows, agentic automation and auto-send. Ask with cited answers was subsequently requested and is implemented. Reviewed reply generation and separately approved Gmail draft creation were subsequently requested and are implemented.
-- External embedding services, background model downloads and later hybrid/ANN search. Explicit development installation, local semantic classification and exact cosine search were subsequently requested and implemented.
-- Outlook/IMAP adapters and simultaneous multi-account UX; the schema and boundaries already isolate accounts.
-- HTML email rendering, remote images, attachment download/preview/execution, OCR and malware scanning.
-- Autonomous label writes, scheduled mailbox-changing rules, complex rule editors and plugin systems.
-- Label deletion/rename, system-label changes, archive/trash/delete and sending. Missing MailPilot label creation was explicitly requested and is now implemented.
-- Background daemon while the app is closed, Gmail push notifications, server infrastructure and cloud synchronization.
-- Encrypted SQLite, cross-device backup/recovery, mobile/web editions, telemetry and automatic updates.
-
-These are scope exclusions, not permission to weaken credential security, local-only defaults or mutation recovery. The first working release should be useful and trustworthy as a local email organizer before intelligence features are added.
+No embeddings/vector engines, MiniLM/model workers, semantic classification/search,
+mailbox Q&A/RAG/chat, arbitrary prompts, AI replies, thread summarization, Gmail
+draft creation, autonomous actions, background AI, sending/deleting/archiving or
+mark-as-read, multiple email accounts/providers or hosted backend. No replacement
+ML architecture is planned. Historical schema/recovery does not authorize a feature.
 
 ### Cached email reader implementation
 
-Mailbox and semantic search subjects now open a local reader; returning preserves
-the mounted list, paging and search state. The account-scoped `mail.read` use case
+Mailbox subjects open a local reader; returning preserves
+the mounted list and paging state. The account-scoped `mail.read` use case
 has no Gmail adapter and reads cached content without OAuth refresh or a network
 fetch. The existing active account session still authorizes reads; cold-start
 account restoration retains its existing connection requirements.
@@ -566,46 +530,12 @@ schema migration or new dependency is needed. Native smoke tests exercise the
 new WebView command's unauthorized-account path using a disposable profile;
 synthetic backend and UI tests cover successful content rendering and paging.
 
-### Implemented Ask MailPilot
+### Shared settings and transport modules
 
-The subsequently requested Ask workflow composes the existing local semantic
-retriever with a separate bounded evidence builder (`internal/ask`) and the existing
-`AIProvider.AnswerWithContext` consent boundary. Explicit sender/date filters apply
-locally. At most five retrieved sources contribute cleaned passage neighborhoods;
-8,000 encoded context bytes are disclosed before a single-use generation approval.
-No unrelated thread expansion, attachment access, remote retrieval, tool execution
-or mailbox write is available to this use case.
-
-The fixed answer policy treats mail as untrusted data and explicitly defends against
-injected instructions. Every accepted claim must cite a known source and include a
-verbatim passage quote; Go rejects malformed/uncited output. This verifies provenance,
-not semantic truth. Escaped answers offer application-owned buttons into the cached
-reader. Insufficient evidence produces an explicit abstention. Source revisions,
-account authorization, session cancellation, expiry and consent replay are checked.
-
-Ask reuses account-scoped reply AI settings and OS key storage. The new allowlisted
-`ask.manage` command has strict Go/Rust/TypeScript DTOs; consent, context, source maps
-and output are memory-only, cleared on disconnect/settings changes. Retrieval remains
-local; only the explicitly approved bounded request goes to the configured provider.
-No storage migration or new dependency is needed. See [Ask MailPilot](ASK_MAILPILOT.md)
-for bounds, threat-model limitations and synthetic/native validation coverage.
-
-### Maintainability review: shared settings and transport modules
-
-Non-secret optional-AI configuration now belongs to `ai.Settings` and its settings
-store, shared by Ask and reply drafting. The reply journal contract owns only reply
-sources and durable draft actions. SQLite exposes the shared settings separately;
-the historical `reply_ai_settings` table, existing data and migration checksums are
-preserved. Both use cases share safe application error mapping, and settings/draft
-reads preserve cancellation through the existing SQLite error sanitizer.
-
-The TypeScript IPC client reexports focused classification, organization and search
-modules, matching the existing reply/reader/Ask modules without changing wire
-contracts or component imports. Go draft creation/reconciliation is separated from
-reply generation/session handling within the same application package. No generic
-job framework, new dependency or product behavior is introduced by these extractions.
-The reply screen scopes asynchronous mailbox loads and private form state to its
-active account and ignores delayed responses from an earlier account.
+Non-secret AI configuration belongs to `ai.Settings`; SQLite retains the historical
+`reply_ai_settings` name. The frontend client reexports only retained classification,
+organization and maintenance APIs; cached reading has its own module. Ask/search
+application, evidence, transport and UI implementations are deleted.
 
 ## 12. Proposed scope reduction and Chrome companion
 
@@ -615,7 +545,8 @@ MiniLM setup, Ask, AI reply generation and new Gmail draft creation; retaining
 one-account sync, cached reading, keyword search, deterministic category review,
 confirmed label organization and local phishing explanations; and reusing the
 existing AI/keyring/consent foundation for one selected-email summary workflow.
-This is a proposed scope change, not a description of changes already made.
+The semantic/model removal is implemented above. Keyword search, bounded summaries
+and the Chrome transport remain proposals; no replacement is scaffolded.
 
 The Chrome extension would be a companion to the installed, running desktop app,
 not a second mail client or database owner. A fixed native messaging relay would

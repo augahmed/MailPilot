@@ -80,9 +80,6 @@ func (a *App) Reply(ctx context.Context, p ReplyRequest) ReplyResponse {
 		return r
 	}
 	r := a.Replies.HandleMaintenance(ctx, p)
-	if a.Ask != nil && r.State == "configuring" && r.Code == "" && (p.Operation == "configure" || p.Operation == "disable") {
-		a.Ask.Clear()
-	}
 	return r
 }
 func (s *ReplyService) fresh(ctx context.Context, a domain.AccountID, sources []reply.Source) error {

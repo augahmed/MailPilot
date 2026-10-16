@@ -3,9 +3,11 @@ package classification
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net/mail"
@@ -14,7 +16,7 @@ import (
 	"unicode"
 
 	"mailpilot.local/core/internal/domain"
-	"mailpilot.local/core/internal/embedding"
+	mailtext "mailpilot.local/core/internal/mail"
 )
 
 var (
@@ -94,7 +96,7 @@ func NewRuleBasedClassifier(config RuleConfig) (*RuleBasedClassifier, error) {
 	return &RuleBasedClassifier{config: cloned, version: configVersion(struct {
 		Algorithm string
 		Rules     RuleConfig
-	}{"rules-2", cloned})}, nil
+	}{"rules-3-direct-gate-0.60", cloned})}, nil
 }
 func (c *RuleBasedClassifier) Name() string    { return c.config.Name }
 func (c *RuleBasedClassifier) Version() string { return c.version }
@@ -209,51 +211,44 @@ func (s signals) matches(c Condition, positive bool) bool {
 	return false
 }
 
-// ruleEvidence keeps rule exclusions and ambiguity available to the hybrid.
-// They must not disappear just because the rule engine abstained.
-type ruleEvidence struct {
-	run       domain.ClassificationRun
-	excluded  map[domain.CategoryID]bool
-	ambiguous bool
-}
+// DirectRuleThreshold is an evidence-strength gate, not a probability.
+const DirectRuleThreshold = .60
 
-func (c *RuleBasedClassifier) Classify(ctx context.Context, email domain.Email, categories []domain.EmailCategory) (domain.ClassificationRun, error) {
-	evidence, err := c.evaluate(ctx, email, categories)
-	return evidence.run, err
+func configVersion(config any) string {
+	data, _ := json.Marshal(config)
+	return fmt.Sprintf("v1-%x", sha256.Sum256(data))
 }
-func (c *RuleBasedClassifier) evaluate(ctx context.Context, email domain.Email, categories []domain.EmailCategory) (ruleEvidence, error) {
+func (c *RuleBasedClassifier) Classify(ctx context.Context, email domain.Email, categories []domain.EmailCategory) (domain.ClassificationRun, error) {
 	if err := ctx.Err(); err != nil {
-		return ruleEvidence{}, err
+		return domain.ClassificationRun{}, err
 	}
 	if email.ID == "" || email.Validate() != nil || len(email.Subject) > 16*1024 || len(email.Sender.Address) > 1024 || len(email.Sender.Name) > 1024 || len(email.BodyText) > 1024*1024 || len(email.Labels) > 1000 || len(categories) > 1000 {
-		return ruleEvidence{}, ErrInvalidInput
+		return domain.ClassificationRun{}, ErrInvalidInput
 	}
 	seen := map[domain.CategoryID]bool{}
 	for _, category := range categories {
 		if category.ID == "" || seen[category.ID] {
-			return ruleEvidence{}, ErrInvalidInput
+			return domain.ClassificationRun{}, ErrInvalidInput
 		}
 		seen[category.ID] = true
 	}
 	for _, label := range email.Labels {
 		if label.AccountID != email.AccountID {
-			return ruleEvidence{}, ErrInvalidInput
+			return domain.ClassificationRun{}, ErrInvalidInput
 		}
 	}
 	run := domain.ClassificationRun{UsedClassifier: "none", Reason: "No specific rule matched.", AccountID: email.AccountID, EmailID: email.ID, ClassifierName: c.Name(), ClassifierVersion: c.Version(), InputHash: InputHash(email, categories), Timestamp: time.Now().UTC().Truncate(time.Millisecond), Results: []domain.ClassificationResult{}}
-	evidence := ruleEvidence{excluded: map[domain.CategoryID]bool{}}
 	subject := strings.ToLower(strings.TrimSpace(email.Subject))
 	for _, prefix := range c.config.ExcludeSubjectPrefixes {
 		if strings.HasPrefix(subject, strings.ToLower(strings.TrimSpace(prefix))) {
-			evidence.run = run
-			return evidence, nil
+			return run, nil
 		}
 	}
 	s := signals{subject: words(email.Subject)}
 	if email.BodyState == "complete" {
-		body, err := embedding.CleanBody(email)
+		body, err := mailtext.CleanBody(email)
 		if err != nil {
-			return ruleEvidence{}, ErrInvalidInput
+			return domain.ClassificationRun{}, ErrInvalidInput
 		}
 		s.body = words(body)
 	}
@@ -269,7 +264,7 @@ func (c *RuleBasedClassifier) evaluate(ctx context.Context, email domain.Email, 
 	candidates := map[domain.CategoryID]domain.ClassificationResult{}
 	for _, rule := range c.config.Rules {
 		if err := ctx.Err(); err != nil {
-			return ruleEvidence{}, err
+			return domain.ClassificationRun{}, err
 		}
 		var categoryID domain.CategoryID
 		matches := 0
@@ -291,7 +286,6 @@ func (c *RuleBasedClassifier) evaluate(ctx context.Context, email domain.Email, 
 			}
 		}
 		if excluded {
-			evidence.excluded[categoryID] = true
 			continue
 		}
 		reasons := []string{}
@@ -324,16 +318,18 @@ func (c *RuleBasedClassifier) evaluate(ctx context.Context, email domain.Email, 
 		}
 	}
 	if best.CategoryID != "" && (len(candidates) == 1 || best.Confidence-second > c.config.AmbiguityMargin) {
+		if best.Confidence < DirectRuleThreshold {
+			run.Reason = "No specific rule met the 0.60 direct-rule gate."
+			return run, nil
+		}
 		run.Results = append(run.Results, best)
 		run.UsedClassifier = c.Name()
 		run.Reason = "One category has a specific, unambiguous rule match."
 	} else if len(candidates) > 1 {
-		evidence.ambiguous = true
 		run.Reason = "Specific rules match competing categories; no category chosen."
 	}
 	if err := ctx.Err(); err != nil {
-		return ruleEvidence{}, err
+		return domain.ClassificationRun{}, err
 	}
-	evidence.run = run
-	return evidence, nil
+	return run, nil
 }

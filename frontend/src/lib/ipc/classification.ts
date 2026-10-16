@@ -5,36 +5,10 @@ const classificationAssessmentSchema = z
   .object({
     used_classifier: z.string().min(1).max(100),
     reason: z.string().min(1).max(160),
-    candidates: z
-      .array(
-        z
-          .object({
-            category_id: z.string().min(1).max(100),
-            category_name: z
-              .string()
-              .refine((value) => [...value].length <= 101),
-            similarity: z.number().min(-1).max(1),
-          })
-          .strict(),
-      )
-      .max(5),
+    // Retained empty field for the existing deterministic wire shape.
+    candidates: z.array(z.never()).max(0),
   })
-  .strict()
-  .superRefine((assessment, ctx) => {
-    const seen = new Set<string>();
-    assessment.candidates.forEach((candidate, i) => {
-      const previous = assessment.candidates[i - 1];
-      if (
-        seen.has(candidate.category_id) ||
-        (previous &&
-          (previous.similarity < candidate.similarity ||
-            (previous.similarity === candidate.similarity &&
-              previous.category_id > candidate.category_id)))
-      )
-        ctx.addIssue({ code: "custom", message: "Invalid candidate ranking" });
-      seen.add(candidate.category_id);
-    });
-  });
+  .strict();
 
 export const classificationPredictionSchema = z
   .object({
@@ -42,7 +16,7 @@ export const classificationPredictionSchema = z
     category_id: z.string().min(1).max(100),
     category_name: z.string().refine((value) => [...value].length <= 101),
     confidence: z.number().gt(0).max(1),
-    score_kind: z.enum(["rule_confidence", "cosine_similarity"]).optional(),
+    score_kind: z.literal("rule_confidence").optional(),
     classifier_name: z.string().min(1).max(100),
     classifier_version: z.string().min(1).max(100),
     reasons: z.array(z.string().trim().min(1).max(160)).min(1).max(6),
@@ -66,13 +40,7 @@ const classificationRowSchema = z
     assessment: classificationAssessmentSchema.optional(),
     timestamp: z.number().int().nullable(),
     code: z
-      .enum([
-        "conflict",
-        "cancelled",
-        "invalid_message",
-        "storage_error",
-        "embedding_unavailable",
-      ])
+      .enum(["conflict", "cancelled", "invalid_message", "storage_error"])
       .optional(),
   })
   .strict()
@@ -99,13 +67,6 @@ const classificationRowSchema = z
     if ((row.state === "error") !== (row.code !== undefined))
       ctx.addIssue({ code: "custom", message: "Inconsistent review error" });
     for (const prediction of row.predictions) {
-      if (
-        prediction.score_kind === "cosine_similarity" &&
-        (!row.assessment?.candidates[0] ||
-          row.assessment.candidates[0].category_id !== prediction.category_id ||
-          row.assessment.candidates[0].similarity !== prediction.confidence)
-      )
-        ctx.addIssue({ code: "custom", message: "Invalid semantic winner" });
       if (
         prediction.email_id !== row.email_id ||
         prediction.timestamp !== row.timestamp

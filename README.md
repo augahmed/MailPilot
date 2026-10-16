@@ -6,8 +6,9 @@ The active scope is defined in [AGENTS.md](AGENTS.md). The
 [focused product plan](docs/PRODUCT_PLAN.md) and
 [contraction plan](docs/CONTRACTION_PLAN.md) describe the target and retirement order.
 Ask, semantic search/indexing, semantic classification, model setup, AI replies
-and new Gmail drafts are disabled at active entry points. Their implementation
-packages and historical database records remain temporarily for staged cleanup.
+and new Gmail drafts have no active entry points. Semantic/model implementation
+packages, workers and setup scripts have been removed; historical database records
+and narrow draft recovery remain.
 Keyword search, selected-email summaries, additional AI providers and Chrome are
 future work, not enabled by this contraction.
 
@@ -46,6 +47,8 @@ rustc --version
 ```
 
 The native build and smoke test have been verified on Apple Silicon macOS. Windows/Linux targets are planned and need native qualification. Cross-compilation is deliberately rejected by the sidecar build script; build on the target OS/architecture.
+
+MailPilot requires no Python, MiniLM, ONNX, model downloads or index setup.
 
 ## Install and run
 
@@ -236,7 +239,7 @@ Gmail requests and explicitly acknowledged after review. No new draft, reply,
 thread context or arbitrary prompt can be submitted. Old draft previews cannot be
 resumed for creation. Undo is unavailable; handle the draft manually in Gmail.
 
-Cached message subjects in the mailbox and semantic search now open a reader with
+Cached message subjects in the mailbox open a reader with
 sender, To/CC, timestamp, body, attachment metadata, cached Gmail labels,
 MailPilot categories and phishing explanations. Back returns to the existing
 results. Reading uses local cached text, including text extracted from HTML-only
@@ -249,4 +252,5 @@ fetch. Attachment downloads and rich HTML display are not implemented.
 [Ask](docs/ASK_MAILPILOT.md), [semantic search](docs/SEMANTIC_SEARCH.md),
 [semantic classification](docs/SEMANTIC_CLASSIFICATION.md) and
 [reply drafting](docs/REPLY_DRAFTING.md) describe historical implementations only.
-Their old workflows and model setup instructions are not active product features.
+The semantic/Ask guides record removal; previous implementation details remain in
+Git history. No model installation is part of setup.

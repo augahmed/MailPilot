@@ -21,7 +21,7 @@ type ClassificationEngine interface {
 
 // InputHash covers exactly the locally available inputs, including category
 // definitions and label names. It deliberately excludes provider-specific IDs,
-// attachments, local assignments, and recipients. HTML is included for embedding fallback.
+// attachments, local assignments, and recipients. HTML is included for deterministic HTML fallback.
 func InputHash(email domain.Email, categories []domain.EmailCategory) string {
 	type label struct {
 		Name string

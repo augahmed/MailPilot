@@ -1,4 +1,0 @@
-# Optional local CPU inference; resolved versions are pinned in requirements.txt.
-onnxruntime==1.23.2
-numpy==2.5.4
-tokenizers==0.23.3
