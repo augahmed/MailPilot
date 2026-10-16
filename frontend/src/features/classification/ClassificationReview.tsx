@@ -13,7 +13,7 @@ const errors = {
   invalid_message:
     "This message or assessment exceeds the supported review limits.",
   embedding_unavailable:
-    "Local embeddings are unavailable. Check the model installation and retry.",
+    "This saved semantic assessment is retired. Run a new deterministic review.",
   storage_error: "Could not load or save a local assessment. Try again.",
 };
 const states = {
@@ -117,13 +117,13 @@ export function ClassificationReview() {
     >
       <h2 id="classification-heading">Classification review</h2>
       <p>
-        Review local hybrid suggestions for downloaded mail, five emails at a
-        time. Emails with weak or ambiguous evidence remain unclassified.
+        Review deterministic rule suggestions for downloaded mail, five emails
+        at a time. Emails with weak or ambiguous evidence remain unclassified.
       </p>
       <p className="help">
-        Rule strength and cosine similarity are scores, not measured
-        probabilities. Reviewing saves suggestions locally and does not assign
-        categories or change Gmail.
+        Rule strength is a heuristic score, not measured probabilities.
+        Reviewing saves suggestions locally and does not assign categories or
+        change Gmail.
       </p>
       <div role="status" aria-live="polite">
         {busy ? "Reviewing cached mail…" : message}

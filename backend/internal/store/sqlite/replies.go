@@ -26,7 +26,7 @@ func (r *replyRepository) Sources(ctx context.Context, a domain.AccountID, id do
 	if thread && selected.Email.ProviderThreadID != "" {
 		rows, e := r.store.db.QueryContext(ctx, `SELECT id FROM emails WHERE remote_deleted=0 AND account_id=? AND provider_thread_id=? AND received_at<=? AND id<>? ORDER BY received_at DESC,id DESC LIMIT 5`, a, selected.Email.ProviderThreadID, selected.Email.ReceivedAt.UnixMilli(), id)
 		if e != nil {
-			return nil, false, repository.ErrStorage
+			return nil, false, storageError(e)
 		}
 		var ids []domain.EmailID
 		for rows.Next() {
@@ -39,7 +39,7 @@ func (r *replyRepository) Sources(ctx context.Context, a domain.AccountID, id do
 		scanErr := rows.Err()
 		_ = rows.Close()
 		if e != nil || scanErr != nil {
-			return nil, false, repository.ErrStorage
+			return nil, false, storageError(errors.Join(e, scanErr))
 		}
 		capped = len(ids) > 4
 		ids = ids[:min(4, len(ids))]
@@ -52,27 +52,6 @@ func (r *replyRepository) Sources(ctx context.Context, a domain.AccountID, id do
 		}
 	}
 	return append(result, selected), capped, nil
-}
-func (r *replyRepository) Settings(ctx context.Context, a domain.AccountID) (reply.Settings, error) {
-	var s reply.Settings
-	e := r.store.db.QueryRowContext(ctx, `SELECT model,enabled FROM reply_ai_settings WHERE account_id=?`, a).Scan(&s.Model, &s.Enabled)
-	if errors.Is(e, sql.ErrNoRows) {
-		return s, nil
-	}
-	if e != nil {
-		return s, repository.ErrStorage
-	}
-	return s, nil
-}
-func (r *replyRepository) SaveSettings(ctx context.Context, a domain.AccountID, s reply.Settings) error {
-	if a == "" || len(s.Model) > 128 || s.Enabled && s.Model == "" {
-		return repository.ErrInvalid
-	}
-	_, e := r.store.db.ExecContext(ctx, `INSERT INTO reply_ai_settings VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE SET model=excluded.model,enabled=excluded.enabled`, a, s.Model, s.Enabled)
-	if e != nil {
-		return repository.ErrStorage
-	}
-	return nil
 }
 func (r *replyRepository) Create(ctx context.Context, p reply.Plan) error {
 	if !p.Valid() || !time.Now().Before(p.ExpiresAt) || p.ExpiresAt.After(time.Now().Add(6*time.Minute)) {
@@ -89,7 +68,7 @@ func (r *replyRepository) Create(ctx context.Context, p reply.Plan) error {
 		for _, src := range p.Sources {
 			var hash string
 			if e := tx.QueryRowContext(ctx, `SELECT content_hash FROM emails WHERE remote_deleted=0 AND account_id=? AND id=?`, p.AccountID, src.ID).Scan(&hash); e != nil {
-				return repository.ErrNotFound
+				return storageError(e)
 			}
 			if hash != src.Hash {
 				return repository.ErrConflict
@@ -123,7 +102,7 @@ func scanDraft(row scanner) (reply.Action, error) {
 		return a, repository.ErrNotFound
 	}
 	if e != nil {
-		return a, repository.ErrStorage
+		return a, storageError(e)
 	}
 	if json.Unmarshal([]byte(plan), &a.Plan) != nil || json.Unmarshal([]byte(ref), &a.Reference) != nil || !a.Plan.Valid() {
 		return reply.Action{}, repository.ErrStorage

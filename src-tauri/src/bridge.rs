@@ -1,4 +1,3 @@
-use crate::ask::{AskRequest, AskResponse};
 pub use crate::replies::{ReplyRequest, ReplyResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -10,99 +9,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SearchRequest {
-    pub operation: String,
-    pub account_id: String,
-    pub job_id: String,
-    pub query: String,
-    pub top_k: u32,
-    pub sender: String,
-    pub category_id: String,
-    pub from: Option<i64>,
-    pub until: Option<i64>,
-}
-impl SearchRequest {
-    fn valid(&self) -> bool {
-        if self.account_id.len() > 100
-            || self.job_id.len() > 100
-            || self.query.len() > 1000
-            || self.sender.len() > 256
-            || self.category_id.len() > 100
-        {
-            return false;
-        }
-        for value in [self.from, self.until].into_iter().flatten() {
-            if !(0..=253_402_300_800_000).contains(&value) {
-                return false;
-            }
-        }
-        if let (Some(from), Some(until)) = (self.from, self.until) {
-            if from >= until {
-                return false;
-            }
-        }
-        let empty = self.query.is_empty()
-            && self.top_k == 0
-            && self.sender.is_empty()
-            && self.category_id.is_empty()
-            && self.from.is_none()
-            && self.until.is_none();
-        match self.operation.as_str() {
-            "status" => empty,
-            "cancel" => empty && !self.account_id.is_empty() && !self.job_id.is_empty(),
-            "index" => empty && !self.account_id.is_empty() && self.job_id.is_empty(),
-            "query" => {
-                !self.account_id.is_empty()
-                    && self.job_id.is_empty()
-                    && !self.query.trim().is_empty()
-                    && (1..=20).contains(&self.top_k)
-            }
-            _ => false,
-        }
-    }
-}
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct SearchCounts {
-    pub cached: u64,
-    pub eligible: u64,
-    pub indexed: u64,
-}
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SearchHit {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub passage_kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub passage_index: Option<u32>,
-    pub email_id: String,
-    pub sender: String,
-    pub subject: String,
-    pub received_at: i64,
-    pub similarity: f64,
-    pub excerpt: String,
-}
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SearchResponse {
-    pub account_id: String,
-    pub job_id: String,
-    pub operation: String,
-    pub state: String,
-    pub counts: SearchCounts,
-    pub processed: u32,
-    pub errors: u32,
-    pub scanned: u32,
-    pub partial: bool,
-    pub capped: bool,
-    pub excerpt_fallback: bool,
-    pub rows: Vec<SearchHit>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code: Option<String>,
-}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -734,20 +640,6 @@ impl Bridge {
         )?)
         .map_err(|_| "Invalid organization response".into())
     }
-    pub fn ask(&mut self, request: AskRequest) -> Result<AskResponse, String> {
-        if !request.valid() {
-            return Err("Invalid Ask request".into());
-        }
-        let result: AskResponse = serde_json::from_value(self.request(
-            "ask.manage",
-            serde_json::to_value(request).map_err(|_| "Invalid Ask request")?,
-        )?)
-        .map_err(|_| "Invalid Ask response")?;
-        if !result.valid() {
-            return Err("Invalid Ask response".into());
-        }
-        Ok(result)
-    }
     pub fn reply(&mut self, request: ReplyRequest) -> Result<ReplyResponse, String> {
         if !request.valid() {
             return Err("Invalid reply request".into());
@@ -761,16 +653,6 @@ impl Bridge {
             return Err("Invalid reply response".into());
         }
         Ok(result)
-    }
-    pub fn search(&mut self, request: SearchRequest) -> Result<SearchResponse, String> {
-        if !request.valid() {
-            return Err("Invalid semantic search request".into());
-        }
-        serde_json::from_value(self.request(
-            "search.semantic",
-            serde_json::to_value(request).map_err(|_| "Invalid semantic search request")?,
-        )?)
-        .map_err(|_| "Invalid semantic search response".into())
     }
     pub fn classifications(
         &mut self,
@@ -1045,36 +927,6 @@ mod phishing_organization_tests {
             Some("cosine_similarity")
         );
         assert_eq!(serde_json::to_value(page).unwrap(), fixture["response"]);
-    }
-}
-
-#[cfg(test)]
-mod search_tests {
-    use super::*;
-    #[test]
-    fn semantic_search_contract_and_strict_scope() {
-        let fixture: Value =
-            serde_json::from_str(include_str!("../../contracts/search-semantic-v1.json")).unwrap();
-        let request: SearchRequest = serde_json::from_value(fixture["request"].clone()).unwrap();
-        assert!(request.valid());
-        let response: SearchResponse = serde_json::from_value(fixture["response"].clone()).unwrap();
-        assert_eq!(serde_json::to_value(response).unwrap(), fixture["response"]);
-        for change in [
-            json!({"topK":21}),
-            json!({"operation":"fetch"}),
-            json!({"from":20,"until":10}),
-            json!({"query":""}),
-        ] {
-            let mut bad = fixture["request"].clone();
-            for (k, v) in change.as_object().unwrap() {
-                bad[k] = v.clone();
-            }
-            let request: SearchRequest = serde_json::from_value(bad).unwrap();
-            assert!(!request.valid());
-        }
-        let mut bad = fixture["request"].clone();
-        bad["url"] = json!("https://example.test");
-        assert!(serde_json::from_value::<SearchRequest>(bad).is_err());
     }
 }
 

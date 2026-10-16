@@ -36,7 +36,7 @@ func NewProvider(account domain.AccountID, tokens TokenSource) *Provider {
 	return &Provider{account: account, tokens: tokens, baseURL: "https://gmail.googleapis.com/gmail/v1/users/me", client: &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func (*Provider) Capabilities() provider.Capabilities {
-	return provider.Capabilities{CreateLabels: true, ModifyLabels: true, CreateDrafts: true}
+	return provider.Capabilities{CreateLabels: true, ModifyLabels: true, CreateDrafts: false}
 }
 
 // Keep credential/cancellation checks consistent across read and write paths.

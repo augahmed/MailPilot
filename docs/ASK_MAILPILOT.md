@@ -1,5 +1,10 @@
 # Ask MailPilot
 
+Historical reference: this feature is retired from active UI/IPC/runtime composition.
+Do not use the setup or workflow below to re-enable it. Only necessary historical
+action recovery remains. See [active scope](../AGENTS.md) and
+[contraction status](ARCHITECTURE.md#active-entry-point-contraction-implemented-2026-10-16).
+
 Ask answers questions about **indexed, locally cached mail**. It uses the existing
 local semantic retriever and a separate `AIProvider.AnswerWithContext` generation
 step. There is no autonomous agent, mailbox mutation capability, remote embedding

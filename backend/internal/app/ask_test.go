@@ -6,7 +6,6 @@ import (
 	"mailpilot.local/core/internal/ai"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/embedding"
-	"mailpilot.local/core/internal/reply"
 	"mailpilot.local/core/internal/search"
 	"mailpilot.local/core/internal/store/sqlite"
 	"strings"
@@ -57,7 +56,7 @@ func askFixture(t *testing.T) (*AskService, *sqlite.Store, *FakeAIProvider, cont
 	fake.answer = func(_ context.Context, r ai.Request) (ai.Result, error) {
 		return ai.Result{Text: ai.NewText(`{"insufficient":false,"claims":[{"text":"The recruiter offered two technical interviews.","source":"S1","quote":"You will have two technical interviews."}]}`)}, nil
 	}
-	s := NewAskService(ctx, func() (domain.AccountID, context.Context, error) { return "a", session, nil }, search.New(db.SearchIndex(), encoder, nil), db.Replies(), db.Emails(), func(_ domain.AccountID, model string) (ai.AIProvider, ai.Identity, error) {
+	s := NewAskService(ctx, func() (domain.AccountID, context.Context, error) { return "a", session, nil }, search.New(db.SearchIndex(), encoder, nil), db.AISettings(), db.Emails(), func(_ domain.AccountID, model string) (ai.AIProvider, ai.Identity, error) {
 		return fake, ai.Identity{Provider: "fake", Model: model, External: true}, nil
 	})
 	t.Cleanup(s.Close)
@@ -132,7 +131,7 @@ func TestAskStaleSourceDisabledAndInsufficient(t *testing.T) {
 	if !out.Answer.Insufficient || out.State != "answered" || fake.count() != 0 {
 		t.Fatal(out.State, out.Code)
 	}
-	if err := db.Replies().SaveSettings(context.Background(), "a", reply.Settings{}); err != nil {
+	if err := db.AISettings().SaveSettings(context.Background(), "a", ai.Settings{}); err != nil {
 		t.Fatal(err)
 	}
 	out = s.Handle(context.Background(), AskRequest{Operation: "prepare", AccountID: "a", Question: "interviews"})

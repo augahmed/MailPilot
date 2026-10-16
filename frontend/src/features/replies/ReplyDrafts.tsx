@@ -64,6 +64,8 @@ export function ReplyDrafts() {
   const mounted = useRef(false);
   const sequence = useRef(0);
   const requestInFlight = useRef(false);
+  const activeAccount = useRef("");
+  const accountId = view?.accountId ?? "";
   const loadedReview = useRef("");
   const loadedAction = useRef("");
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -81,6 +83,7 @@ export function ReplyDrafts() {
   };
   const accept = (r: ReplyResponse) => {
     if (r.code === "unauthorized") {
+      activeAccount.current = "";
       clearPrivate();
       setView(r);
       return;
@@ -91,6 +94,12 @@ export function ReplyDrafts() {
           "The operation failed. Review your settings or prepare a new preview.",
       );
       return;
+    }
+    if (activeAccount.current !== r.accountId) {
+      clearPrivate();
+      setOffset(0);
+      setModel("");
+      activeAccount.current = r.accountId;
     }
     setView(r);
     if (
@@ -139,10 +148,16 @@ export function ReplyDrafts() {
     };
   }, []);
   useEffect(() => {
+    if (!accountId) return;
     let active = true;
     void getMailbox(offset)
       .then((r) => {
-        if (active) setPage(r);
+        if (
+          active &&
+          activeAccount.current === accountId &&
+          r.accountId === accountId
+        )
+          setPage(r);
       })
       .catch(() => {
         if (active) setPage(null);
@@ -150,7 +165,7 @@ export function ReplyDrafts() {
     return () => {
       active = false;
     };
-  }, [offset, refresh]);
+  }, [offset, refresh, accountId]);
   const request = async (p: Partial<ReplyRequest>) => {
     const current = ++sequence.current;
     requestInFlight.current = true;
@@ -280,7 +295,7 @@ export function ReplyDrafts() {
                 }}
               >
                 <option value="">Choose a cached email</option>
-                {page?.rows.map((m) => (
+                {(page?.accountId === accountId ? page.rows : []).map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.sender} — {m.subject || "(No subject)"}
                   </option>

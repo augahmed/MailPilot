@@ -1,5 +1,16 @@
 # Local IPC, protocol version 1
 
+Active contraction status (2026-10-16): `ask.manage` / `ask_manage` and
+`search.semantic` / `semantic_search` are removed, including indexing. Their
+fixtures and sections below are historical references. `reply.manage` / `reply_manage`
+accepts only status, configure/disable for retained provider settings, and
+reconcile/resolve/cancel for historical actions. All previous prepare/generate/
+preview_draft/create/undo_preview requests reject even with approval. Thread or
+arbitrary prompt fields cannot be supplied to retained operations. Historical
+preview bodies are never restored as editable/creatable sessions; returned preview
+and review IDs are empty. Existing outcome records and immutable migrations remain.
+A cached-message summary endpoint and keyword-search endpoint do not yet exist.
+
 The trusted native host launches the fixed bundled Go executable and owns its private stdin/stdout pipes. UTF-8 JSON-RPC 2.0 objects are newline-delimited, with a 64 KiB frame limit, string request IDs (1–64 characters), and no batches or notifications in this bootstrap. One request executes at a time. The Go request timeout is five seconds; the host waits at most seven seconds. A broken or timed-out transport is closed and requires an application restart.
 
 Initialize before database access:

@@ -37,7 +37,7 @@ func TestDraftSubjectPreservesReviewedUnicodeAndEncodedWords(t *testing.T) {
 		}
 	}
 }
-func TestGmailDraftCreationMIMEAndReadOnlyReconciliation(t *testing.T) {
+func TestRetiredDraftCreationAndReadOnlyReconciliation(t *testing.T) {
 	d := testDraft()
 	var posts, reads atomic.Int32
 	var fail, edited, missing, duplicate atomic.Bool
@@ -115,15 +115,14 @@ func TestGmailDraftCreationMIMEAndReadOnlyReconciliation(t *testing.T) {
 	p.baseURL = server.URL
 	p.client = server.Client()
 	ctx := context.Background()
-	if !p.Capabilities().CreateDrafts {
-		t.Fatal("missing draft capability")
+	if p.Capabilities().CreateDrafts {
+		t.Fatal("retired capability advertised")
 	}
-	got, e := p.CreateDraft(ctx, d)
-	if e != nil || got.AccountID != "a" || got.ProviderDraftID != "draft" {
-		t.Fatal("create failed", e)
+	if _, e := p.CreateDraft(ctx, d); e != provider.ErrUnsupported || posts.Load() != 0 {
+		t.Fatal("retired draft dispatched", e)
 	}
-	got, e = p.FindDraft(ctx, d)
-	if e != nil || got.ProviderDraftID != "draft" || posts.Load() != 1 {
+	got, e := p.FindDraft(ctx, d)
+	if e != nil || got.ProviderDraftID != "draft" || posts.Load() != 0 {
 		t.Fatal("reconcile wrote or mismatched", e)
 	}
 	edited.Store(true)
@@ -141,22 +140,22 @@ func TestGmailDraftCreationMIMEAndReadOnlyReconciliation(t *testing.T) {
 		t.Fatal("ambiguous result")
 	}
 	fail.Store(true)
-	if _, e = p.CreateDraft(ctx, d); e == nil || posts.Load() != 2 {
+	if _, e = p.CreateDraft(ctx, d); e != provider.ErrUnsupported || posts.Load() != 0 {
 		t.Fatal("write retried or failure hidden")
 	}
 	for _, mutate := range []func(*provider.DraftInput){func(d *provider.DraftInput) { d.Subject = "hi\r\nBcc: attacker@example.test" }, func(d *provider.DraftInput) { d.Recipients[0].Address = "bad\r\n" }, func(d *provider.DraftInput) { d.MessageID = "<foreign@example.test>" }, func(d *provider.DraftInput) { d.InReplyTo = "bad" }, func(d *provider.DraftInput) { d.BodyHTML = new(string) }, func(d *provider.DraftInput) { d.BodyText = strings.Repeat("a", 16385) }, func(d *provider.DraftInput) { d.ThreadID = "../bad" }} {
 		bad := testDraft()
 		mutate(&bad)
-		if _, e = p.CreateDraft(ctx, bad); e != provider.ErrInvalidArgument {
+		if _, e = p.CreateDraft(ctx, bad); e != provider.ErrUnsupported {
 			t.Fatal("unsafe draft accepted")
 		}
 	}
-	if posts.Load() != 2 {
+	if posts.Load() != 0 {
 		t.Fatal("invalid input dispatched")
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, e = p.CreateDraft(cancelled, d); e != context.Canceled {
+	if _, e = p.CreateDraft(cancelled, d); e != provider.ErrUnsupported {
 		t.Fatal("cancellation ignored")
 	}
 }

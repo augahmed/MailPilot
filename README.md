@@ -2,6 +2,15 @@
 
 Local-first email assistant built with Go, React + TypeScript, Tauri 2, and SQLite.
 
+The active scope is defined in [AGENTS.md](AGENTS.md). The
+[focused product plan](docs/PRODUCT_PLAN.md) and
+[contraction plan](docs/CONTRACTION_PLAN.md) describe the target and retirement order.
+Ask, semantic search/indexing, semantic classification, model setup, AI replies
+and new Gmail drafts are disabled at active entry points. Their implementation
+packages and historical database records remain temporarily for staged cleanup.
+Keyword search, selected-email summaries, additional AI providers and Chrome are
+future work, not enabled by this contraction.
+
 This bootstrap opens a native desktop window and checks the real Go backend and SQLite database. A healthy startup displays:
 
 ```text
@@ -13,7 +22,11 @@ Backend connected
 Database connected
 ```
 
-Gmail OAuth, OS-secure refresh-token storage, and connection controls are implemented. Follow [Gmail development setup](docs/GMAIL_SETUP.md) to connect a dedicated test account. Bounded manual Inbox import and a cached mailbox summary are implemented. User-defined categories, local rule classification, reviewed Gmail label organization and structured offline phishing feature extraction are implemented. Phishing scoring/review and local semantic classification/search are implemented; optional reviewed AI reply drafting is implemented. The local application works without an account or external service. Failed connections are shown as disconnected; the browser-only preview does not simulate a backend.
+Gmail OAuth, OS credential storage, bounded initial/incremental sync, cached reading,
+editable categories, deterministic category review, explained phishing risk and
+reviewed label organization remain active. Follow [Gmail setup](docs/GMAIL_SETUP.md)
+with a dedicated test account. AI settings and read-only historical draft recovery
+remain available independently of retired generation workflows.
 
 ## Prerequisites
 
@@ -183,9 +196,12 @@ Connect an account and use **Refresh categories** to manage its local definition
 
 After connecting and syncing an account, open **Classification review** and choose **Classify this page**. MailPilot reviews up to five cached emails, saves the results, and shows each email’s predicted category, confidence and reasons. Use the previous/next review-page controls to cover more downloaded messages. **Refresh reviews** loads saved assessments without running the classifier. Reading results uses local SQLite and requires no AI provider/key.
 
-The hybrid classifier treats rule strength and cosine similarity as separate evidence. Specific unambiguous starter rules at 0.60 or above work without a local model; broader 0.55 rules require agreement with the leading semantic category. Agreement can select at cosine 0.35 with a lead above 0.05; semantic-only selection still requires 0.45 and that same margin. Conflicting rules, rule/model disagreement, near ties and explicit exclusions abstain. Scores are not probabilities. Rules and embeddings share quote/signature-trimmed text, and rules ignore limited immediate negations. Rule configuration contents and algorithm/policy versions are fingerprinted. Existing category definitions are unchanged; renamed, disabled or custom categories have no starter name mapping.
-
-Category definitions and label changes can make previous predictions stale; rerun the page to refresh them. Partial storage failures report successful saves and row errors separately. Classification saves suggestions only: it does not assign categories, modify Gmail or use an LLM. The explicitly configured local MiniLM provider computes and caches embeddings during manual hybrid review. See [semantic setup](docs/SEMANTIC_CLASSIFICATION.md) and [measured synthetic evaluation](docs/SEMANTIC_EVALUATION.md). The existing account session is required to access retained cached mail; reconnect and refresh after disconnect. Automated tests use synthetic mail and temporary databases.
+Review uses deterministic rules with the existing conservative direct-rule gate
+(0.60). No model is constructed, configured or invoked. Rule strength is a heuristic,
+not a probability. Ambiguous or weak evidence abstains. Older semantic/hybrid
+assessments with a different engine identity/version are stale and need explicit
+re-review before a new organization preview. Category descriptions do not train a
+model; custom categories without a matching rule may remain unsuggested.
 
 ## Safe Gmail organization
 
@@ -207,24 +223,18 @@ Set `MAILPILOT_RISK_HIGH_THRESHOLD=75` before starting the desktop app to change
 
 **Preview undo last batch** and its separate confirmation remove only verified additions, preserving pre-existing and unrelated labels. Created labels remain in Gmail. Interrupted or uncertain writes require reconciliation first. Schema migration 7 preserves existing plans and makes category references optional for risk proposals.
 
-## Search your mailbox
+## AI settings and historical draft recovery
 
-Configure the local MiniLM runtime using [semantic setup](docs/SEMANTIC_CLASSIFICATION.md), sync cached mail, then choose **Index cached mail** under **Search your mailbox**. Enter a description and choose **Search locally** for cosine-ranked results with sender, subject, date, score and the best matching subject/body passage. After upgrading, choose **Index cached mail** to build the new passage index even if classification vectors already exist. Optional date, sender and category filters use local cached data. Progress, incomplete-body coverage, partial results and cancellation are visible. Saved vectors are reused across searches and restarts; indexing is explicit and only computes missing current-model entries.
+Open **AI settings and historical draft recovery → Optional AI settings** to keep
+or update the existing OpenAI model/key configuration. Keys remain in OS credential
+storage; saving settings never uploads mail. No summary or generation workflow is
+exposed yet. The shared provider/consent foundation remains for future bounded
+single-email summaries and additional providers.
 
-Retrieval never sends mail to an external inference service or runs a Gmail keyword query. Gmail keyword search remains a separate future feature. [Search documentation](docs/SEMANTIC_SEARCH.md) explains cache coverage, filters, limits and the real synthetic 4/4 retrieval check. The optional Python/ONNX runtime still requires configured local paths and is not bundled in public installers.
-
-## Optional generative AI
-
-Open **Draft a reply → Optional AI settings** to choose an OpenAI model available
-to your project and save its API key in the OS credential store. AI is disabled
-until configured. Select a cached email, optionally include earlier cached thread
-messages, choose a tone and add an instruction. Review the exact external AI
-payload before approving generation; edit the proposed reply, then separately
-preview and approve creating a Gmail draft. MailPilot never sends mail.
-
-See [reply drafting and recovery](docs/REPLY_DRAFTING.md) and
-[provider security boundaries](docs/GENERATIVE_AI.md). Tests use FakeAIProvider
-and synthetic Gmail responses; no paid API calls or live mailbox writes are needed.
+Historical uncertain/conflicting draft actions can be reconciled with read-only
+Gmail requests and explicitly acknowledged after review. No new draft, reply,
+thread context or arbitrary prompt can be submitted. Old draft previews cannot be
+resumed for creation. Undo is unavailable; handle the draft manually in Gmail.
 
 Cached message subjects in the mailbox and semantic search now open a reader with
 sender, To/CC, timestamp, body, attachment metadata, cached Gmail labels,
@@ -234,10 +244,9 @@ messages; email links remain inactive and remote content is never loaded. Long
 bodies offer “Load more cached text.” Missing content is reported without a Gmail
 fetch. Attachment downloads and rich HTML display are not implemented.
 
-### Ask MailPilot
+### Retired implementation references
 
-After indexing cached mail and configuring the optional AI provider under Draft a reply,
-use **Ask MailPilot** to retrieve evidence locally, review the exact outbound context,
-and approve an answer with citations that open cached emails. Sender/date filters
-are optional. Answers can abstain and cannot modify mail. See [Ask MailPilot](docs/ASK_MAILPILOT.md)
-for privacy boundaries, context limits and validation coverage.
+[Ask](docs/ASK_MAILPILOT.md), [semantic search](docs/SEMANTIC_SEARCH.md),
+[semantic classification](docs/SEMANTIC_CLASSIFICATION.md) and
+[reply drafting](docs/REPLY_DRAFTING.md) describe historical implementations only.
+Their old workflows and model setup instructions are not active product features.

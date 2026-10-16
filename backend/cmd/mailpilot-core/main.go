@@ -16,13 +16,11 @@ import (
 	"mailpilot.local/core/internal/config"
 	"mailpilot.local/core/internal/credentials"
 	"mailpilot.local/core/internal/domain"
-	"mailpilot.local/core/internal/embedding"
-	"mailpilot.local/core/internal/embedding/minilm"
 	"mailpilot.local/core/internal/ipc"
 	"mailpilot.local/core/internal/logging"
+	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/provider/gmail"
 	"mailpilot.local/core/internal/risk"
-	"mailpilot.local/core/internal/search"
 	"mailpilot.local/core/internal/store/sqlite"
 	mailsync "mailpilot.local/core/internal/sync"
 )
@@ -62,18 +60,10 @@ func run() int {
 	var authentication *auth.Manager
 	var synchronization *mailsync.Service
 	var organization *app.Organization
-	var mailboxSearch *app.MailboxSearch
 	var replies *app.ReplyService
-	var askService *app.AskService
 	defer func() {
-		if askService != nil {
-			askService.Close()
-		}
 		if replies != nil {
 			replies.Close()
-		}
-		if mailboxSearch != nil {
-			mailboxSearch.Close()
 		}
 		if synchronization != nil {
 			synchronization.Clear()
@@ -120,36 +110,11 @@ func run() int {
 		if err != nil {
 			return nil, err
 		}
-		var semantic *classification.SemanticClassifier
-		var embeddings *embedding.Service
-		if cfg.EmbeddingModelDir != "" {
-			model, modelErr := minilm.New(ctx, cfg.EmbeddingPython, cfg.EmbeddingModelDir)
-			if modelErr != nil {
-				return nil, modelErr
-			}
-			embeddings, modelErr = embedding.NewLocalClassificationService(model, store.Emails(), store.Vectors(), store.CategoryVectors())
-			if modelErr != nil {
-				return nil, modelErr
-			}
-			semantic, modelErr = classification.NewSemanticClassifier(embeddings, classification.DefaultSemanticConfig())
-			if modelErr != nil {
-				return nil, modelErr
-			}
-		}
-		engine, err := classification.NewHybridClassifier(rules, semantic, classification.DefaultHybridConfig())
+		// Preserve the existing conservative rule gate; no semantic provider is composed.
+		engine, err := classification.NewHybridClassifier(rules, nil, classification.DefaultHybridConfig())
 		if err != nil {
 			return nil, err
 		}
-		var searchEmbeddings search.Embeddings
-		if embeddings != nil {
-			searchEmbeddings = embeddings
-		}
-		if searchEmbeddings != nil {
-			searchEmbeddings = &search.PassageEmbeddings{Base: searchEmbeddings, Emails: store.Emails(), Vectors: store.PassageVectors()}
-		}
-		retrieval := search.New(store.SearchIndex(), searchEmbeddings, engine)
-		mailboxSearch = app.NewMailboxSearch(ctxRoot, authentication.Session, retrieval, store.Categories())
-		application.Search = mailboxSearch
 		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {
 			return gmail.NewProvider(account, authentication)
 		}, store.Emails(), store.Categories(), store.Classifications(), store.Organization(), engine)
@@ -164,9 +129,7 @@ func run() int {
 			}
 			return p, p.Identity(), nil
 		}
-		askService = app.NewAskService(ctxRoot, authentication.Session, retrieval, store.Replies(), store.Emails(), aiFactory)
-		application.Ask = askService
-		replies = app.NewReplyService(ctxRoot, authentication.Session, store.Replies(), store.Emails(), func(account domain.AccountID) app.ReplyProvider { return gmail.NewProvider(account, authentication) }, keys, aiFactory)
+		replies = app.NewReplyMaintenance(ctxRoot, authentication.Session, store.Replies(), store.AISettings(), func(account domain.AccountID) provider.DraftFinder { return gmail.NewProvider(account, authentication) }, keys, aiFactory)
 		replies.SetOperationGate(gate)
 		application.Replies = replies
 		organization.SetRiskEngine(riskEngine)

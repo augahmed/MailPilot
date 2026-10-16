@@ -15,8 +15,6 @@ import (
 	"mailpilot.local/core/internal/repository"
 )
 
-var errReplyInput = errors.New("invalid reply input")
-
 type ReplyProvider interface {
 	provider.DraftCreator
 	provider.DraftFinder
@@ -28,7 +26,9 @@ type ReplyService struct {
 	root         context.Context
 	session      func() (domain.AccountID, context.Context, error)
 	store        reply.Store
+	settings     ai.SettingsStore
 	emails       repository.EmailRepository
+	finder       func(domain.AccountID) provider.DraftFinder
 	factory      func(domain.AccountID) ReplyProvider
 	keys         func(domain.AccountID) credentials.SecretStore
 	aiFactory    func(domain.AccountID, string) (ai.AIProvider, ai.Identity, error)
@@ -39,14 +39,15 @@ type ReplyService struct {
 	reviewID     string
 	response     ReplyResponse
 	cancel       context.CancelFunc
+	maintenance  bool
 	busy, closed bool
 	generation   uint64
 	wg           sync.WaitGroup
 	gate         chan struct{}
 }
 
-func NewReplyService(root context.Context, session func() (domain.AccountID, context.Context, error), store reply.Store, emails repository.EmailRepository, factory func(domain.AccountID) ReplyProvider, keys func(domain.AccountID) credentials.SecretStore, aiFactory func(domain.AccountID, string) (ai.AIProvider, ai.Identity, error)) *ReplyService {
-	return &ReplyService{root: root, session: session, store: store, emails: emails, factory: factory, keys: keys, aiFactory: aiFactory, response: emptyReply()}
+func NewReplyService(root context.Context, session func() (domain.AccountID, context.Context, error), store reply.Store, settings ai.SettingsStore, emails repository.EmailRepository, factory func(domain.AccountID) ReplyProvider, keys func(domain.AccountID) credentials.SecretStore, aiFactory func(domain.AccountID, string) (ai.AIProvider, ai.Identity, error)) *ReplyService {
+	return &ReplyService{root: root, session: session, store: store, settings: settings, emails: emails, factory: factory, keys: keys, aiFactory: aiFactory, response: emptyReply()}
 }
 func (s *ReplyService) SetOperationGate(gate chan struct{}) { s.gate = gate }
 func (s *ReplyService) clearLocked() {
@@ -78,38 +79,11 @@ func (a *App) Reply(ctx context.Context, p ReplyRequest) ReplyResponse {
 		r.Code = "unauthorized"
 		return r
 	}
-	r := a.Replies.Handle(ctx, p)
+	r := a.Replies.HandleMaintenance(ctx, p)
 	if a.Ask != nil && r.State == "configuring" && r.Code == "" && (p.Operation == "configure" || p.Operation == "disable") {
 		a.Ask.Clear()
 	}
 	return r
-}
-func replyCode(e error) string {
-	if e == nil {
-		return ""
-	}
-	switch {
-	case errors.Is(e, repository.ErrConflict), errors.Is(e, ai.ErrConsent):
-		return "stale_preview"
-	case errors.Is(e, repository.ErrNotFound):
-		return "not_found"
-	case errors.Is(e, repository.ErrInvalid), errors.Is(e, ai.ErrInvalid), errors.Is(e, provider.ErrInvalidArgument), errors.Is(e, errReplyInput):
-		return "validation"
-	case errors.Is(e, credentials.ErrUnavailable), errors.Is(e, credentials.ErrNotFound), errors.Is(e, ai.ErrCredentials):
-		return "ai_credentials_unavailable"
-	case errors.Is(e, ai.ErrDisabled):
-		return "ai_disabled"
-	case errors.Is(e, context.Canceled), errors.Is(e, context.DeadlineExceeded):
-		return "cancelled"
-	case errors.Is(e, provider.ErrUnsupported):
-		return "unsupported"
-	case errors.Is(e, provider.ErrAuthenticationRequired):
-		return "reauth_required"
-	case errors.Is(e, ai.ErrAuthentication), errors.Is(e, ai.ErrRateLimited), errors.Is(e, ai.ErrRefused), errors.Is(e, ai.ErrIncomplete):
-		return ai.SafeError(e).Error()
-	default:
-		return "operation_failed"
-	}
 }
 func (s *ReplyService) fresh(ctx context.Context, a domain.AccountID, sources []reply.Source) error {
 	for _, src := range sources {
@@ -147,6 +121,9 @@ func actionReply(base ReplyResponse, a reply.Action) ReplyResponse {
 	return base
 }
 func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse {
+	if s.maintenance && p.Operation != "configure" && p.Operation != "disable" {
+		return s.HandleMaintenance(ctx, p)
+	}
 	fail := func(code string) ReplyResponse { r := emptyReply(); r.Code = code; return r }
 	if !p.Valid() {
 		return fail("validation")
@@ -174,9 +151,9 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 	if s.response.AccountID == "" {
 		s.response.AccountID = string(account)
 	}
-	cfg, e := s.store.Settings(ctx, account)
+	cfg, e := s.settings.Settings(ctx, account)
 	if e != nil {
-		return fail("operation_failed")
+		return fail(aiWorkflowCode(e))
 	}
 	s.response.Configured = cfg.Enabled
 	s.response.Model = cfg.Model
@@ -224,10 +201,10 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 		s.response.AccountID = string(account)
 		s.startLocked(account, session, "configuring", func(job context.Context, r ReplyResponse) ReplyResponse {
 			if p.Operation == "disable" {
-				if e := s.store.SaveSettings(job, account, reply.Settings{}); e != nil {
-					r.Code = replyCode(e)
+				if e := s.settings.SaveSettings(job, account, ai.Settings{}); e != nil {
+					r.Code = aiWorkflowCode(e)
 				} else {
-					r.Code = replyCode(s.keys(account).Delete(job))
+					r.Code = aiWorkflowCode(s.keys(account).Delete(job))
 				}
 				r.Configured = false
 				r.Model = ""
@@ -236,7 +213,7 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 			} else {
 				_, _, err := s.aiFactory(account, p.Model)
 				if err != nil {
-					r.Code = replyCode(err)
+					r.Code = aiWorkflowCode(err)
 					r.State = "error"
 					return r
 				}
@@ -247,9 +224,9 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 					_, err = keys.Load(job)
 				}
 				if err == nil {
-					err = s.store.SaveSettings(job, account, reply.Settings{Model: p.Model, Enabled: true})
+					err = s.settings.SaveSettings(job, account, ai.Settings{Model: p.Model, Enabled: true})
 				}
-				r.Code = replyCode(err)
+				r.Code = aiWorkflowCode(err)
 				if err == nil {
 					r.Configured = true
 					r.Model = p.Model
@@ -269,7 +246,7 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 		}
 		rows, capped, err := s.store.Sources(ctx, account, domain.EmailID(p.EmailID), p.IncludeThread)
 		if err != nil {
-			return fail(replyCode(err))
+			return fail(aiWorkflowCode(err))
 		}
 		for _, row := range rows {
 			if row.Email.AccountID != account {
@@ -282,15 +259,15 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 		}
 		engine, identity, err := s.aiFactory(account, cfg.Model)
 		if err != nil {
-			return fail(replyCode(err))
+			return fail(aiWorkflowCode(err))
 		}
 		consent, err := ai.NewService(engine, identity)
 		if err != nil {
-			return fail(replyCode(err))
+			return fail(aiWorkflowCode(err))
 		}
 		preview, err := consent.Prepare(ctx, account, ai.Draft, payload)
 		if err != nil {
-			return fail(replyCode(err))
+			return fail(aiWorkflowCode(err))
 		}
 		if s.consent != nil {
 			s.consent.Clear()
@@ -324,7 +301,7 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 				return r
 			}
 			if err != nil {
-				r.Code = replyCode(err)
+				r.Code = aiWorkflowCode(err)
 				r.State = "error"
 				return r
 			}
@@ -344,13 +321,13 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 		plan := reply.Plan{ID: id, AccountID: account, EmailID: s.selected, Sources: append([]reply.Source{}, s.sources...), Draft: draft, ExpiresAt: time.Now().UTC().Add(5 * time.Minute)}
 		plan.Digest = plan.Hash()
 		if err := s.store.Create(ctx, plan); err != nil {
-			return fail(replyCode(err))
+			return fail(aiWorkflowCode(err))
 		}
 		s.response = actionReply(s.response, reply.Action{Plan: plan, State: "preview"})
 	case "create", "reconcile", "resolve", "undo_preview":
 		action, err := s.store.Get(ctx, account, p.ActionID)
 		if err != nil {
-			return fail(replyCode(err))
+			return fail(aiWorkflowCode(err))
 		}
 		if action.Plan.AccountID != account {
 			return fail("unauthorized")
@@ -365,7 +342,7 @@ func (s *ReplyService) Handle(ctx context.Context, p ReplyRequest) ReplyResponse
 				return fail("reconcile_required")
 			}
 			if err = s.store.Transition(ctx, account, p.ActionID, action.State, "resolved", action.Reference, "manually_resolved", true); err != nil {
-				return fail(replyCode(err))
+				return fail(aiWorkflowCode(err))
 			}
 			action.State = "resolved"
 			action.Code = "manually_resolved"
@@ -423,90 +400,4 @@ func (s *ReplyService) startLocked(account domain.AccountID, session context.Con
 			s.reviewID = r.ReviewID
 		}
 	}()
-}
-func (s *ReplyService) create(ctx context.Context, a domain.AccountID, action reply.Action, r ReplyResponse) ReplyResponse {
-	fail := func(e error) ReplyResponse {
-		result := actionReply(r, action)
-		result.Code = replyCode(e)
-		return result
-	}
-	if s.gate != nil {
-		select {
-		case s.gate <- struct{}{}:
-			defer func() { <-s.gate }()
-		case <-ctx.Done():
-			return fail(ctx.Err())
-		}
-	}
-	p := s.factory(a)
-	if !p.Capabilities().CreateDrafts {
-		return fail(provider.ErrUnsupported)
-	}
-	if e := s.fresh(ctx, a, action.Plan.Sources); e != nil {
-		return fail(e)
-	}
-	selected, e := s.emails.Get(ctx, a, action.Plan.EmailID)
-	if e != nil {
-		return fail(e)
-	}
-	live, e := p.FetchMessage(ctx, selected.Email.ProviderID)
-	if e != nil {
-		return fail(e)
-	}
-	// Check the exact selected message at the provider, including reply routing.
-	if live.AccountID != a || live.ProviderID != selected.Email.ProviderID || live.ProviderThreadID != action.Plan.Draft.ThreadID || selected.Email.ProviderThreadID != action.Plan.Draft.ThreadID {
-		return fail(provider.ErrMalformed)
-	}
-	live.ID = selected.Email.ID
-	h, e := repository.EmailContentHash(live)
-	if e != nil || h != selected.ContentHash {
-		return fail(repository.ErrConflict)
-	}
-	if e = s.store.Transition(ctx, a, action.Plan.ID, "preview", "in_flight", provider.DraftReference{}, "", false); e != nil {
-		return fail(e)
-	}
-	ref, e := p.CreateDraft(ctx, action.Plan.Draft)
-	state, code := "created", ""
-	if e != nil || ref.AccountID != a || ref.ProviderDraftID == "" || ref.ProviderMessageID == "" {
-		state = "uncertain"
-		code = "outcome_unknown"
-		ref = provider.DraftReference{}
-	}
-	persist, done := context.WithTimeout(context.WithoutCancel(s.root), 5*time.Second)
-	defer done()
-	if err := s.store.Transition(persist, a, action.Plan.ID, "in_flight", state, ref, code, false); err != nil {
-		state = "uncertain"
-		code = "journal_unavailable"
-	}
-	action.State = state
-	action.Code = code
-	action.Reference = ref
-	return actionReply(r, action)
-}
-func (s *ReplyService) reconcile(ctx context.Context, a domain.AccountID, action reply.Action, r ReplyResponse) ReplyResponse {
-	p := s.factory(a)
-	ref, e := p.FindDraft(ctx, action.Plan.Draft)
-	state, code := "created", ""
-	if e != nil || ref.AccountID != a || ref.ProviderDraftID == "" || ref.ProviderMessageID == "" {
-		state = "uncertain"
-		code = "outcome_unknown"
-		ref = action.Reference
-		if errors.Is(e, provider.ErrConflict) {
-			state = "conflict"
-			code = "draft_changed"
-		}
-	}
-	persist, done := context.WithTimeout(context.WithoutCancel(s.root), 5*time.Second)
-	defer done()
-	// A failed/cancelled provider read is not a completed reconciliation attempt.
-	reconciled := e == nil || errors.Is(e, provider.ErrConflict) || errors.Is(e, provider.ErrNotFound)
-	if err := s.store.Transition(persist, a, action.Plan.ID, action.State, state, ref, code, reconciled); err != nil {
-		state = "uncertain"
-		code = "journal_unavailable"
-	}
-	action.State = state
-	action.Code = code
-	action.Reference = ref
-	action.Reconciled = reconciled
-	return actionReply(r, action)
 }

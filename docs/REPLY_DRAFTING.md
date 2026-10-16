@@ -1,5 +1,10 @@
 # AI-assisted reply drafting
 
+Historical reference: this feature is retired from active UI/IPC/runtime composition.
+Do not use the setup or workflow below to re-enable it. Only necessary historical
+action recovery remains. See [active scope](../AGENTS.md) and
+[contraction status](ARCHITECTURE.md#active-entry-point-contraction-implemented-2026-10-16).
+
 Reply drafting is optional. Reading, sync, classification, risk analysis and local
 search work without an AI provider. The current adapter is OpenAI; no sending
 operation exists.

@@ -96,19 +96,19 @@ func TestRiskHighThreshold(t *testing.T) {
 	}
 }
 
-func TestLocalEmbeddingPaths(t *testing.T) {
-	for _, values := range []map[string]string{
-		{"MAILPILOT_EMBEDDING_PYTHON": "/trusted/python"},
-		{"MAILPILOT_EMBEDDING_MODEL_DIR": "/trusted/model"},
-		{"MAILPILOT_EMBEDDING_PYTHON": "relative", "MAILPILOT_EMBEDDING_MODEL_DIR": "/trusted/model"},
-	} {
-		if _, err := Load(nil, func(k string) string { return values[k] }, "/private/tmp/mailpilot"); err == nil {
-			t.Fatal("invalid embedding paths accepted")
+func TestRetiredModelSetupCannotBeConfigured(t *testing.T) {
+	for _, flag := range []string{"--embedding-python", "--embedding-model-dir"} {
+		if _, err := Load([]string{flag, "/unused"}, func(string) string { return "" }, t.TempDir()); err == nil {
+			t.Fatal("retired model flag accepted", flag)
 		}
 	}
-	values := map[string]string{"MAILPILOT_EMBEDDING_PYTHON": "/trusted/python", "MAILPILOT_EMBEDDING_MODEL_DIR": "/trusted/model"}
-	cfg, err := Load([]string{"--embedding-model-dir", "/other/model"}, func(k string) string { return values[k] }, "/private/tmp/mailpilot")
-	if err != nil || cfg.EmbeddingModelDir != "/other/model" || cfg.EmbeddingPython != "/trusted/python" {
-		t.Fatal(cfg, err)
+	// Stale environment settings no longer enable or validate a model worker.
+	if _, err := Load(nil, func(k string) string {
+		if k == "MAILPILOT_EMBEDDING_PYTHON" || k == "MAILPILOT_EMBEDDING_MODEL_DIR" {
+			t.Fatal("retired environment setting read")
+		}
+		return ""
+	}, t.TempDir()); err != nil {
+		t.Fatal(err)
 	}
 }

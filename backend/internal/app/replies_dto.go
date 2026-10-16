@@ -2,10 +2,12 @@ package app
 
 import (
 	"encoding/json"
-	"mailpilot.local/core/internal/credentials"
-	"mailpilot.local/core/internal/reply"
 	"strings"
 	"unicode/utf8"
+
+	"mailpilot.local/core/internal/ai"
+	"mailpilot.local/core/internal/credentials"
+	"mailpilot.local/core/internal/reply"
 )
 
 // KeyInput only permits incoming secret material; inherited formatting and JSON
@@ -15,7 +17,7 @@ type KeyInput struct{ credentials.Secret }
 func (k *KeyInput) UnmarshalJSON(data []byte) error {
 	var v string
 	if json.Unmarshal(data, &v) != nil || len(v) > 2048 {
-		return errReplyInput
+		return ai.ErrInvalid
 	}
 	k.Secret = credentials.NewSecret(v)
 	return nil

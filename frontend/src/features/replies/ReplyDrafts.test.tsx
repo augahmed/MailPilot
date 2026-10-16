@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -11,6 +12,7 @@ import {
   getMailbox,
   manageReplies,
   type ReplyResponse,
+  type MailboxPage,
 } from "../../lib/ipc/client";
 import fixture from "../../../../contracts/reply-drafting-v1.json";
 vi.mock("../../lib/ipc/client", () => ({
@@ -83,7 +85,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 async function selectAndPreview() {
-  await screen.findByRole("combobox", { name: "Email" });
+  await screen.findByRole("option", { name: "Host — Synthetic meeting" });
   await fireEvent.change(screen.getByRole("combobox", { name: "Email" }), {
     target: { value: "fixture-message" },
   });
@@ -287,4 +289,68 @@ it("does not show a late generated reply after disconnect/remount", async () => 
     expect(screen.queryByText("PRIVATE_LATE_REPLY")).not.toBeInTheDocument(),
   );
   expect(screen.queryByLabelText("Reply body")).not.toBeInTheDocument();
+});
+
+it("does not display a mailbox response belonging to an earlier account", async () => {
+  current = { ...current, accountId: "new-account" };
+  // This response can have been queued before the account changed.
+  render(<ReplyDrafts />);
+  await waitFor(() => expect(getMailbox).toHaveBeenCalled());
+  await screen.findByLabelText("Email");
+  expect(
+    screen.queryByRole("option", { name: "Host — Synthetic meeting" }),
+  ).not.toBeInTheDocument();
+});
+
+it("discards a delayed mailbox load after the active account changes", async () => {
+  let finish!: (page: MailboxPage) => void;
+  const oldPage: MailboxPage = {
+    accountId: "fixture-account",
+    rows: [
+      {
+        id: "old-message",
+        sender: "Old sender",
+        subject: "PRIVATE_OLD_MAIL",
+        receivedAt: 1,
+        bodyState: "complete",
+      },
+    ],
+    hasMore: false,
+  };
+  const newPage: MailboxPage = {
+    accountId: "new-account",
+    rows: [
+      {
+        id: "new-message",
+        sender: "New sender",
+        subject: "New mail",
+        receivedAt: 1,
+        bodyState: "complete",
+      },
+    ],
+    hasMore: false,
+  };
+  vi.mocked(getMailbox)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValue(newPage);
+  render(<ReplyDrafts />);
+  await waitFor(() => expect(getMailbox).toHaveBeenCalledTimes(1));
+  current = { ...current, accountId: "new-account" };
+  await screen.findByRole(
+    "option",
+    { name: "New sender — New mail" },
+    { timeout: 2500 },
+  );
+  await act(async () => finish(oldPage));
+  expect(
+    screen.queryByRole("option", { name: "Old sender — PRIVATE_OLD_MAIL" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: "New sender — New mail" }),
+  ).toBeInTheDocument();
 });

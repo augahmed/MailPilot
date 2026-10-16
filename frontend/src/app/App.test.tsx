@@ -127,6 +127,30 @@ describe("desktop status", () => {
     expect(await screen.findByText("Backend connected")).toBeInTheDocument();
     expect(screen.getByText("Database connected")).toBeInTheDocument();
   });
+  it("does not expose retired navigation, prompts or creation controls", async () => {
+    vi.mocked(getHealth).mockRejectedValue(new Error("offline"));
+    render(<App />);
+    await screen.findByText("Backend disconnected");
+    for (const name of [
+      /Ask MailPilot/i,
+      /Search your mailbox/i,
+      /Draft a reply/i,
+      /semantic/i,
+      /Index cached mail/i,
+      /Generate proposed reply/i,
+      /Create Gmail draft/i,
+      /Preview AI context/i,
+    ]) {
+      expect(screen.queryByRole("heading", { name })).toBeNull();
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(screen.queryByLabelText(/Optional instruction/i)).toBeNull();
+    expect(screen.queryByLabelText(/Include earlier cached/i)).toBeNull();
+    expect(semanticSearch).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Classification review" }),
+    ).toBeInTheDocument();
+  });
   it("does not claim connectivity after a bridge failure", async () => {
     vi.mocked(getHealth).mockRejectedValue(new Error("offline"));
     render(<App />);

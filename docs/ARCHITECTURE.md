@@ -2,6 +2,41 @@
 
 Status: implementation baseline, initially proposed on 2026-10-10. The desktop bootstrap is now authorized and implemented; later product phases below remain planned.
 
+Planning update, 2026-10-16: the user supports simplifying the product, adding a
+Chrome companion beside Gmail and retaining one bounded optional AI feature, and
+has requested planning only. [The focused product plan](PRODUCT_PLAN.md) proposes
+desktop reading/search/organization, local phishing explanations and selected-email
+AI summaries, with a small Chrome side panel using the same Go core. Its detailed
+requirements and architectural choices remain proposals; no feature retirement or
+extension implementation has been authorized by that planning request. The sections
+below continue to record existing implementation and its earlier roadmap. See
+section 12 for the proposed boundary changes.
+
+### Active entry-point contraction (implemented 2026-10-16)
+
+The desktop no longer mounts Ask, semantic search/indexing or reply drafting.
+`ask.manage`/`search.semantic` and their native handlers/permissions are removed.
+Go startup no longer constructs MiniLM, embeddings, retrieval, Ask or a semantic
+classifier. Model environment settings are ignored and model flags are rejected.
+The deterministic review retains the existing no-model rule policy (0.60 gate)
+through a nil-semantic compatibility wrapper; shared text/vector implementation
+packages remain for a later deletion pass. Gmail draft creation is unsupported
+at the adapter itself and its capability is false.
+
+`reply.manage` is restricted to status, existing provider settings configure/disable,
+and historical action reconcile/resolve/cancel. The composed maintenance service
+has no email-context reader or draft-creator factory and cannot restore old previews
+as editable sessions. Recovery loads immutable journal data and makes GET-only
+Gmail checks, with explicit local acknowledgment after reconciliation. Settings
+use the existing shared AI store and OS keyring; recovery does not require an AI
+adapter/key. Summary/provider abstractions and the existing OpenAI adapter remain;
+no new summary, provider or Chrome workflow is implemented by this change.
+
+All 13 migrations, journal evidence and necessary recovery codecs remain unchanged.
+Older feature descriptions below are implementation history, not permission to
+expose retired capabilities. AGENTS.md is the active scope contract. Keyword search
+and cold-start offline authorization remain gaps documented in the contraction plan.
+
 ### Bootstrap implementation status
 
 The current code implements the Go entry point, domain/use-case/adapter boundaries, non-secret configuration, structured stderr logging, React status UI, native Tauri lifecycle, bounded private JSON-RPC handshake/health/shutdown, and SQLite initialization. `config` and `logging` are small supporting packages added to the target layout. Bounded manual Inbox synchronization and a cached mailbox summary view are implemented; manual incremental history synchronization is now implemented; background scheduling and push notifications remain planned. Gmail OAuth and OS credential storage are implemented as described in section 5.
@@ -554,3 +589,53 @@ and output are memory-only, cleared on disconnect/settings changes. Retrieval re
 local; only the explicitly approved bounded request goes to the configured provider.
 No storage migration or new dependency is needed. See [Ask MailPilot](ASK_MAILPILOT.md)
 for bounds, threat-model limitations and synthetic/native validation coverage.
+
+### Maintainability review: shared settings and transport modules
+
+Non-secret optional-AI configuration now belongs to `ai.Settings` and its settings
+store, shared by Ask and reply drafting. The reply journal contract owns only reply
+sources and durable draft actions. SQLite exposes the shared settings separately;
+the historical `reply_ai_settings` table, existing data and migration checksums are
+preserved. Both use cases share safe application error mapping, and settings/draft
+reads preserve cancellation through the existing SQLite error sanitizer.
+
+The TypeScript IPC client reexports focused classification, organization and search
+modules, matching the existing reply/reader/Ask modules without changing wire
+contracts or component imports. Go draft creation/reconciliation is separated from
+reply generation/session handling within the same application package. No generic
+job framework, new dependency or product behavior is introduced by these extractions.
+The reply screen scopes asynchronous mailbox loads and private form state to its
+active account and ignores delayed responses from an earlier account.
+
+## 12. Proposed scope reduction and Chrome companion
+
+[PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the requirements-planning reference for the
+proposed next release. It recommends retiring active semantic retrieval/classification,
+MiniLM setup, Ask, AI reply generation and new Gmail draft creation; retaining
+one-account sync, cached reading, keyword search, deterministic category review,
+confirmed label organization and local phishing explanations; and reusing the
+existing AI/keyring/consent foundation for one selected-email summary workflow.
+This is a proposed scope change, not a description of changes already made.
+
+The Chrome extension would be a companion to the installed, running desktop app,
+not a second mail client or database owner. A fixed native messaging relay would
+connect through a restricted OS-local endpoint owned by the thin Rust host, which
+routes allowlisted requests to its existing Go sidecar. This adds a local transport
+boundary to the desktop-only baseline and requires a feasibility/security spike,
+client isolation, explicit pairing and real native tests. No application HTTP
+server, hosted backend, standalone extension credentials or second Go database
+process is proposed. Go retains all application policy and credential ownership.
+
+Automatic Gmail message/account identification remains unproven. Explicit cached
+message selection is the proposed baseline fallback; no subject-only match or
+undocumented UI identifier may silently authorize content access or AI disclosure.
+The extension initially exposes cached reading, risk explanations and per-request
+summary consent only, with no mailbox mutation or key-configuration capability.
+
+The plan also identifies cold-start offline authorization and complete local
+keyword search as gaps to resolve rather than assuming current cache/FTS support
+implements them. Feature retirement must preserve immutable migrations and necessary
+historical label/draft recovery. External-AI transfer, cache retention and data-at-rest
+policy obligations remain release-review items. Detailed functional requirements,
+quality targets, workflows, migration precautions and phase exit gates are in the
+product plan; they require review before implementation.

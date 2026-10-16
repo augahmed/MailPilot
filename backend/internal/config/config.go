@@ -14,8 +14,6 @@ import (
 )
 
 type Config struct {
-	EmbeddingPython    string
-	EmbeddingModelDir  string
 	RiskHighThreshold  int
 	InitialSyncLimit   int
 	GoogleClientID     string
@@ -43,8 +41,6 @@ func Load(args []string, getenv func(string) string, defaultDir string) (Config,
 			return Config{}, errors.New("invalid sync limit")
 		}
 	}
-	python := getenv("MAILPILOT_EMBEDDING_PYTHON")
-	modelDir := getenv("MAILPILOT_EMBEDDING_MODEL_DIR")
 	dir := defaultDir
 	if value := getenv("MAILPILOT_DATA_DIR"); value != "" {
 		dir = value
@@ -55,8 +51,6 @@ func Load(args []string, getenv func(string) string, defaultDir string) (Config,
 	}
 	flags := flag.NewFlagSet("mailpilot-core", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	flags.StringVar(&python, "embedding-python", python, "absolute trusted local inference Python executable")
-	flags.StringVar(&modelDir, "embedding-model-dir", modelDir, "absolute installed MiniLM model directory")
 	flags.IntVar(&high, "risk-high-threshold", high, "HIGH phishing-risk threshold (31-100)")
 	flags.IntVar(&limit, "sync-limit", limit, "maximum messages per Inbox sync (1-10000)")
 	flags.StringVar(&dir, "data-dir", dir, "absolute private application data directory")
@@ -81,12 +75,9 @@ func Load(args []string, getenv func(string) string, defaultDir string) (Config,
 	if !ok {
 		return Config{}, errors.New("invalid log level")
 	}
-	if (python == "") != (modelDir == "") || (python != "" && (!filepath.IsAbs(python) || !filepath.IsAbs(modelDir))) {
-		return Config{}, errors.New("embedding paths must be paired and absolute")
-	}
 	clientID := strings.TrimSpace(getenv("MAILPILOT_GOOGLE_CLIENT_ID"))
 	if clientID != "" && (!strings.HasSuffix(clientID, ".apps.googleusercontent.com") || strings.ContainsAny(clientID, " /\r\n")) {
 		return Config{}, errors.New("invalid Google client configuration")
 	}
-	return Config{EmbeddingPython: python, EmbeddingModelDir: modelDir, RiskHighThreshold: high, InitialSyncLimit: limit, DataDir: filepath.Clean(dir), LogLevel: parsed, GoogleClientID: clientID, GoogleClientSecret: credentials.NewSecret(getenv("MAILPILOT_GOOGLE_CLIENT_SECRET"))}, nil
+	return Config{RiskHighThreshold: high, InitialSyncLimit: limit, DataDir: filepath.Clean(dir), LogLevel: parsed, GoogleClientID: clientID, GoogleClientSecret: credentials.NewSecret(getenv("MAILPILOT_GOOGLE_CLIENT_SECRET"))}, nil
 }

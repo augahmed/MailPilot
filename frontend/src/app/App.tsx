@@ -1,4 +1,4 @@
-import { ReplyDrafts } from "../features/replies/ReplyDrafts";
+import { AIMaintenance } from "../features/replies/AIMaintenance";
 import { MailWorkspace } from "../features/reader/MailWorkspace";
 import { Organization } from "../features/organization/Organization";
 import { ClassificationReview } from "../features/classification/ClassificationReview";
@@ -93,7 +93,7 @@ export function App() {
         key={connectionRevision}
         connectionRevision={connectionRevision}
       />
-      <ReplyDrafts key={`replies-${connectionRevision}`} />
+      <AIMaintenance key={`maintenance-${connectionRevision}`} />
       <Categories key={`categories-${connectionRevision}`} />
       <ClassificationReview key={`classification-${connectionRevision}`} />
       <Organization key={`organization-${connectionRevision}`} />

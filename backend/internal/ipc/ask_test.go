@@ -40,12 +40,8 @@ func TestAskContractAndStrictIPC(t *testing.T) {
 		if err := Serve(context.Background(), strings.NewReader(input), &out, func(context.Context) (HealthService, error) { return askFixtureService{}, nil }); err != nil {
 			t.Fatal(err)
 		}
-		if params == `{"operation":"status"}` {
-			if !strings.Contains(out.String(), "unauthorized") {
-				t.Fatal("dispatch")
-			}
-		} else if !strings.Contains(out.String(), "Invalid parameters") || strings.Contains(out.String(), "private") {
-			t.Fatal("unvalidated request")
+		if !strings.Contains(out.String(), "Method not found") || strings.Contains(out.String(), "private") || strings.Contains(out.String(), "unauthorized") {
+			t.Fatal("retired Ask method reached application")
 		}
 	}
 }

@@ -14,9 +14,7 @@ fn main() {
             "categories_manage",
             "classification_review",
             "organization_manage",
-            "semantic_search",
             "reply_manage",
-            "ask_manage",
         ]),
     ))
     .expect("failed to build Tauri application manifest");

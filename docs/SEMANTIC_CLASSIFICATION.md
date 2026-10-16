@@ -1,5 +1,10 @@
 # Local semantic classification
 
+Historical reference: this feature is retired from active UI/IPC/runtime composition.
+Do not use the setup or workflow below to re-enable it. Only necessary historical
+action recovery remains. See [active scope](../AGENTS.md) and
+[contraction status](ARCHITECTURE.md#active-entry-point-contraction-implemented-2026-10-16).
+
 MailPilot reviews cached email with a versioned evidence-aware `HybridClassifier`. The semantic-only gate remains cosine **0.45**, with a lead strictly greater than **0.05**. The shipped rule scores remain **0.55–0.65**; they represent heuristic evidence strength, not estimated correctness probabilities.
 
 The policy is:

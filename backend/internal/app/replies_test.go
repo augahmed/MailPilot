@@ -155,13 +155,13 @@ func replyFixture(t *testing.T) (*ReplyService, *sqlite.Store, *FakeAIProvider, 
 			t.Fatal(e)
 		}
 	}
-	if e = db.Replies().SaveSettings(ctx, "a", reply.Settings{Model: "synthetic-model", Enabled: true}); e != nil {
+	if e = db.AISettings().SaveSettings(ctx, "a", ai.Settings{Model: "synthetic-model", Enabled: true}); e != nil {
 		t.Fatal(e)
 	}
 	fake := &FakeAIProvider{}
 	mailbox := &replyMailbox{email: email}
 	keys := &replyKeys{key: credentials.NewSecret("synthetic")}
-	s := NewReplyService(ctx, func() (domain.AccountID, context.Context, error) { return "a", ctx, nil }, db.Replies(), db.Emails(), func(domain.AccountID) ReplyProvider { return mailbox }, func(domain.AccountID) credentials.SecretStore { return keys }, func(_ domain.AccountID, model string) (ai.AIProvider, ai.Identity, error) {
+	s := NewReplyService(ctx, func() (domain.AccountID, context.Context, error) { return "a", ctx, nil }, db.Replies(), db.AISettings(), db.Emails(), func(domain.AccountID) ReplyProvider { return mailbox }, func(domain.AccountID) credentials.SecretStore { return keys }, func(_ domain.AccountID, model string) (ai.AIProvider, ai.Identity, error) {
 		return fake, ai.Identity{Provider: "fake", Model: model, External: true}, nil
 	})
 	t.Cleanup(s.Close)
@@ -419,7 +419,7 @@ func TestCancelSuppressesGenerationAndJournalsDispatchedDraft(t *testing.T) {
 func TestReplyConfigurationAndDisabledProvider(t *testing.T) {
 	s, db, fake, _ := replyFixture(t)
 	ctx := context.Background()
-	if e := db.Replies().SaveSettings(ctx, "a", reply.Settings{}); e != nil {
+	if e := db.AISettings().SaveSettings(ctx, "a", ai.Settings{}); e != nil {
 		t.Fatal(e)
 	}
 	if r := s.Handle(ctx, ReplyRequest{Operation: "prepare", AccountID: "a", EmailID: "selected", Tone: "Concise"}); r.Code != "ai_disabled" || fake.count() != 0 {
@@ -468,5 +468,15 @@ func TestReplyJournalFailurePreventsDispatch(t *testing.T) {
 	r := createReply(t, s, p)
 	if r.Code != "operation_failed" || mailbox.creates.Load() != 0 {
 		t.Fatal("write without journal")
+	}
+}
+
+func TestCancelledReplySettingsReadReturnsCancelled(t *testing.T) {
+	s, _, _, _ := replyFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := s.Handle(ctx, ReplyRequest{Operation: "status"})
+	if r.Code != "cancelled" {
+		t.Fatalf("expected cancelled wire code, got %q", r.Code)
 	}
 }

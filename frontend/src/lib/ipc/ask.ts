@@ -1,4 +1,3 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
 import { z } from "zod";
 const text = (max: number) =>
   z
@@ -93,22 +92,8 @@ export const askResponseSchema = z
 export type AskRequest = z.infer<typeof askRequestSchema>;
 export type AskResponse = z.infer<typeof askResponseSchema>;
 export async function askMail(
-  request: Partial<AskRequest> = {},
+  ..._request: [Partial<AskRequest>?]
 ): Promise<AskResponse> {
-  if (!isTauri()) throw new Error("Desktop app required");
-  const parameters = askRequestSchema.parse({
-    operation: "status",
-    accountId: "",
-    question: "",
-    sender: "",
-    from: null,
-    until: null,
-    previewId: "",
-    jobId: "",
-    approved: false,
-    ...request,
-  });
-  return askResponseSchema.parse(
-    await invoke<unknown>("ask_manage", { request: parameters }),
-  );
+  void _request;
+  throw new Error("Ask MailPilot is retired.");
 }

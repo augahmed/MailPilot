@@ -274,7 +274,7 @@ func TestSemanticSearchStrictContractAndAllowlist(t *testing.T) {
 	if err = json.Unmarshal(data, &fixture); err != nil || !fixture.Request.Valid() {
 		t.Fatal(err)
 	}
-	for _, change := range []string{`"topK":21`, `"query":""`, `"operation":"fetch"`, `"url":"https://example.test"`} {
+	for _, change := range []string{`"topK":2`, `"operation":"index"`, `"operation":"status"`, `"operation":"cancel"`, `"topK":21`, `"query":""`, `"operation":"fetch"`, `"url":"https://example.test"`} {
 		params := map[string]any{}
 		raw, _ := json.Marshal(fixture.Request)
 		_ = json.Unmarshal(raw, &params)
@@ -289,7 +289,7 @@ func TestSemanticSearchStrictContractAndAllowlist(t *testing.T) {
 		if err := Serve(context.Background(), strings.NewReader(input), &output, func(context.Context) (HealthService, error) { return searchFake{}, nil }); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(output.String(), "Invalid parameters") {
+		if !strings.Contains(output.String(), "Method not found") {
 			t.Fatal("untrusted search request accepted")
 		}
 	}

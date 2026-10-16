@@ -114,6 +114,19 @@ export const replyRequestSchema = z
         );
     }
   });
+// The original schema remains for historical fixtures; live invokes are restricted.
+export const activeReplyRequestSchema = replyRequestSchema.refine(
+  (p) =>
+    [
+      "status",
+      "configure",
+      "disable",
+      "reconcile",
+      "resolve",
+      "cancel",
+    ].includes(p.operation),
+  { message: "Reply generation and draft creation are retired" },
+);
 export const replyResponseSchema = z
   .object({
     accountId: text(100),
@@ -186,7 +199,7 @@ export async function manageReplies(
   request: Partial<ReplyRequest> = {},
 ): Promise<ReplyResponse> {
   if (!isTauri()) throw new Error("Desktop app required");
-  const parameters = replyRequestSchema.parse({
+  const parameters = activeReplyRequestSchema.parse({
     operation: "status",
     accountId: "",
     emailId: "",

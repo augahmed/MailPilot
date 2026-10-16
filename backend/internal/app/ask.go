@@ -12,7 +12,6 @@ import (
 	"mailpilot.local/core/internal/ai"
 	"mailpilot.local/core/internal/ask"
 	"mailpilot.local/core/internal/domain"
-	"mailpilot.local/core/internal/reply"
 	"mailpilot.local/core/internal/repository"
 	"mailpilot.local/core/internal/search"
 )
@@ -90,7 +89,7 @@ type AskRetriever interface {
 	Query(context.Context, domain.AccountID, string, int, search.Filters) (search.Result, error)
 }
 type AskSettings interface {
-	Settings(context.Context, domain.AccountID) (reply.Settings, error)
+	Settings(context.Context, domain.AccountID) (ai.Settings, error)
 }
 type AskEmails interface {
 	Get(context.Context, domain.AccountID, domain.EmailID) (repository.StoredEmail, error)
@@ -204,7 +203,7 @@ func (s *AskService) Handle(ctx context.Context, p AskRequest) AskResponse {
 	}
 	cfg, err := s.settings.Settings(ctx, account)
 	if err != nil {
-		return fail("operation_failed")
+		return fail(aiWorkflowCode(err))
 	}
 	if !cfg.Enabled {
 		s.clearLocked()
@@ -215,7 +214,7 @@ func (s *AskService) Handle(ctx context.Context, p AskRequest) AskResponse {
 			return fail("stale_preview")
 		}
 		consent := s.consent
-		s.startLocked(account, session, "generating", func(job context.Context, r AskResponse) (AskResponse, *ai.Service) {
+		s.startLocked(session, "generating", func(job context.Context, r AskResponse) (AskResponse, *ai.Service) {
 			err := s.fresh(job, account, r.Sources)
 			var output ai.Result
 			if err == nil {
@@ -233,7 +232,7 @@ func (s *AskService) Handle(ctx context.Context, p AskRequest) AskResponse {
 				r.Answer, err = ask.ValidateAnswer(output.Text.Reveal(), r.Sources)
 			}
 			if err != nil {
-				r.Code = replyCode(err)
+				r.Code = aiWorkflowCode(err)
 				r.State = "error"
 				r.Answer = ask.Answer{Insufficient: true, Claims: []ask.Claim{}}
 			} else {
@@ -245,7 +244,7 @@ func (s *AskService) Handle(ctx context.Context, p AskRequest) AskResponse {
 	} else {
 		s.clearLocked()
 		s.response.AccountID = string(account)
-		s.startLocked(account, session, "retrieving", func(job context.Context, r AskResponse) (AskResponse, *ai.Service) {
+		s.startLocked(session, "retrieving", func(job context.Context, r AskResponse) (AskResponse, *ai.Service) {
 			result, err := s.retrieval.Query(job, account, p.Question, 10, p.filters())
 			if err != nil {
 				r.State = "error"
@@ -258,7 +257,7 @@ func (s *AskService) Handle(ctx context.Context, p AskRequest) AskResponse {
 			r.Sources = sources
 			if err != nil {
 				r.State = "error"
-				r.Code = replyCode(err)
+				r.Code = aiWorkflowCode(err)
 				r.Sources = []ask.Source{}
 				return r, nil
 			}
@@ -270,19 +269,19 @@ func (s *AskService) Handle(ctx context.Context, p AskRequest) AskResponse {
 			engine, identity, err := s.factory(account, cfg.Model)
 			if err != nil {
 				r.State = "error"
-				r.Code = replyCode(err)
+				r.Code = aiWorkflowCode(err)
 				return r, nil
 			}
 			consent, err := ai.NewService(engine, identity)
 			if err != nil {
 				r.State = "error"
-				r.Code = replyCode(err)
+				r.Code = aiWorkflowCode(err)
 				return r, nil
 			}
 			preview, err := consent.Prepare(job, account, ai.Answer, payload)
 			if err != nil {
 				r.State = "error"
-				r.Code = replyCode(err)
+				r.Code = aiWorkflowCode(err)
 				return r, nil
 			}
 			r.State = "preview"
@@ -299,7 +298,7 @@ func (s *AskService) Handle(ctx context.Context, p AskRequest) AskResponse {
 	}
 	return s.response
 }
-func (s *AskService) startLocked(account domain.AccountID, session context.Context, state string, work func(context.Context, AskResponse) (AskResponse, *ai.Service)) {
+func (s *AskService) startLocked(session context.Context, state string, work func(context.Context, AskResponse) (AskResponse, *ai.Service)) {
 	job, cancel := context.WithTimeout(s.root, 2*time.Minute)
 	stop := context.AfterFunc(session, cancel)
 	s.cancel = cancel

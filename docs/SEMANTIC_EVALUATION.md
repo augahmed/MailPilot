@@ -1,5 +1,10 @@
 # Classification quality evaluation
 
+Historical reference: this feature is retired from active UI/IPC/runtime composition.
+Do not use the setup or workflow below to re-enable it. Only necessary historical
+action recovery remains. See [active scope](../AGENTS.md) and
+[contraction status](ARCHITECTURE.md#active-entry-point-contraction-implemented-2026-10-16).
+
 Measured on 2026-10-12 with the real local `all-MiniLM-L6-v2` ONNX adapter, pinned revision `10dbd2f06a8baf40ad285b037edda610c1b9a57c`, on Apple Silicon macOS. Inference uses the installed Python 3.12 environment and pinned runtime dependencies. Temporary SQLite databases exercise preprocessing, vector caches, classification, account-scoped assessment persistence and version metadata. No Gmail traffic, external inference or LLM classification is involved.
 
 ## Corpus and experimental protocol

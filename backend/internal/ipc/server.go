@@ -40,17 +40,9 @@ type MailService interface {
 type CategoryService interface {
 	ManageCategories(context.Context, app.CategoryRequest) app.CategoryPage
 }
-type AskService interface {
-	AskMail(context.Context, app.AskRequest) app.AskResponse
-}
-
 type ReplyService interface {
 	Reply(context.Context, app.ReplyRequest) app.ReplyResponse
 }
-type SearchService interface {
-	SearchMailbox(context.Context, app.SearchRequest) app.SearchResponse
-}
-
 type ClassificationService interface {
 	ReviewClassifications(context.Context, app.ClassificationRequest) app.ClassificationPage
 }
@@ -139,37 +131,16 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 				} else {
 					reply.Result = organization.Organize(callCtx, params)
 				}
-			case "ask.manage":
-				var params app.AskRequest
-				ask, ok := service.(AskService)
-				if !ok {
-					fail(-32601, "Method not found")
-				} else if strictDecode(req.Params, &params) != nil || !params.Valid() {
-					fail(-32602, "Invalid parameters")
-				} else {
-					reply.Result = ask.AskMail(callCtx, params)
-				}
 			case "reply.manage":
 				var params app.ReplyRequest
 				replies, ok := service.(ReplyService)
-				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+				if strictDecode(req.Params, &params) != nil || !params.ActiveValid() {
 					fail(-32602, "Invalid parameters")
 				} else if !ok {
 					fail(-32001, "Replies unavailable")
 				} else {
 					reply.Result = replies.Reply(callCtx, params)
 				}
-			case "search.semantic":
-				var params app.SearchRequest
-				search, ok := service.(SearchService)
-				if strictDecode(req.Params, &params) != nil || !params.Valid() {
-					fail(-32602, "Invalid parameters")
-				} else if !ok {
-					fail(-32001, "Search unavailable")
-				} else {
-					reply.Result = search.SearchMailbox(callCtx, params)
-				}
-
 			case "classification.review":
 				review, ok := service.(ClassificationService)
 				var params app.ClassificationRequest

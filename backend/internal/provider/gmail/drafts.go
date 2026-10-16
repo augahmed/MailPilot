@@ -56,31 +56,11 @@ func draftMIME(d provider.DraftInput, from string) []byte {
 	_ = w.Close()
 	return b.Bytes()
 }
-func (p *Provider) CreateDraft(ctx context.Context, d provider.DraftInput) (provider.DraftReference, error) {
-	if !validReply(d) {
-		return provider.DraftReference{}, provider.ErrInvalidArgument
-	}
-	var profile struct {
-		EmailAddress string `json:"emailAddress"`
-	}
-	if e := p.get(ctx, "/profile", url.Values{}, &profile); e != nil {
-		return provider.DraftReference{}, e
-	}
-	from, e := mail.ParseAddress(profile.EmailAddress)
-	if e != nil || from.Address != profile.EmailAddress || from.Name != "" {
-		return provider.DraftReference{}, provider.ErrMalformed
-	}
-	var request draftWire
-	request.Message.ThreadID = string(d.ThreadID)
-	request.Message.Raw = base64.RawURLEncoding.EncodeToString(draftMIME(d, from.Address))
-	var response draftWire
-	if e = p.post(ctx, "/drafts", request, &response); e != nil {
-		return provider.DraftReference{}, e
-	}
-	if !validID(response.ID) || !validID(response.Message.ID) || response.Message.ThreadID != string(d.ThreadID) {
-		return provider.DraftReference{}, provider.ErrMalformed
-	}
-	return provider.DraftReference{AccountID: p.account, ProviderDraftID: response.ID, ProviderMessageID: domain.ProviderMessageID(response.Message.ID)}, nil
+
+// CreateDraft is retired. Keep the adapter signature temporarily for historical
+// package compatibility, but never dispatch a new Gmail draft write.
+func (p *Provider) CreateDraft(context.Context, provider.DraftInput) (provider.DraftReference, error) {
+	return provider.DraftReference{}, provider.ErrUnsupported
 }
 
 // No match is never proof of non-creation: Gmail indexing may lag, or a user may

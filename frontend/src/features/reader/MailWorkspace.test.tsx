@@ -39,12 +39,9 @@ vi.mock("./MailReader", () => ({
     <button onClick={onBack}>Back to {source}</button>
   ),
 }));
-it("returns to the same mailbox page and search query with focus restored", async () => {
+it("preserves mailbox state and focus without mounting retired entry points", async () => {
   render(<MailWorkspace connectionRevision={0} />);
   fireEvent.click(screen.getByText("Next mailbox page"));
-  fireEvent.change(screen.getByLabelText("Saved search"), {
-    target: { value: "invoice" },
-  });
   const mailbox = screen.getByText("Open mailbox message");
   fireEvent.click(mailbox);
   expect(
@@ -53,11 +50,6 @@ it("returns to the same mailbox page and search query with focus restored", asyn
   fireEvent.click(screen.getByText("Back to mailbox"));
   expect(screen.getByText("Mailbox page 1")).toBeVisible();
   await waitFor(() => expect(mailbox).toHaveFocus());
-  fireEvent.click(screen.getByText("Open search message"));
-  fireEvent.click(screen.getByText("Back to search results"));
-  expect(screen.getByLabelText("Saved search")).toHaveValue("invoice");
-  const citation = screen.getByText("Open cited email");
-  fireEvent.click(citation);
-  fireEvent.click(screen.getByText("Back to Ask MailPilot"));
-  await waitFor(() => expect(citation).toHaveFocus());
+  expect(screen.queryByText("Open search message")).toBeNull();
+  expect(screen.queryByText("Open cited email")).toBeNull();
 });

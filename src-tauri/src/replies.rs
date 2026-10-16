@@ -19,6 +19,18 @@ pub struct ReplyRequest {
 }
 impl ReplyRequest {
     pub fn valid(&self) -> bool {
+        if ![
+            "status",
+            "configure",
+            "disable",
+            "reconcile",
+            "resolve",
+            "cancel",
+        ]
+        .contains(&self.operation.as_str())
+        {
+            return false;
+        }
         if [
             &self.account_id,
             &self.email_id,
@@ -197,11 +209,55 @@ mod tests {
     use super::*;
     use serde_json::{json, Value};
     #[test]
+    fn maintenance_only_accepts_settings_and_existing_action_recovery() {
+        let base = json!({"operation":"status","accountId":"a","emailId":"",
+            "includeThread":false,"instruction":"","tone":"","previewId":"",
+            "jobId":"","actionId":"","approved":false,"body":"","model":"","apiKey":""});
+        assert!(serde_json::from_value::<ReplyRequest>(base.clone())
+            .unwrap()
+            .valid());
+        for operation in [
+            "prepare",
+            "generate",
+            "preview_draft",
+            "create",
+            "summarize_thread",
+            "chat",
+            "undo_preview",
+        ] {
+            let mut request = base.clone();
+            request["operation"] = json!(operation);
+            request["actionId"] = json!("historical");
+            request["previewId"] = json!("approved-preview");
+            request["approved"] = json!(true);
+            assert!(!serde_json::from_value::<ReplyRequest>(request)
+                .unwrap()
+                .valid());
+        }
+        let mut recovery = base.clone();
+        recovery["operation"] = json!("reconcile");
+        recovery["actionId"] = json!("historical");
+        assert!(serde_json::from_value::<ReplyRequest>(recovery.clone())
+            .unwrap()
+            .valid());
+        recovery["body"] = json!("cannot substitute historical evidence");
+        assert!(!serde_json::from_value::<ReplyRequest>(recovery)
+            .unwrap()
+            .valid());
+        let mut settings = base;
+        settings["operation"] = json!("configure");
+        settings["model"] = json!("synthetic-model");
+        settings["apiKey"] = json!("synthetic-key");
+        assert!(serde_json::from_value::<ReplyRequest>(settings)
+            .unwrap()
+            .valid());
+    }
+    #[test]
     fn reply_contract_rejects_secret_responses_and_unapproved_writes() {
         let fixture: Value =
             serde_json::from_str(include_str!("../../contracts/reply-drafting-v1.json")).unwrap();
         let req: ReplyRequest = serde_json::from_value(fixture["request"].clone()).unwrap();
-        assert!(req.valid());
+        assert!(!req.valid()); // historical generation request is retired
         let result: ReplyResponse = serde_json::from_value(fixture["response"].clone()).unwrap();
         assert!(result.valid());
         assert_eq!(serde_json::to_value(result).unwrap(), fixture["response"]);
@@ -229,7 +285,7 @@ mod tests {
         create["actionId"] = json!("a");
         create["previewId"] = json!("digest");
         create["approved"] = json!(true);
-        assert!(serde_json::from_value::<ReplyRequest>(create.clone())
+        assert!(!serde_json::from_value::<ReplyRequest>(create.clone())
             .unwrap()
             .valid());
         create["approved"] = json!(false);

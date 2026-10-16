@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"mailpilot.local/core/internal/ai"
 	"strings"
 	"testing"
 	"time"
@@ -130,10 +131,10 @@ func TestReplySourcesBoundedAndSettingsHaveNoKeys(t *testing.T) {
 	if err != nil || capped || len(rows) != 1 {
 		t.Fatal("selected message expanded")
 	}
-	if err = s.Replies().SaveSettings(ctx, a, reply.Settings{Model: "fixture-model", Enabled: true}); err != nil {
+	if err = s.AISettings().SaveSettings(ctx, a, ai.Settings{Model: "fixture-model", Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := s.Replies().Settings(ctx, b)
+	cfg, err := s.AISettings().Settings(ctx, b)
 	if err != nil || cfg.Enabled {
 		t.Fatal("cross-account settings")
 	}

@@ -1,7 +1,5 @@
-import { AskMailPilot } from "../ask/AskMailPilot";
 import { useRef, useState } from "react";
 import { Mailbox } from "../mailbox/Mailbox";
-import { SemanticSearch } from "../search/SemanticSearch";
 import { MailReader } from "./MailReader";
 export function MailWorkspace({
   connectionRevision,
@@ -30,16 +28,6 @@ export function MailWorkspace({
           connectionRevision={connectionRevision}
           onOpen={(accountId, emailId, button) =>
             open("mailbox", accountId, emailId, button)
-          }
-        />
-        <AskMailPilot
-          onOpen={(accountId, emailId, button) =>
-            open("Ask MailPilot", accountId, emailId, button)
-          }
-        />
-        <SemanticSearch
-          onOpen={(accountId, emailId, button) =>
-            open("search results", accountId, emailId, button)
           }
         />
       </div>

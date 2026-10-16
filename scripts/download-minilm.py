@@ -18,6 +18,7 @@ FILES = {
 }
 
 def main():
+    raise SystemExit("MiniLM setup is retired; MailPilot no longer runs model workers.")
     parser = argparse.ArgumentParser()
     parser.add_argument("directory", type=Path)
     target = parser.parse_args().directory.resolve()

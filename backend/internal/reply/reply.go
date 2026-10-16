@@ -24,10 +24,6 @@ func ToneValid(t string) bool {
 	return t == "Professional" || t == "Friendly" || t == "Concise" || t == "Formal"
 }
 
-type Settings struct {
-	Model   string
-	Enabled bool
-}
 type Source struct {
 	ID   domain.EmailID
 	Hash string
@@ -50,8 +46,6 @@ type Action struct {
 }
 type Store interface {
 	Sources(context.Context, domain.AccountID, domain.EmailID, bool) ([]repository.StoredEmail, bool, error)
-	Settings(context.Context, domain.AccountID) (Settings, error)
-	SaveSettings(context.Context, domain.AccountID, Settings) error
 	Create(context.Context, Plan) error
 	Get(context.Context, domain.AccountID, string) (Action, error)
 	Latest(context.Context, domain.AccountID) (Action, error)

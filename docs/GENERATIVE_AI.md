@@ -1,5 +1,10 @@
 # Optional generative AI provider layer
 
+Active status: provider/key settings and the shared AI/consent foundation remain.
+Reply generation, thread summaries, Ask and arbitrary prompts have no active entry
+point. Selected-email summary UI/IPC and additional provider adapters are future
+work; the older operation descriptions below document retained implementation history.
+
 The Go backend now supports `AIProvider.GenerateDraft`, `SummarizeThread`, and
 `AnswerWithContext`. All three accept a context, a provider-neutral `ai.Request`
 (user instruction/question, selected plain-text context, output-token limit), and

@@ -1,5 +1,10 @@
 # Local semantic mailbox search
 
+Historical reference: this feature is retired from active UI/IPC/runtime composition.
+Do not use the setup or workflow below to re-enable it. Only necessary historical
+action recovery remains. See [active scope](../AGENTS.md) and
+[contraction status](ARCHITECTURE.md#active-entry-point-contraction-implemented-2026-10-16).
+
 **Search your mailbox** retrieves related downloaded email using local embeddings and cosine similarity. It uses the same optional all-MiniLM-L6-v2 provider as semantic classification. No query or mailbox content is sent to an external inference service. Search has no Gmail adapter, remote endpoint, LLM, or mailbox write capability. Gmail keyword syntax is not interpreted, and provider keyword search remains a separate, unimplemented feature.
 
 ## Use
