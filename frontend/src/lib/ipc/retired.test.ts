@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import type { ReplyRequest } from "./reply";
 import { manageReplies } from "./reply";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -31,7 +32,10 @@ it("blocks even explicitly approved reply generation and draft creation before I
     },
   ])
     await expect(
-      manageReplies({ accountId: "a", ...request }),
+      manageReplies({
+        accountId: "a",
+        ...request,
+      } as unknown as Partial<ReplyRequest>),
     ).rejects.toThrow();
   expect(invoke).not.toHaveBeenCalled();
 });

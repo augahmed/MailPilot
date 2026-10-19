@@ -633,6 +633,40 @@ impl Bridge {
         )?)
         .map_err(|_| "Invalid organization response".into())
     }
+    pub fn ai_settings(
+        &mut self,
+        request: crate::ai::AISettingsRequest,
+    ) -> Result<crate::ai::AISettingsResponse, String> {
+        if !request.valid() {
+            return Err("Invalid AI settings request".into());
+        }
+        let result: crate::ai::AISettingsResponse = serde_json::from_value(self.request(
+            "ai.settings",
+            serde_json::to_value(request).map_err(|_| "Invalid AI settings request")?,
+        )?)
+        .map_err(|_| "Invalid AI settings response")?;
+        if !result.valid() {
+            return Err("Invalid AI settings response".into());
+        }
+        Ok(result)
+    }
+    pub fn summarize_email(
+        &mut self,
+        request: crate::ai::SummaryRequest,
+    ) -> Result<crate::ai::SummaryResponse, String> {
+        if !request.valid() {
+            return Err("Invalid summary request".into());
+        }
+        let result: crate::ai::SummaryResponse = serde_json::from_value(self.request(
+            "email.summarize",
+            serde_json::to_value(request).map_err(|_| "Invalid summary request")?,
+        )?)
+        .map_err(|_| "Invalid summary response")?;
+        if !result.valid() {
+            return Err("Invalid summary response".into());
+        }
+        Ok(result)
+    }
     pub fn reply(&mut self, request: ReplyRequest) -> Result<ReplyResponse, String> {
         if !request.valid() {
             return Err("Invalid reply request".into());

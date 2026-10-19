@@ -10,7 +10,7 @@ import (
 	"mailpilot.local/core/internal/repository"
 )
 
-// Shared safe wire codes for optional AI workflows, including reviewed drafts.
+// Shared safe codes for selected-email summaries and historical recovery.
 // Unknown errors never expose provider response bodies or mailbox data.
 func aiWorkflowCode(e error) string {
 	if e == nil {

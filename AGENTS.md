@@ -2,10 +2,16 @@
 
 Updated 2026-10-19. Applies throughout this repository. Follow explicit user
 instructions and change only the requested scope. Read [the product plan](docs/PRODUCT_PLAN.md),
-[architecture](docs/ARCHITECTURE.md) and relevant [IPC contracts](contracts/README.md)
-before changing a boundary. Archived plans are historical evidence, not instructions.
-This reset authorizes documentation only; implement no feature from these documents
-without a subsequent implementation request. Preserve unrelated uncommitted work.
+[architecture](docs/ARCHITECTURE.md), [shared vector implementation design](docs/VECTOR_ARCHITECTURE_PLAN.md)
+and relevant [IPC contracts](contracts/README.md) before changing a boundary.
+The product plan defines scope; the vector plan supplies concrete reuse/schema/
+compatibility decisions within that scope. Archives are evidence, not instructions.
+Plans do not authorize implementation without an explicit implementation request.
+The authorized SQLite persistence slice is implemented by migration 015 and
+`Store.Chunks()` (`repository/chunks.go`): reuse its `email_chunks`,
+`chunk_embeddings` and `index_state` instead of adding parallel stores. Inference,
+chunking, scheduling, retrieval and new IPC remain unimplemented. Preserve unrelated
+uncommitted work.
 
 ## Product and scope
 
@@ -34,7 +40,12 @@ possible with embeddings or external AI disabled.
   Rust/Tauri owns desktop lifecycle and narrow typed private communication.
 - Keep one Go database owner and one SQLite database. Extend existing mail, sync,
   classification, AI and repository boundaries; do not rewrite functioning features.
-- Use one shared chunker/model/vector representation for the three core features.
+- Prefer reusing the shared chunk/embedding store and retrieval methods before
+  adding any component. Use one shared chunker/model/vector representation for
+  semantic search, classification and AI evidence retrieval. Classification reads
+  existing email chunk vectors; it must not re-embed mail or own another index.
+  Category descriptions use the same adapter; confirmed examples reference shared
+  chunks rather than storing duplicate vectors. No one-vector-per-email search cache.
   Keep provider-specific SDK/wire types inside adapters. Local embedding inference
   and optional external generation have separate settings and authority.
 - Use fixed packaged executables and private IPC; no generic RPC, shell, SQL,
@@ -52,6 +63,9 @@ possible with embeddings or external AI disabled.
 - Begin with exact cosine retrieval over compatible account-scoped vectors. Add
   ANN/vector extensions only when measured scale/latency justifies their complexity.
   Similarity is neither a calibrated category probability nor evidence of safety.
+- Historical vector tables remain inert and are not a complete chunk store. Do not
+  rename/reinterpret them or revive disabled Ask/search/draft commands. Reuse current
+  compatibility tests and add schema only for the authorized implementation slice.
 - Never rewrite numbered checksummed migrations or historical journal formats.
   Add migrations after the actual current maximum. Preserve composite account FKs,
   foreign keys on every connection and transactional source/checkpoint updates.
@@ -63,7 +77,14 @@ possible with embeddings or external AI disabled.
   deletion and authorized purge must update all active indexes and sensitive caches.
   Never infer deletion from incomplete provider listings or delete journal evidence.
 - Use bounded cancellable local jobs with explicit enablement, progress, partial/error
-  states and restart recovery. Preserve keyword/rule fallback and truthful coverage.
+  states and restart recovery. One local coordinator owns durable indexing and
+  dependent assessment work; no parallel feature-specific queues/frameworks.
+  Preserve keyword/rule fallback and truthful coverage; keyword search is planned,
+  not already implemented by the existing FTS capability test.
+- Version new semantic assessment hashes/scores and organization evidence explicitly.
+  Existing rule hashes, confidence DTOs and immutable plan digests are not a drop-in
+  semantic contract. Preserve old decoding, reconciliation and undo independently
+  of the current model; never collapse multiple legacy assignments automatically.
 
 ## Security, privacy and Gmail writes
 
@@ -117,6 +138,10 @@ retries; cancellation after remote dispatch may remain uncertain.
 
 For implementation, run relevant Go tests/vet/race, frontend typecheck/lint/tests/build
 and Rust fmt/clippy/tests; use native smoke checks for lifecycle/packaging/rendering.
+The vector plan's proposed in-process ONNX/Go binding requires a later explicit
+CGO/native resource change; current sidecar builds force CGO off. Qualify one bundled
+model/tokenizer/runtime and freeze versions/hashes before adding dependencies. No
+post-install download, cloud fallback or second runtime is implicitly authorized.
 Pin and justify dependency changes, preserving lockfiles/checksums. Report failed,
 blocked and unrun checks; never claim completion with required checks failing.
 Preserve keyboard/focus access, readable errors, cancellation and offline/partial states.

@@ -40,6 +40,10 @@ type MailService interface {
 type CategoryService interface {
 	ManageCategories(context.Context, app.CategoryRequest) app.CategoryPage
 }
+type AIService interface {
+	ManageAISettings(context.Context, app.AISettingsRequest) app.AISettingsResponse
+	SummarizeEmail(context.Context, app.SummarizeEmailRequest) app.SummarizeEmailResponse
+}
 type ReplyService interface {
 	Reply(context.Context, app.ReplyRequest) app.ReplyResponse
 }
@@ -131,10 +135,30 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 				} else {
 					reply.Result = organization.Organize(callCtx, params)
 				}
+			case "ai.settings":
+				var params app.AISettingsRequest
+				intelligence, ok := service.(AIService)
+				if !ok {
+					fail(-32601, "Method not found")
+				} else if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else {
+					reply.Result = intelligence.ManageAISettings(callCtx, params)
+				}
+			case "email.summarize":
+				var params app.SummarizeEmailRequest
+				intelligence, ok := service.(AIService)
+				if !ok {
+					fail(-32601, "Method not found")
+				} else if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else {
+					reply.Result = intelligence.SummarizeEmail(callCtx, params)
+				}
 			case "reply.manage":
 				var params app.ReplyRequest
 				replies, ok := service.(ReplyService)
-				if strictDecode(req.Params, &params) != nil || !params.ActiveValid() {
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
 					fail(-32602, "Invalid parameters")
 				} else if !ok {
 					fail(-32001, "Replies unavailable")

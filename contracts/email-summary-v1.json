@@ -1,0 +1,26 @@
+{
+  "request": {
+    "operation": "preview",
+    "accountId": "fixture-account",
+    "emailId": "selected",
+    "previewId": "",
+    "jobId": "",
+    "approved": false
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "emailId": "selected",
+    "state": "preview",
+    "previewId": "one-use-preview",
+    "jobId": "",
+    "expiresAt": 2000000000000,
+    "provider": "openai",
+    "model": "synthetic-model",
+    "external": true,
+    "email": "Subject: Synthetic meeting\nBody:\nPlease confirm by Tuesday.",
+    "policy": "Fixed single-email summary policy.",
+    "truncated": false,
+    "result": null,
+    "code": ""
+  }
+}

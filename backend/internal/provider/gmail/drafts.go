@@ -10,7 +10,6 @@ import (
 	"net/mail"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/provider"
@@ -30,37 +29,6 @@ func validReply(d provider.DraftInput) bool {
 }
 func canonicalBody(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
-}
-
-// Always encode/fold subject text, including ASCII that resembles an encoded
-// word. This preserves the exact reviewed subject without RFC header injection.
-func draftSubject(subject string) string {
-	var words []string
-	for len(subject) > 0 {
-		n := min(45, len(subject))
-		for n < len(subject) && !utf8.RuneStart(subject[n]) {
-			n--
-		}
-		words = append(words, "=?utf-8?B?"+base64.StdEncoding.EncodeToString([]byte(subject[:n]))+"?=")
-		subject = subject[n:]
-	}
-	return strings.Join(words, "\r\n ")
-}
-func draftMIME(d provider.DraftInput, from string) []byte {
-	var b bytes.Buffer
-	b.WriteString("From: " + (&mail.Address{Address: from}).String() + "\r\n")
-	b.WriteString("To: " + (&mail.Address{Name: d.Recipients[0].Name, Address: d.Recipients[0].Address}).String() + "\r\n")
-	b.WriteString("Subject: " + draftSubject(d.Subject) + "\r\nMessage-ID: " + d.MessageID + "\r\nIn-Reply-To: " + d.InReplyTo + "\r\nReferences: " + d.References + "\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n")
-	w := quotedprintable.NewWriter(&b)
-	_, _ = w.Write([]byte(canonicalBody(d.BodyText)))
-	_ = w.Close()
-	return b.Bytes()
-}
-
-// CreateDraft is retired. Keep the adapter signature temporarily for historical
-// package compatibility, but never dispatch a new Gmail draft write.
-func (p *Provider) CreateDraft(context.Context, provider.DraftInput) (provider.DraftReference, error) {
-	return provider.DraftReference{}, provider.ErrUnsupported
 }
 
 // No match is never proof of non-creation: Gmail indexing may lag, or a user may

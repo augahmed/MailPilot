@@ -46,15 +46,6 @@ func New(secrets credentials.SecretStore, model string) (*Provider, error) {
 func (p *Provider) Identity() ai.Identity {
 	return ai.Identity{Provider: "openai", Model: p.model, External: true}
 }
-func (p *Provider) GenerateDraft(ctx context.Context, r ai.Request) (ai.Result, error) {
-	return p.generate(ctx, ai.Draft, r)
-}
-func (p *Provider) SummarizeThread(ctx context.Context, r ai.Request) (ai.Result, error) {
-	return p.generate(ctx, ai.Summary, r)
-}
-func (p *Provider) AnswerWithContext(ctx context.Context, r ai.Request) (ai.Result, error) {
-	return p.generate(ctx, ai.Answer, r)
-}
 
 type inputMessage struct {
 	Role    string `json:"role"`
@@ -81,87 +72,82 @@ type response struct {
 	} `json:"output"`
 }
 
-func (p *Provider) generate(ctx context.Context, op ai.Operation, r ai.Request) (ai.Result, error) {
+func (p *Provider) SummarizeEmail(ctx context.Context, r ai.SummaryRequest) (ai.SummaryResult, error) {
 	if err := ctx.Err(); err != nil {
-		return ai.Result{}, err
+		return ai.SummaryResult{}, err
 	}
 	if err := r.Validate(); err != nil {
-		return ai.Result{}, err
+		return ai.SummaryResult{}, err
 	}
-	if (op == ai.Summary || op == ai.Answer) && strings.TrimSpace(r.Context.Reveal()) == "" {
-		return ai.Result{}, ai.ErrInvalid
-	}
+
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	select {
 	case p.gate <- struct{}{}:
 		defer func() { <-p.gate }()
 	case <-ctx.Done():
-		return ai.Result{}, ctx.Err()
+		return ai.SummaryResult{}, ctx.Err()
 	}
 	key, err := p.secrets.Load(ctx)
 	if ctx.Err() != nil {
-		return ai.Result{}, ctx.Err()
+		return ai.SummaryResult{}, ctx.Err()
 	}
 	if err != nil || key.Empty() {
-		return ai.Result{}, ai.ErrCredentials
+		return ai.SummaryResult{}, ai.ErrCredentials
 	}
 	if v := key.Reveal(); len(v) > 2048 || strings.IndexFunc(v, func(r rune) bool { return r < 33 || r > 126 }) >= 0 {
-		return ai.Result{}, ai.ErrCredentials
+		return ai.SummaryResult{}, ai.ErrCredentials
 	}
-	instructions, err := ai.Instructions(op)
-	if err != nil {
-		return ai.Result{}, err
-	}
+	instructions := ai.Instructions()
 	// Fixed framing only. No extra email metadata, hidden history or tools.
 	body, err := json.Marshal(request{p.model, instructions, []inputMessage{
-		{"user", r.Instruction.Reveal()}, {"user", "Untrusted email context:\n" + r.Context.Reveal()},
-	}, r.MaxOutputTokens, false, false})
+		{"user", "One untrusted cached email:\n" + r.Email.Reveal()},
+	}, ai.MaxOutputTokens, false, false})
 	if err != nil {
-		return ai.Result{}, ai.ErrInvalid
+		return ai.SummaryResult{}, ai.ErrInvalid
 	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return ai.Result{}, ai.ErrUnavailable
+		return ai.SummaryResult{}, ai.ErrUnavailable
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+key.Reveal())
 	httpRequest.Header.Set("Content-Type", "application/json")
 	resp, err := p.client.Do(httpRequest)
 	if err != nil {
 		if ctx.Err() != nil {
-			return ai.Result{}, ctx.Err()
+			return ai.SummaryResult{}, ctx.Err()
 		}
-		return ai.Result{}, ai.ErrUnavailable
+		return ai.SummaryResult{}, ai.ErrUnavailable
 	}
 	defer resp.Body.Close()
 	// Do not read/return provider error bodies, which may echo private input.
 	switch {
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
-		return ai.Result{}, ai.ErrAuthentication
+		return ai.SummaryResult{}, ai.ErrAuthentication
 	case resp.StatusCode == 429:
-		return ai.Result{}, ai.ErrRateLimited
+		return ai.SummaryResult{}, ai.ErrRateLimited
 	case resp.StatusCode != http.StatusOK:
-		return ai.Result{}, ai.ErrUnavailable
+		return ai.SummaryResult{}, ai.ErrUnavailable
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if ctx.Err() != nil {
-		return ai.Result{}, ctx.Err()
+		return ai.SummaryResult{}, ctx.Err()
 	}
 	if err != nil {
-		return ai.Result{}, ai.ErrUnavailable
+		return ai.SummaryResult{}, ai.ErrUnavailable
 	}
 	if len(raw) > maxResponseBytes || !utf8.Valid(raw) {
-		return ai.Result{}, ai.ErrResponse
+		return ai.SummaryResult{}, ai.ErrResponse
 	}
 	var data response
 	if json.Unmarshal(raw, &data) != nil {
-		return ai.Result{}, ai.ErrResponse
+		return ai.SummaryResult{}, ai.ErrResponse
 	}
 	if data.Status == "incomplete" {
-		return ai.Result{}, ai.ErrIncomplete
+		return ai.SummaryResult{}, ai.ErrIncomplete
 	}
 	if data.Status != "completed" {
-		return ai.Result{}, ai.ErrResponse
+		return ai.SummaryResult{}, ai.ErrResponse
 	}
 	var parts []string
 	for _, item := range data.Output {
@@ -169,23 +155,43 @@ func (p *Provider) generate(ctx context.Context, op ai.Operation, r ai.Request) 
 			continue
 		}
 		if item.Type != "message" || item.Role != "assistant" || item.Status != "completed" {
-			return ai.Result{}, ai.ErrResponse
+			return ai.SummaryResult{}, ai.ErrResponse
 		}
 		for _, content := range item.Content {
 			if content.Type == "refusal" {
-				return ai.Result{}, ai.ErrRefused
+				return ai.SummaryResult{}, ai.ErrRefused
 			}
 			if content.Type != "output_text" {
-				return ai.Result{}, ai.ErrResponse
+				return ai.SummaryResult{}, ai.ErrResponse
 			}
 			parts = append(parts, content.Text)
 		}
 	}
 	text := strings.Join(parts, "\n")
 	if len(text) > ai.MaxOutputBytes || strings.TrimSpace(text) == "" || strings.ContainsRune(text, '\x00') {
-		return ai.Result{}, ai.ErrResponse
+		return ai.SummaryResult{}, ai.ErrResponse
 	}
-	return ai.Result{Text: ai.NewText(text)}, nil
+	var decoded struct {
+		Summary   string   `json:"summary"`
+		Requests  []string `json:"requests"`
+		Deadlines []string `json:"deadlines"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(text))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&decoded) != nil || decoder.Decode(new(any)) != io.EOF || decoded.Requests == nil || decoded.Deadlines == nil {
+		return ai.SummaryResult{}, ai.ErrResponse
+	}
+	result := ai.SummaryResult{Summary: ai.NewText(decoded.Summary), Requests: []ai.Text{}, Deadlines: []ai.Text{}}
+	for _, v := range decoded.Requests {
+		result.Requests = append(result.Requests, ai.NewText(v))
+	}
+	for _, v := range decoded.Deadlines {
+		result.Deadlines = append(result.Deadlines, ai.NewText(v))
+	}
+	if err := result.Validate(r); err != nil {
+		return ai.SummaryResult{}, err
+	}
+	return result, nil
 }
 
 var _ ai.AIProvider = (*Provider)(nil)

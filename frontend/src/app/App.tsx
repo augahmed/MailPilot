@@ -1,3 +1,4 @@
+import { AISettings } from "../features/ai/AISettings";
 import { AIMaintenance } from "../features/replies/AIMaintenance";
 import { MailWorkspace } from "../features/reader/MailWorkspace";
 import { Organization } from "../features/organization/Organization";
@@ -93,6 +94,7 @@ export function App() {
         key={connectionRevision}
         connectionRevision={connectionRevision}
       />
+      <AISettings key={`ai-settings-${connectionRevision}`} />
       <AIMaintenance key={`maintenance-${connectionRevision}`} />
       <Categories key={`categories-${connectionRevision}`} />
       <ClassificationReview key={`classification-${connectionRevision}`} />

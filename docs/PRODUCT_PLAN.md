@@ -6,9 +6,15 @@ plan. [ARCHITECTURE.md](ARCHITECTURE.md) defines technical boundaries;
 describe implemented transport only. [The audit](DOCUMENTATION_AUDIT.md) records
 this documentation reset and the disposition of older plans.
 
-Status: planning only. The user requested no application, dependency, migration,
-credential, database or runtime changes. Milestones below require subsequent
-implementation requests; this document does not start them.
+The [vector architecture plan](VECTOR_ARCHITECTURE_PLAN.md) supplies the concrete
+reuse/removal map, logical schema, shared interfaces and compatibility gates for
+these same milestones. It is a technical supplement, not a second scope/prompt plan.
+
+Status: the subsequently authorized SQLite persistence portion of M2 is implemented
+by migration 015 and `Store.Chunks()`. M1 chunking and the remaining inference,
+coordination, search, classification and AI milestones are still planned. No model,
+new dependency, credentials or public IPC changed. Further work requires a scoped
+implementation request; this document does not start it.
 
 ## 1. Product purpose
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { EmailSummary } from "../ai/EmailSummary";
 import { readCachedMail, type ReadMailResponse } from "../../lib/ipc/reader";
 
 export function MailReader({
@@ -236,6 +237,11 @@ export function MailReader({
               </button>
             </>
           )}
+          <EmailSummary
+            key={`${accountId}/${emailId}/${page?.revision}`}
+            accountId={accountId}
+            emailId={emailId}
+          />
           <h3>Attachments</h3>
           <p className="help">
             Metadata only; files are not downloaded or opened.

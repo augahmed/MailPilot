@@ -67,12 +67,12 @@ func count(t *testing.T, s *Store, table string) int {
 
 func TestCleanDatabaseRunsAllMigrations(t *testing.T) {
 	s := testStore(t)
-	for _, table := range []string{"accounts", "emails", "email_addresses", "labels", "email_labels", "categories", "email_categories", "classification_results", "phishing_results", "mailbox_actions", "mailbox_action_items"} {
+	for _, table := range []string{"accounts", "emails", "email_addresses", "labels", "email_labels", "categories", "email_categories", "classification_results", "phishing_results", "mailbox_actions", "mailbox_action_items", "email_chunks", "chunk_embeddings", "index_state"} {
 		if count(t, s, table) != 0 {
 			t.Fatalf("new table %s not empty", table)
 		}
 	}
-	if count(t, s, "schema_migrations") != 13 {
+	if count(t, s, "schema_migrations") != 15 {
 		t.Fatal("missing migration")
 	}
 	rows, err := s.db.Query("PRAGMA foreign_key_check")
@@ -126,7 +126,7 @@ func TestUpgradeVersionOnePreservesSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SchemaVersion() != 13 || count(t, s, "settings") != 1 {
+	if s.SchemaVersion() != 15 || count(t, s, "settings") != 1 {
 		t.Fatal("upgrade lost data")
 	}
 	_ = s.Close()
@@ -135,7 +135,7 @@ func TestUpgradeVersionOnePreservesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if count(t, s, "schema_migrations") != 13 {
+	if count(t, s, "schema_migrations") != 15 {
 		t.Fatal("migrations repeated")
 	}
 }

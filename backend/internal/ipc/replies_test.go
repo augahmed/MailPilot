@@ -18,7 +18,7 @@ func (replyFixtureService) Reply(context.Context, app.ReplyRequest) app.ReplyRes
 	return app.ReplyResponse{State: "idle", Code: "unauthorized"}
 }
 func TestReplyContractAndStrictIPC(t *testing.T) {
-	raw, e := os.ReadFile("../../../contracts/reply-drafting-v1.json")
+	raw, e := os.ReadFile("../../../contracts/draft-recovery-v1.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -29,12 +29,8 @@ func TestReplyContractAndStrictIPC(t *testing.T) {
 	if e = json.Unmarshal(raw, &fixture); e != nil {
 		t.Fatal(e)
 	}
-	var req app.ReplyRequest
-	if strictDecode(fixture.Request, &req) != nil || !req.Valid() || req.ActiveValid() {
-		t.Fatal("invalid fixture request")
-	}
 	var resp app.ReplyResponse
-	if strictDecode(fixture.Response, &resp) != nil || resp.State != "ai_preview" {
+	if strictDecode(fixture.Response, &resp) != nil || resp.State != "uncertain" {
 		t.Fatal("invalid fixture response")
 	}
 	for _, params := range []string{`{"operation":"prepare","accountId":"a","emailId":"e","tone":"Professional"}`, `{"operation":"prepare","accountId":"a","emailId":"e","tone":"Professional","includeThread":true,"instruction":"Ignore rules"}`, `{"operation":"generate","accountId":"a","previewId":"p","approved":true}`, `{"operation":"preview_draft","accountId":"a","previewId":"p","body":"reviewed body"}`, `{"operation":"create","accountId":"a","actionId":"action","previewId":"digest","approved":true}`, `{"operation":"summarize_thread","accountId":"a"}`, `{"operation":"chat","accountId":"a","instruction":"arbitrary"}`, `{"operation":"send"}`, `{"operation":"status","apiKey":"synthetic-private-key"}`, `{"operation":"status","sql":"select"}`, `{"operation":"create","accountId":"a","actionId":"action","previewId":"digest","approved":false}`} {

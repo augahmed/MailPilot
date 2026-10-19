@@ -1,0 +1,20 @@
+{
+  "request": {
+    "operation": "status",
+    "accountId": "fixture-account",
+    "jobId": "",
+    "actionId": "",
+    "approved": false
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "state": "uncertain",
+    "jobId": "",
+    "to": "recipient@example.test",
+    "subject": "Historical meeting",
+    "actionId": "old",
+    "draftId": "",
+    "reconciled": true,
+    "code": "outcome_unknown"
+  }
+}

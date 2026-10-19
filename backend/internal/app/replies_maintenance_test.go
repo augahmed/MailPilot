@@ -2,69 +2,106 @@ package app
 
 import (
 	"context"
-	"testing"
-
+	"errors"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/provider"
+	"mailpilot.local/core/internal/reply"
+	"mailpilot.local/core/internal/repository"
+	"strings"
+	"testing"
+	"time"
 )
 
-func TestMaintenanceRejectsNewWorkAndDoesNotRestoreHistoricalPreviews(t *testing.T) {
-	legacy, db, fake, mailbox := replyFixture(t)
-	preview := previewDraft(t, legacy) // synthetic historical record, no Gmail write
-	before := fake.count()
-	s := NewReplyMaintenance(context.Background(), legacy.session, db.Replies(), db.AISettings(),
-		func(domain.AccountID) provider.DraftFinder { return mailbox }, legacy.keys, legacy.aiFactory)
-	t.Cleanup(s.Close)
-	application := &App{Replies: s}
-	r := application.Reply(context.Background(), ReplyRequest{Operation: "status"})
-	if r.ActionID != preview.ActionID || r.State != "draft_preview" || r.PreviewID != "" || r.ReviewID != "" || s.reviewID != "" || s.selected != "" {
-		t.Fatal("historical preview became an editable/creatable session")
+type historicalDrafts struct{ action reply.Action }
+
+func (s *historicalDrafts) Get(_ context.Context, a domain.AccountID, id string) (reply.Action, error) {
+	if a != s.action.Plan.AccountID || id != s.action.Plan.ID {
+		return reply.Action{}, repository.ErrNotFound
 	}
-	for _, p := range []ReplyRequest{
-		{Operation: "prepare", AccountID: "a", EmailID: "selected", IncludeThread: true, Tone: "Friendly", Instruction: "arbitrary"},
-		{Operation: "generate", AccountID: "a", PreviewID: "p", Approved: true},
-		{Operation: "preview_draft", AccountID: "a", PreviewID: "p", Body: "body"},
-		{Operation: "create", AccountID: "a", ActionID: preview.ActionID, PreviewID: preview.PreviewID, Approved: true},
-		{Operation: "summarize_thread", AccountID: "a"},
-		{Operation: "chat", AccountID: "a", Instruction: "arbitrary"},
-	} {
-		if r := application.Reply(context.Background(), p); r.Code != "validation" {
-			t.Fatal("retired application operation accepted", p.Operation)
-		}
-		if r := s.Handle(context.Background(), p); r.Code != "validation" {
-			t.Fatal("maintenance service exposed legacy implementation", p.Operation)
-		}
+	return s.action, nil
+}
+func (s *historicalDrafts) Latest(ctx context.Context, a domain.AccountID) (reply.Action, error) {
+	return s.Get(ctx, a, s.action.Plan.ID)
+}
+func (s *historicalDrafts) Transition(_ context.Context, a domain.AccountID, id, from, to string, ref provider.DraftReference, code string, reconciled bool) error {
+	if a != s.action.Plan.AccountID || id != s.action.Plan.ID || s.action.State != from {
+		return repository.ErrConflict
 	}
-	if fake.count() != before || mailbox.creates.Load() != 0 || mailbox.finds.Load() != 0 {
-		t.Fatal("rejected operation dispatched external work")
-	}
+	s.action.State = to
+	s.action.Reference = ref
+	s.action.Code = code
+	s.action.Reconciled = reconciled
+	return nil
 }
 
-func TestMaintenanceRecoversWithoutAIAndNeverCreatesDrafts(t *testing.T) {
-	legacy, db, fake, mailbox := replyFixture(t)
-	p := previewDraft(t, legacy)
+type historicalFinder struct{ err error }
+
+func (f historicalFinder) FindDraft(context.Context, provider.DraftInput) (provider.DraftReference, error) {
+	return provider.DraftReference{AccountID: "a", ProviderDraftID: "existing", ProviderMessageID: "existing-message"}, f.err
+}
+func historicalRecovery(t *testing.T, state string, findErr error) *ReplyService {
+	t.Helper()
+	plan := reply.Plan{ID: "old", AccountID: "a", EmailID: "selected", Sources: []reply.Source{{ID: "selected", Hash: strings.Repeat("a", 64)}}, Draft: provider.DraftInput{Recipients: []domain.EmailAddress{{Address: "recipient@example.test"}}, Subject: "Historical", BodyText: "Historical reviewed body", ThreadID: "thread", MessageID: "<mailpilot-old@mailpilot.invalid>", InReplyTo: "<parent@example.test>", References: "<parent@example.test>"}, ExpiresAt: time.Now().Add(-time.Hour)}
+	plan.Digest = plan.Hash()
+	if !plan.Valid() {
+		t.Fatal("bad fixture")
+	}
+	store := &historicalDrafts{action: reply.Action{Plan: plan, State: state}}
 	ctx := context.Background()
-	if err := db.Replies().Transition(ctx, "a", p.ActionID, "preview", "in_flight", provider.DraftReference{}, "", false); err != nil {
-		t.Fatal(err)
-	}
-	before := fake.count()
-	s := NewReplyMaintenance(ctx, legacy.session, db.Replies(), db.AISettings(),
-		func(domain.AccountID) provider.DraftFinder { return mailbox }, nil, nil)
+	s := NewReplyMaintenance(ctx, func() (domain.AccountID, context.Context, error) { return "a", ctx, nil }, store, func(domain.AccountID) provider.DraftFinder { return historicalFinder{err: findErr} })
 	t.Cleanup(s.Close)
-	// No AI adapter/key factory is needed for historical outcome checks.
-	r := s.HandleMaintenance(ctx, ReplyRequest{Operation: "status"})
-	if r.State != "uncertain" || r.ActionID != p.ActionID {
-		t.Fatal("interrupted action hidden")
+	return s
+}
+func waitRecovery(t *testing.T, s *ReplyService) ReplyResponse {
+	t.Helper()
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+		r := s.HandleMaintenance(context.Background(), ReplyRequest{Operation: "status"})
+		if r.State != "reconciling" {
+			return r
+		}
+		time.Sleep(time.Millisecond)
 	}
-	if r := s.HandleMaintenance(ctx, ReplyRequest{Operation: "reconcile", AccountID: "b", ActionID: p.ActionID}); r.Code != "unauthorized" {
-		t.Fatal("cross-account recovery accepted")
+	t.Fatal("recovery timed out")
+	return ReplyResponse{}
+}
+func TestRecoveryNeverRestoresCreationOrAI(t *testing.T) {
+	s := historicalRecovery(t, "preview", nil)
+	r := s.HandleMaintenance(context.Background(), ReplyRequest{Operation: "status"})
+	if r.State != "draft_preview" {
+		t.Fatal("creatable preview restored")
 	}
-	if r := s.HandleMaintenance(ctx, ReplyRequest{Operation: "resolve", AccountID: "a", ActionID: p.ActionID, Approved: true}); r.Code != "reconcile_required" {
-		t.Fatal("resolved before reconciliation")
+	for _, op := range []string{"configure", "disable", "prepare", "generate", "create", "preview_draft", "summarize_thread", "chat", "classify", "undo_preview"} {
+		if r := s.HandleMaintenance(context.Background(), ReplyRequest{Operation: op, AccountID: "a"}); r.Code != "validation" {
+			t.Fatal(op)
+		}
 	}
-	s.HandleMaintenance(ctx, ReplyRequest{Operation: "reconcile", AccountID: "a", ActionID: p.ActionID})
-	r = waitReply(t, s)
-	if r.State != "created" || !r.Reconciled || mailbox.finds.Load() != 1 || mailbox.creates.Load() != 0 || fake.count() != before {
-		t.Fatal("legacy reconciliation generated or wrote mail", r.State, r.Code)
+}
+func TestRecoveryWorksWithoutAIOrKeysAndPreservesUncertainty(t *testing.T) {
+	for _, tc := range []struct {
+		err   error
+		state string
+	}{{nil, "created"}, {provider.ErrNotFound, "uncertain"}, {provider.ErrConflict, "conflict"}, {errors.New("private transport error"), "uncertain"}} {
+		s := historicalRecovery(t, "in_flight", tc.err)
+		ctx := context.Background()
+		if r := s.HandleMaintenance(ctx, ReplyRequest{Operation: "resolve", AccountID: "a", ActionID: "old", Approved: true}); r.Code != "reconcile_required" {
+			t.Fatal("premature resolution")
+		}
+		if r := s.HandleMaintenance(ctx, ReplyRequest{Operation: "reconcile", AccountID: "b", ActionID: "old"}); r.Code != "unauthorized" {
+			t.Fatal("foreign recovery")
+		}
+		s.HandleMaintenance(ctx, ReplyRequest{Operation: "reconcile", AccountID: "a", ActionID: "old"})
+		r := waitRecovery(t, s)
+		if r.State != tc.state {
+			t.Fatal(r.State, r.Code)
+		}
+		if tc.err == provider.ErrNotFound || tc.err == provider.ErrConflict {
+			if !r.Reconciled {
+				t.Fatal("reconciliation lost")
+			}
+			r = s.HandleMaintenance(ctx, ReplyRequest{Operation: "resolve", AccountID: "a", ActionID: "old", Approved: true})
+			if r.State != "resolved" {
+				t.Fatal(r.Code)
+			}
+		}
 	}
 }

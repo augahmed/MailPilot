@@ -1,0 +1,22 @@
+{
+  "request": {
+    "operation": "configure",
+    "accountId": "fixture-account",
+    "provider": "openai",
+    "model": "synthetic-model",
+    "apiKey": "synthetic-key"
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "provider": "openai",
+    "model": "synthetic-model",
+    "enabled": true,
+    "providers": [
+      {
+        "id": "openai",
+        "external": true
+      }
+    ],
+    "code": ""
+  }
+}

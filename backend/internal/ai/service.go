@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"mailpilot.local/core/internal/domain"
 )
@@ -22,15 +21,14 @@ type Preview struct {
 	ID           string
 	AccountID    domain.AccountID
 	Identity     Identity
-	Operation    Operation
 	Instructions Text
-	Request      Request
+	Request      SummaryRequest
 	ExpiresAt    time.Time
 }
 
 // Service is a bounded in-memory consent boundary. The caller must authorize
 // the account/session before Prepare AND Execute, and Clear on disconnect.
-// No IPC exposure is provided until a UI can display the complete preview.
+// The summary use case discloses the complete bounded preview through typed IPC.
 type Service struct {
 	mu         sync.Mutex
 	provider   AIProvider
@@ -53,7 +51,7 @@ func NewService(provider AIProvider, identity Identity) (*Service, error) {
 
 func (s *Service) Enabled() bool { return s != nil && s.provider != nil }
 
-func (s *Service) Prepare(ctx context.Context, account domain.AccountID, op Operation, request Request) (Preview, error) {
+func (s *Service) Prepare(ctx context.Context, account domain.AccountID, request SummaryRequest) (Preview, error) {
 	if err := ctx.Err(); err != nil {
 		return Preview{}, err
 	}
@@ -66,40 +64,35 @@ func (s *Service) Prepare(ctx context.Context, account domain.AccountID, op Oper
 	if err := request.Validate(); err != nil {
 		return Preview{}, err
 	}
-	if (op == Summary || op == Answer) && strings.TrimSpace(request.Context.Reveal()) == "" {
-		return Preview{}, ErrInvalid
-	}
-	instructions, err := Instructions(op)
-	if err != nil {
-		return Preview{}, err
-	}
+
+	instructions := Instructions()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.busy {
 		return Preview{}, ErrBusy
 	}
 	var token [32]byte
-	if _, err = rand.Read(token[:]); err != nil {
+	if _, err := rand.Read(token[:]); err != nil {
 		return Preview{}, ErrUnavailable
 	}
-	p := Preview{hex.EncodeToString(token[:]), account, s.identity, op, NewText(instructions), request, s.now().Add(5 * time.Minute)}
+	p := Preview{hex.EncodeToString(token[:]), account, s.identity, NewText(instructions), request, s.now().Add(5 * time.Minute)}
 	s.pending = &p
 	return p, nil
 }
 
 // Execute consumes a matching approval before dispatch, including failed or
 // uncertain requests. No automatic retries; a new preview is needed to retry.
-func (s *Service) Execute(ctx context.Context, account domain.AccountID, previewID string, approved bool) (Result, error) {
+func (s *Service) Execute(ctx context.Context, account domain.AccountID, previewID string, approved bool) (SummaryResult, error) {
 	if err := ctx.Err(); err != nil {
-		return Result{}, err
+		return SummaryResult{}, err
 	}
 	if !s.Enabled() {
-		return Result{}, ErrDisabled
+		return SummaryResult{}, ErrDisabled
 	}
 	s.mu.Lock()
 	if s.busy {
 		s.mu.Unlock()
-		return Result{}, ErrBusy
+		return SummaryResult{}, ErrBusy
 	}
 	p := s.pending
 	if p != nil && !s.now().Before(p.ExpiresAt) {
@@ -108,7 +101,7 @@ func (s *Service) Execute(ctx context.Context, account domain.AccountID, preview
 	}
 	if !approved || p == nil || p.ID != previewID || p.AccountID != account {
 		s.mu.Unlock()
-		return Result{}, ErrConsent
+		return SummaryResult{}, ErrConsent
 	}
 	s.pending = nil
 	s.busy = true
@@ -117,31 +110,22 @@ func (s *Service) Execute(ctx context.Context, account domain.AccountID, preview
 	generation := s.generation
 	s.mu.Unlock()
 	defer cancel()
-	var result Result
-	var err error
-	switch p.Operation {
-	case Draft:
-		result, err = s.provider.GenerateDraft(ctx, p.Request)
-	case Summary:
-		result, err = s.provider.SummarizeThread(ctx, p.Request)
-	case Answer:
-		result, err = s.provider.AnswerWithContext(ctx, p.Request)
-	}
+	result, err := s.provider.SummarizeEmail(ctx, p.Request)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.busy, s.cancel = false, nil
 	if generation != s.generation {
-		return Result{}, ErrConsent
+		return SummaryResult{}, ErrConsent
 	}
 	if ctx.Err() != nil {
-		return Result{}, ctx.Err()
+		return SummaryResult{}, ctx.Err()
 	}
 	if err != nil {
-		return Result{}, SafeError(err)
+		return SummaryResult{}, SafeError(err)
 	}
-	t := result.Text.Reveal()
-	if strings.TrimSpace(t) == "" || len(t) > MaxOutputBytes || !utf8.ValidString(t) || strings.ContainsRune(t, '\x00') {
-		return Result{}, ErrResponse
+	if err := result.Validate(p.Request); err != nil {
+		return SummaryResult{}, err
 	}
 	return result, nil
 }

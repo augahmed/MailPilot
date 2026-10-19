@@ -182,13 +182,6 @@ type DraftReference struct {
 	ProviderMessageID domain.ProviderMessageID
 }
 
-type DraftCreator interface {
-	// CreateDraft stores a draft remotely; it never sends. This is a mailbox write
-	// requiring preview/confirmation/journaling. Do not blindly retry after
-	// ambiguous failures: providers may have created a draft before disconnection.
-	CreateDraft(context.Context, DraftInput) (DraftReference, error)
-}
-
 // DraftFinder reconciles only an application-generated draft identity. No
 // general provider search string, sending or deletion capability is exposed.
 type DraftFinder interface {
@@ -204,7 +197,6 @@ type EmailProvider interface {
 	Authenticator
 	Reader
 	LabelManager
-	DraftCreator
 	Capabilities() Capabilities
 }
 

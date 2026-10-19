@@ -2,9 +2,16 @@
 
 Updated 2026-10-19 for the shared local retrieval direction. This document is the
 technical authority; [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the sole scope/milestone
-plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. This is a
-documentation reset only: no planned pipeline, migration, command or model is
-implemented by these edits. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
+plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. The later
+authorized persistence slice adds migration 015 and typed chunk storage only;
+chunking, inference, indexing coordination, retrieval and new IPC remain planned. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
+
+[VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) is the detailed technical
+supplement for the same scope: exact source reuse/disabled paths, logical shared
+schema, interfaces, revision lifecycle, proposed native model choice and migration/
+recovery incompatibilities. It adds no second product roadmap or implementation
+permission. Where this overview leaves alternatives open, use that plan's single
+proposed baseline and qualification gates.
 
 ## 1. Verified implementation baseline
 
@@ -21,7 +28,7 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
 | AI | `ai.settings`, provider-scoped OS keys and one approved cached-email Summary through `SummarizeEmail`; OpenAI is the only installed functional adapter. | No evidence-question operation, retrieved context, tools, replies, new drafts or general chat. |
-| Search/storage | SQLite migrations 001–014, source hashes and transactional invalidation of historical derived rows; tests probe FTS5 availability. | Neither keyword search nor semantic search/indexing is an active product service. Old vector schemas are inert. |
+| Search/storage | SQLite migrations 001–015, shared chunk/embedding persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Neither keyword search nor semantic search/indexing is an active product service. Old vector schemas are inert. |
 | Historical recovery | GET-only Gmail draft matching and local status/reconcile/resolve/cancel for old journal actions. | No draft creation, resending, remote deletion or reactivation of historical previews. |
 
 Composition is in [main.go](../backend/cmd/mailpilot-core/main.go). Actual command
@@ -137,8 +144,12 @@ Use one English-first retrieval-capable model and tokenizer bundled in the insta
 with reviewed redistribution license and pinned artifact/runtime hashes. No user
 Python, arbitrary interpreter/model paths, remote code, inference endpoint or
 post-install download. Loading can be lazy after local semantic enablement. Choose
-one viable native runtime design; if a helper is necessary, package a fixed executable
-with bounded private inference-only IPC and no database/network/key access.
+one viable native runtime design. The [concrete vector plan](VECTOR_ARCHITECTURE_PLAN.md#6-embedding-modelruntime-decision-and-packaging)
+proposes all-MiniLM-L6-v2 ONNX with one in-process Go/CPU runtime and compatible
+tokenizer, gated on parity/quality/native packaging. It requires a future explicit
+CGO/native-library change because the current sidecar build forces CGO off. No
+helper, second runtime or model artifact is added here; a failed qualification gate
+requires revisiting that single design before implementation.
 
 Fingerprint tokenizer, input prefixes, pooling, normalization, dimensions and model/
 runtime versions. Encode queries/passages/categories according to that model's
@@ -176,6 +187,7 @@ Current source-of-truth DDL is [the migrations directory](../backend/internal/st
 | 012 | Incremental sync checkpoints and confirmed-deletion visibility. |
 | 013 | Historical passage-vector/retrieval-index identities. |
 | 014 | Selected provider in non-secret historical `reply_ai_settings`; existing OpenAI settings/key identity retained. |
+| 015 | Shared `email_chunks`, model-versioned `chunk_embeddings`, per-email `index_state`, composite ownership and atomic source/deletion invalidation triggers. |
 
 The historical `email_embeddings`, `category_embeddings`, `email_passage_vectors`
 and `email_retrieval_indexes` have no active inference/retrieval consumers.
@@ -184,13 +196,27 @@ ordinal, section or source-offset representation. It is not the new chunk index.
 Preserve migrations byte-for-byte and keep necessary invalidation/trigger behavior.
 New schemas require new numbered checksummed migrations after the actual maximum.
 
+### Implemented chunk persistence
+
+`Store.Chunks()` implements the SQL-free `repository.ChunkRepository`: atomic
+snapshot replacement, account-scoped paged reads, source/model/generation-bound
+embedding batches and index state. It reuses valid unchanged inputs, including moved
+chunks, and rejects stale work. Source changes retain inaccessible old chunks only
+until refresh for cache reuse; confirmed deletion removes them. Vector BLOBs are
+little-endian float32 with dimension/length checks plus Go finite/nonzero validation.
+Unknown or unavailable bodies remain partial; an empty projection is unavailable.
+No inference, chunk production, scheduling or retrieval consumer is wired. See the
+[implemented schema and lifecycle](VECTOR_ARCHITECTURE_PLAN.md#implemented-minimal-shared-index-records)
+for exact fields, statuses, bounds and timestamp semantics. Historical vectors are
+never read as current chunks; no migrations, assignments or journals are rewritten.
+
 ### Planned logical additions and publication rules
 
-Design minimal versioned source/chunk/vector records, index generations/work state,
-FTS mapping, category examples/prototypes and assessment/override provenance.
+Extend the implemented chunk/vector/state records only as needed for indexing
+coordination, FTS mapping, category examples/prototypes and assessment/override provenance.
 Reuse compatible existing category assignments; preserve conflicting legacy data
 until explicit resolution rather than deleting extra assignments to force a new rule.
-No new tables, names or migration numbers are created by this reset.
+Those future services and category/keyword schemas are not implemented by the persistence slice.
 
 `repository.EmailContentHash` already covers normalized mail evidence excluding IDs,
 labels and local categories. Current `classification.InputHash` covers rules' inputs
@@ -356,10 +382,10 @@ Measure English search quality/category abstention, 10,000-message performance a
 installer resources; publish denominators and misses. Targets are in the product
 plan and remain unmeasured here.
 
-Recommended first implementation slice after model/tokenizer feasibility: extend
+Next planned source slice, after model/tokenizer feasibility: extend
 `internal/mail` with loss-preserving versioned source sections and one shared chunk
 contract/chunker, including original passage text, mapping/order/section/hash/revision
-fixtures. Leave reading, risk and rules' existing cleanup stable. Design minimal
-new storage around this contract next; do not revive old Ask, add an AI editor or
-start with a replacement application architecture. The sole milestone authority is
-[PRODUCT_PLAN.md](PRODUCT_PLAN.md); this reset stops at documentation.
+fixtures. Leave reading, risk and rules' existing cleanup stable. Reuse the implemented
+chunk storage and extend it only when required; do not revive old Ask, add an AI editor
+or start with a replacement application architecture. The sole milestone authority
+is [PRODUCT_PLAN.md](PRODUCT_PLAN.md); further services require explicit authorization.

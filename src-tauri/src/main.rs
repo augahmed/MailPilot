@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai;
 mod bridge;
 mod replies;
 
+use ai::{AISettingsRequest, AISettingsResponse, SummaryRequest, SummaryResponse};
 use bridge::{
     AuthStatus, Bridge, CategoryPage, CategoryRequest, ClassificationPage, ClassificationRequest,
     Health, MailboxPage, OrganizationRequest, OrganizationResponse, ReadMailRequest,
@@ -31,6 +33,8 @@ mod capability_tests {
             "allow-classification-review",
             "allow-organization-manage",
             "allow-reply-manage",
+            "allow-ai-settings",
+            "allow-email-summarize",
         ] {
             assert!(permissions.iter().any(|p| p.as_str() == Some(retained)));
         }
@@ -47,6 +51,8 @@ struct SmokeTest {
     classification_completed: AtomicBool,
     organization_completed: AtomicBool,
     reply_completed: AtomicBool,
+    ai_settings_completed: AtomicBool,
+    summary_completed: AtomicBool,
 }
 
 impl SmokeTest {
@@ -59,6 +65,8 @@ impl SmokeTest {
             && self.classification_completed.load(Ordering::SeqCst)
             && self.organization_completed.load(Ordering::SeqCst)
             && self.reply_completed.load(Ordering::SeqCst)
+            && self.ai_settings_completed.load(Ordering::SeqCst)
+            && self.summary_completed.load(Ordering::SeqCst)
     }
 }
 
@@ -253,7 +261,6 @@ async fn reply_manage(
     let smoke = app.state::<SmokeTest>();
     if smoke.enabled
         && result.code == "unauthorized"
-        && result.body.is_empty()
         && !smoke.reply_completed.swap(true, Ordering::SeqCst)
     {
         eprintln!(
@@ -367,6 +374,69 @@ async fn mailbox_list(
     Ok(result)
 }
 
+#[tauri::command]
+async fn ai_settings(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+    request: AISettingsRequest,
+) -> Result<AISettingsResponse, String> {
+    let backend = backend.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.ai_settings(request),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())??;
+    let smoke = app.state::<SmokeTest>();
+    if smoke.enabled
+        && result.code == "unauthorized"
+        && !smoke.ai_settings_completed.swap(true, Ordering::SeqCst)
+    {
+        eprintln!("{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_ai_settings_ok\"}}");
+        if let Some(window) = app.get_webview_window("main") {
+            let _=window.eval(r#"window.__TAURI_INTERNALS__.invoke('email_summarize', {request:{operation:'preview',accountId:'smoke',emailId:'smoke',previewId:'',jobId:'',approved:false}}).catch(() => {});"#);
+        }
+        if smoke.complete() {
+            app.exit(0);
+        }
+    }
+    Ok(result)
+}
+#[tauri::command]
+async fn email_summarize(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+    request: SummaryRequest,
+) -> Result<SummaryResponse, String> {
+    let backend = backend.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.summarize_email(request),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())??;
+    let smoke = app.state::<SmokeTest>();
+    if smoke.enabled
+        && result.code == "unauthorized"
+        && result.email.is_empty()
+        && result.result.is_none()
+        && !smoke.summary_completed.swap(true, Ordering::SeqCst)
+    {
+        eprintln!(
+            "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_summary_ok\"}}"
+        );
+        if smoke.complete() {
+            app.exit(0);
+        }
+    }
+    Ok(result)
+}
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -377,7 +447,7 @@ fn main() {
         }))
         .setup(|app| {
             let smoke_test = std::env::args().any(|arg| arg == "--smoke-test");
-            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), reader_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false) });
+            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), reader_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false), ai_settings_completed:AtomicBool::new(false),summary_completed:AtomicBool::new(false) });
             if smoke_test {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
@@ -396,7 +466,7 @@ fn main() {
             app.manage(Arc::new(Mutex::new(backend)) as Backend);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, sync_cancel, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, reply_manage])
+        .invoke_handler(tauri::generate_handler![health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, sync_cancel, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, reply_manage, ai_settings, email_summarize])
         .build(tauri::generate_context!())
         .expect("failed to build MailPilot desktop application");
 

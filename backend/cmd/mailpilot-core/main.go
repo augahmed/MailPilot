@@ -61,7 +61,11 @@ func run() int {
 	var synchronization *mailsync.Service
 	var organization *app.Organization
 	var replies *app.ReplyService
+	var intelligence *app.AIService
 	defer func() {
+		if intelligence != nil {
+			intelligence.Close()
+		}
 		if replies != nil {
 			replies.Close()
 		}
@@ -119,15 +123,13 @@ func run() int {
 		keys := func(account domain.AccountID) credentials.SecretStore {
 			return credentials.NewAPIKeyStore(cfg.DataDir+"\x00"+string(account), "openai")
 		}
-		aiFactory := func(account domain.AccountID, model string) (ai.AIProvider, ai.Identity, error) {
-			p, err := openai.New(keys(account), model)
-			if err != nil {
-				return nil, ai.Identity{}, err
-			}
-			return p, p.Identity(), nil
-		}
-		replies = app.NewReplyMaintenance(ctxRoot, authentication.Session, store.Replies(), store.AISettings(), func(account domain.AccountID) provider.DraftFinder { return gmail.NewProvider(account, authentication) }, keys, aiFactory)
-		replies.SetOperationGate(gate)
+		intelligence = app.NewAIService(ctxRoot, authentication.Session, store.Emails(), store.AISettings(), map[string]app.ProviderAdapter{
+			"openai": {External: true, Keys: keys, New: func(account domain.AccountID, model string) (ai.AIProvider, error) {
+				return openai.New(keys(account), model)
+			}},
+		})
+		application.AI = intelligence
+		replies = app.NewReplyMaintenance(ctxRoot, authentication.Session, store.Replies(), func(account domain.AccountID) provider.DraftFinder { return gmail.NewProvider(account, authentication) })
 		application.Replies = replies
 		organization.SetRiskEngine(riskEngine)
 		organization.SetOperationGate(gate)

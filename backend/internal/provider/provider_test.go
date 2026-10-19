@@ -105,10 +105,6 @@ func (readOnlyProvider) ApplyLabel(context.Context, domain.ProviderMessageID, do
 func (readOnlyProvider) RemoveLabel(context.Context, domain.ProviderMessageID, domain.ProviderLabelID) error {
 	return provider.ErrUnsupported
 }
-func (readOnlyProvider) CreateDraft(context.Context, provider.DraftInput) (provider.DraftReference, error) {
-	return provider.DraftReference{}, fmt.Errorf("draft: %w", provider.ErrUnsupported)
-}
-
 func TestProviderCanBeConsumedWithoutAnSDK(t *testing.T) {
 	var adapter provider.EmailProvider = readOnlyProvider{}
 	var reader provider.Reader = adapter
@@ -142,14 +138,11 @@ func TestProviderCanBeConsumedWithoutAnSDK(t *testing.T) {
 	if adapter.Capabilities().CreateDrafts {
 		t.Fatal("unsupported draft capability advertised")
 	}
-	if _, err := adapter.CreateDraft(ctx, provider.DraftInput{}); !errors.Is(err, provider.ErrUnsupported) {
-		t.Fatal("unsupported error lost")
-	}
 }
 
 func TestProviderDoesNotExposeSendingOrDeletion(t *testing.T) {
 	contract := reflect.TypeFor[provider.EmailProvider]()
-	for _, name := range []string{"Send", "SendMail", "SendDraft", "Delete", "DeleteMessage", "MoveMessage"} {
+	for _, name := range []string{"CreateDraft", "Send", "SendMail", "SendDraft", "Delete", "DeleteMessage", "MoveMessage"} {
 		if _, exists := contract.MethodByName(name); exists {
 			t.Fatalf("unsafe operation exposed: %s", name)
 		}

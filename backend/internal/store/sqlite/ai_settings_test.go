@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"mailpilot.local/core/internal/ai"
-	"mailpilot.local/core/internal/domain"
 )
 
 func TestAISettingsAndReplyReadsPreserveCancellation(t *testing.T) {
@@ -18,10 +17,6 @@ func TestAISettingsAndReplyReadsPreserveCancellation(t *testing.T) {
 		"save settings": func() error { return s.AISettings().SaveSettings(ctx, "account", ai.Settings{}) },
 		"get draft":     func() error { _, err := s.Replies().Get(ctx, "account", "draft"); return err },
 		"latest draft":  func() error { _, err := s.Replies().Latest(ctx, "account"); return err },
-		"thread sources": func() error {
-			_, _, err := s.Replies().Sources(ctx, "account", domain.EmailID("email"), true)
-			return err
-		},
 	}
 	for name, check := range checks {
 		t.Run(name, func(t *testing.T) {
@@ -42,7 +37,7 @@ func TestAISettingsSurviveRestartAndRemainAccountScoped(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 	a := account(t, s, "settings-a")
 	b := account(t, s, "settings-b")
-	want := ai.Settings{Model: "synthetic-model", Enabled: true}
+	want := ai.Settings{Provider: "openai", Model: "synthetic-model", Enabled: true}
 	if err := s.AISettings().SaveSettings(ctx, a, want); err != nil {
 		t.Fatal(err)
 	}
@@ -61,5 +56,51 @@ func TestAISettingsSurviveRestartAndRemainAccountScoped(t *testing.T) {
 	other, err := reopened.AISettings().Settings(ctx, b)
 	if err != nil || other.Enabled || other.Model != "" {
 		t.Fatal("settings crossed accounts", err)
+	}
+}
+
+func TestProviderSelectionMigrationPreservesExistingPreferenceAndHistory(t *testing.T) {
+	ctx := context.Background()
+	s, dir := historicalStore(t, 13)
+	var err error
+	defer func() { _ = s.Close() }()
+	a := account(t, s, "upgrade-ai")
+	plan := draftPlan(t, s, a)
+	importHistoricalDraft(t, s, plan, "uncertain")
+	if _, err = s.db.Exec(`INSERT INTO reply_ai_settings VALUES(?,?,1)`, a, "old-functional-model"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := s.AISettings().Settings(ctx, a)
+	if err != nil || cfg.Provider != "openai" || cfg.Model != "old-functional-model" || !cfg.Enabled {
+		t.Fatal("existing choice lost", err)
+	}
+	action, err := s.Replies().Get(ctx, a, plan.ID)
+	if err != nil || action.Plan.Digest != plan.Digest || action.State != "uncertain" {
+		t.Fatal("journal changed by provider migration", err)
+	}
+	if _, err = s.Emails().Get(ctx, a, plan.EmailID); err != nil {
+		t.Fatal("cached mail lost", err)
+	}
+	cfg.Provider = "another-functional-adapter"
+	if err = s.AISettings().SaveSettings(ctx, a, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := s.AISettings().Settings(ctx, a)
+	if err != nil || restored != cfg {
+		t.Fatal("provider choice did not persist", err)
 	}
 }
