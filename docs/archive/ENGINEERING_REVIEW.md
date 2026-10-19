@@ -1,4 +1,9 @@
-# Repository maintainability review
+# Historical repository maintainability review
+
+Archived on 2026-10-19. This records an earlier source review, including now-removed
+Ask/reply/semantic implementations. It is not a current dependency inventory, test
+result or product plan. See [the current architecture](../ARCHITECTURE.md) and
+[compatibility notes](LEGACY_FEATURES.md) before applying any statement below.
 
 This review examined composition, application jobs, provider/storage boundaries,
 semantic retrieval, optional AI consent, IPC contracts, React async state, tests and

@@ -1,122 +1,149 @@
-# Optional generative AI provider layer
+# Optional AI: approved email evidence and current Summary
 
-Active status: provider/key settings and the shared AI/consent foundation remain.
-Reply generation, thread summaries, Ask and arbitrary prompts have no active entry
-point. Selected-email summary UI/IPC and additional provider adapters are future
-work; the older operation descriptions below document retained implementation history.
+Updated 2026-10-19. [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the scope authority and
+[ARCHITECTURE.md](ARCHITECTURE.md#8-optional-retrieval-augmented-answers-planned)
+defines the intended application boundary. This feature specification distinguishes
+planned answers from the currently implemented selected-email Summary. The reset
+changes no command, provider method, key, credential, approval or runtime behavior.
 
-The Go backend now supports `AIProvider.GenerateDraft`, `SummarizeThread`, and
-`AnswerWithContext`. All three accept a context, a provider-neutral `ai.Request`
-(user instruction/question, selected plain-text context, output-token limit), and
-return untrusted plain text. Generating a draft does not create a Gmail draft,
-send mail, or change mailbox state.
+## Intended workflow: retrieval-augmented questions (planned)
 
-The desktop exposes optional OpenAI settings and read-only historical draft recovery.
-Reading, sync, deterministic rules and risk scoring remain independent of AI.
-Ask and semantic retrieval implementations have been removed. Summary UI remains
-unimplemented; no inference model or Python installation is required.
+The immediate AI use case is answering bounded questions about information in
+cached email. Go retrieves through the shared local semantic/hybrid pipeline;
+users inspect/select and separately approve the exact passages, question, metadata,
+policy and provider/model before disclosure. No hidden thread expansion, attachments,
+prior conversation, model-controlled search or action tools. Answers cite approved
+source emails and preserve insufficient/conflicting evidence and uncertainty.
 
-## Composition and configuration
+Keep multiple providers behind one narrow evidence-answer abstraction, with
+provider-specific wire/SDK types in adapters and provider-scoped OS keys. Local
+embedding inference is independent and uploads no mail. No generative provider or
+key is needed for local search/classification. Composition/replies, sending, new
+Gmail drafts, unrestricted chat/agents and background external AI are outside scope.
 
-A backend caller can compose the implementation as follows:
+Approval must be expiring/single-use and bound to account/client, exact payload,
+source revisions, policy and provider/model/settings/key identity. Recheck before
+dispatch/display, revoke on relevant changes and suppress late results after
+cancellation. Validate source IDs/quotes, bounds and escaped output; citation
+provenance cannot prove semantic correctness. Keep previews/answers memory-only
+initially. Set exact RAG payload limits and typed contracts during implementation;
+the current Summary's limits below are not permission for broader disclosure.
+
+Plan a later tested Summary transition, reusing safe settings/keyring/redaction/
+transport foundations. Existing Summary enablement or approval never authorizes
+RAG. Historical draft recovery stays independent. No replacement is implemented
+by this documentation task.
+
+## Implemented baseline: selected-email summaries
+
+The current runtime supports one AI workflow: summarize one explicitly selected cached email,
+extract explicit requests, and extract stated deadlines. The reader provides an
+exact payload preview and a separate approval step. Ordinary mail reading, sync,
+categories, organization and phishing analysis work with AI disabled.
+
+### Providers and settings
+
+**OpenAI is the only installed functional provider adapter.** It retains its existing
+bounded HTTPS Responses API transport, OS key loading per dispatch, timeout,
+no automatic retry, redirect rejection and environment-proxy rejection. There are
+no external SDK dependencies. No unimplemented provider is offered in Settings.
+
+The shared boundary supports multiple adapters for the same workflow. Trusted Go
+composition registers each adapter with its own constructor and provider-scoped
+OS key store. Desktop **Optional AI settings** lists registered providers; the user
+chooses provider/model. Tests register a second synthetic adapter to verify
+substitution, selection and separate key handling; it is not a shipped provider.
+
+Migration 014 adds the selected provider to the existing non-secret
+`reply_ai_settings` record. Existing records default to `openai`; saved model,
+enabled state and existing profile/account/OpenAI keyring slot remain valid.
+Migrations 001–013 are unchanged. Keys remain in OS credential storage, never SQL,
+files, environment, returned DTOs or logs. The input clears immediately after
+submission. Blank input uses only the selected provider's saved key. Changing
+providers leaves other providers' keys alone. Disable turns AI off before removing
+the selected provider's key; OS-store failures are reported with no plaintext fallback.
+
+### Provider contract
 
 ```go
-// Disabled is a supported configuration and never touches a credential store.
-service, err := ai.NewService(nil, ai.Identity{})
+type AIProvider interface {
+    SummarizeEmail(context.Context, SummaryRequest) (SummaryResult, error)
+}
 
-// For an explicitly configured provider, use an application-owned profile path
-// and an explicit model ID supported by the user's OpenAI project.
-keys := credentials.NewAPIKeyStore(privateDataDir, "openai")
-provider, err := openai.New(keys, modelID)
-// Check err before using provider.
-service, err = ai.NewService(provider, provider.Identity())
+type SummaryRequest struct {
+    EmailID  domain.EmailID // application identity; not forwarded to OpenAI
+    Revision string         // cached content hash; not forwarded to OpenAI
+    Email    Text           // exact approved bounded email payload
+}
+
+type SummaryResult struct {
+    Summary   Text
+    Requests  []Text
+    Deadlines []Text
+}
 ```
 
-These snippets describe composition, not a new command-line or IPC API. Provider
-and model identifiers are non-secret configuration. No model default is silently
-selected. `NewService(nil, ...)` returns `Enabled() == false`; preparing/executing
-returns `ai_disabled`. A configured adapter with a missing, locked, corrupt or
-unavailable key fails with `ai_credentials_unavailable` before any HTTP request.
-Constructors perform no network or keyring operation. Provider instances and their
-identity must remain immutable while a service is in use.
+`Text` redacts standard formatting, JSON and structured logs. The application
+explicitly reveals only approved input for preview/provider transport and validated
+output for presentation. SDK/wire types remain inside each provider adapter.
 
-`credentials.SecretStore` exposes `Load`, `Save`, and `Delete` for one scoped secret.
-The concrete `APIKeyStore` uses the existing OS keyring library in a namespace
-separate from Gmail OAuth. Slots are isolated by application-data profile and
-provider; the desktop reply use case additionally scopes by account. There is no file, SQLite, environment-variable or command-argument key
-fallback. Save accepts the existing redacted `credentials.Secret` wrapper. The settings form submits briefly held input through the narrow typed reply command, clears it immediately, and never returns a saved key through a read API. OS keyring calls
-are synchronous; context is checked before and after the OS operation, but cannot
-interrupt an OS credential-store prompt already in progress.
+Adapters return this normalized result, never arbitrary chat text or tool calls.
+The OpenAI adapter decodes strict JSON with only `summary`, `requests`, `deadlines`.
+The summary is limited to 4,000 UTF-8 bytes. Each extraction array has at most ten
+verbatim excerpts of at most 500 bytes, with no duplicates within the array.
+Every extracted excerpt must occur in the approved payload. This verifies text
+provenance, not semantic correctness; summaries and extraction can still be wrong.
+Absent requests/deadlines are empty arrays. No date/time-zone inference is requested.
 
-Anthropic and local/Ollama adapters can implement the same three-method interface
-without changing consumers. They are not implemented or routed through OpenAI.
-Local adapters can disclose `External: false`. They must preserve the approval,
-redaction, limits and cancellation contract; no arbitrary endpoint supplied by
-mailbox content is allowed. No provider SDK types appear in neutral inputs or
-results. No dependencies were added.
+### Selection, consent and lifecycle
 
-## Approval and privacy boundary
+Go loads only the selected account/email ID from SQLite. It has no thread-query,
+retrieval, Gmail or attachment reader in the summary path. The payload includes
+bounded subject/sender/received time and locally cleaned current body text, with
+quote/signature removal and HTML-to-text fallback. A complete readable cached body
+is required. Input is capped at **6,000 UTF-8 bytes**, with truncation disclosed in
+the preview. This is the implemented limit, superseding larger proposed plan limits.
 
-`ai.Service.Prepare` creates an immutable, account-bound preview containing the
-provider/model/external identity, operation, full versioned policy instructions,
-user instruction, selected context, and token limit. The adapter sends those texts
-as policy plus two user messages; the context message has the fixed prefix
-`Untrusted email context:` followed by a newline. There are no hidden email
-headers, attachments, retrieved sources, prior conversations, or tools.
+The preview shows the exact email payload, fixed versioned policy, destination,
+model and five-minute expiry. Approval binds to that immutable snapshot, account,
+provider/model and one-use token. Go rechecks the source before dispatch and before
+publishing output. Changing selection, cached content, provider/model/key, disabling
+AI, disconnecting, cancelling or leaving the reader revokes consent or hides stale
+results. No external AI request occurs during settings, status, sync or preview.
 
-The reply application use case authorizes the current account/session before
-both `Prepare` and `Execute`, fetches only account-owned sources, shows every preview
-field (using `Text.Reveal()` only for this explicit presentation), and obtains a
-separate user confirmation. The service is not an authentication mechanism. The UI uses a validated, fixed reply.manage command rather than direct provider access.
+Execution is one bounded background job per core, polled through the summary
+endpoint. Provider calls have a one-minute limit; the surrounding job has a
+75-second deadline. Cancellation revokes local permission and suppresses late output;
+a dispatched external request may already have reached the provider. Failed calls
+consume approval and require a fresh preview to retry. Shutdown cancels and joins
+work before SQLite closes. Summary previews/output are memory-only. Wire responses
+are bounded to 48 KiB after JSON escaping.
 
-Approvals expire after five minutes, are bound to one service configuration and
-account, and are consumed before dispatch, even if the request fails. Only one
-pending preview and one active call are supported; new previews replace old
-ones. Modifying a returned preview cannot modify the stored request. Execution
-accepts only the preview ID, authorized account and explicit confirmation, not a
-replacement payload. Clear the service on disconnect/configuration changes to
-revoke previews, release pending input, cancel work, and suppress late output.
-Cancellation cannot recall data already received by an external provider. Retrying
-requires a new preview and confirmation.
+The provider receives the fixed summary policy and exactly the approved payload.
+There are no tools, Gmail permissions, previous-response IDs, conversation state,
+arbitrary user prompts, hidden mail expansion, background AI or action authority.
+Email/model output is untrusted and rendered as escaped text with inactive links.
 
-AI requests and unreviewed results stay in memory. Once the user requests a Gmail draft preview, the reviewed body and routing are persisted in the local action journal for safe recovery. `ai.Text` and `credentials.Secret` redact
-ordinary formatting, structured logs and generic JSON serialization. The adapter
-has no prompt/body logging, tracing or log opt-in. It reports fixed neutral error
-codes, never raw HTTP, keyring or provider error details. Explicitly extracting
-text into a string is sensitive and must not be logged; only explicitly reviewed draft plans are persisted by this workflow.
-Prompts do not confer action rights; model responses have no tools or mailbox
-mutation access and are rendered as escaped text for human review.
+### Removed capabilities and compatibility
 
-## OpenAI adapter
+`GenerateDraft`, `AnswerWithContext`, `SummarizeThread`, generic operation dispatch,
+reply payload construction, thread-context SQL, new draft-plan insertion/dispatch,
+Gmail `CreateDraft`, and the old reply editor are deleted. Ask, mailbox Q&A/RAG,
+reply generation, thread summaries, arbitrary chat/prompts and AI classification
+cannot be reached through the UI, IPC, provider interface or indirect recovery.
 
-The adapter uses Go's standard HTTP/JSON libraries and a fixed HTTPS Responses
-API endpoint. It loads the key immediately before each dispatch, so replacement
-or removal is respected on the next call. It refuses redirects and ignores
-proxy environment variables. One request runs at a time per adapter; waiting and
-network work share a one-minute context deadline. There are no automatic retries,
-streaming, conversation IDs, tools or remote files.
+No generic AI methods remain for compatibility. Only historical draft plan
+values/digests/validation, account-scoped journal reads, recovery transitions and
+Gmail `FindDraft` remain. Recovery has no AI/key/settings dependency and cannot
+resume previews or create/resend/delete drafts. Journal bodies/source references
+remain immutable evidence in SQLite. See [draft recovery](REPLY_DRAFTING.md).
 
-Input is capped at 32 KiB total and must be valid UTF-8; output-token requests are
-1–4096. Thread summaries and contextual answers require nonempty context. HTTP
-response bodies are capped at 256 KiB; generated text is capped at 32 KiB. Refusals,
-incomplete responses, invalid output, authentication failures, and rate limits
-have distinct safe errors. Failed or partial model text is not returned as success.
+Wire endpoints are `ai.settings` and `email.summarize`, exposed by narrow native
+commands `ai_settings` and `email_summarize`. `reply.manage` only handles historical
+status/reconcile/resolve/cancel. [Contracts and synthetic examples](../contracts/README.md)
+define the operation-specific fields; unknown prompt/thread/tool fields reject.
 
-The adapter explicitly sends `store: false`. This disables stored Responses
-application state; it is **not** a promise of zero retention by the external
-provider. OpenAI's other retention/data-control policies still apply. The wire
-implementation was checked against official [text-generation documentation](https://developers.openai.com/api/docs/guides/text)
-and [data controls](https://developers.openai.com/api/docs/guides/your-data).
-
-## Verification
-
-`FakeAIProvider` exercises all operations and the consent service with synthetic
-inputs. OpenAI tests use an in-memory HTTP transport and synthetic SecretStore;
-OS-store unit tests use the existing keyring mock. Tests never need a paid API
-call or a real key. Coverage includes disabled behavior, approval expiry/replay,
-account isolation, immutable previews, clear/cancellation races, provider errors,
-key rotation/failure, redirects, request/response limits, refusals, incomplete
-output, concurrency, and log/serialization redaction.
-
-No live OpenAI test was performed. Model availability and generation quality
-remain dependent on the selected model and the user's project. Reply workflow tests additionally cover IPC validation, both approvals, source/account isolation, editing, session cancellation, journal recovery and the native unauthorized-command boundary.
+Validation uses synthetic mail, fake adapters, mocked OS credentials and local
+HTTP transports. It makes no paid AI call or personal-mailbox mutation. Native
+smoke checks exercise authorization and lifecycle with Gmail/AI unconfigured;
+these are not real-provider quality or accuracy measurements.

@@ -1,4 +1,19 @@
-# MailPilot contraction plan
+# MailPilot contraction record — 2026-10-16
+
+Historical record preserved during the 2026-10-19 documentation reset. This is not
+an active product plan or an instruction to remove/restore features. Its inventory
+records paths and scope at the time, including paths since removed or consolidated.
+Current authority: [product plan](../PRODUCT_PLAN.md), [architecture](../ARCHITECTURE.md)
+and [engineering contract](../../AGENTS.md). The original record follows; linked
+current documents may now have different scope.
+
+Successor planning update (2026-10-16): the user has requested a future retrieval,
+header/semantic categorization and formatted-reader design, replacing standalone
+Summary with evidence-based answers/composition. See [PRODUCT_PLAN.md](../PRODUCT_PLAN.md)
+and [RETRIEVAL_READER_PLAN.md](LEGACY_FEATURES.md#superseded-intermediate-plans). This document remains a
+historical contraction/compatibility record; its retirement inventory and old
+future-scope recommendations do not override that new proposal. The new request
+authorizes documentation only, not restoring deleted code or changing the runtime.
 
 Status: execution plan authored 2026-10-16. The inventory below records the
 pre-contraction repository; deleted paths remain here as historical disposition
@@ -11,8 +26,12 @@ locks and their exclusive tests/corpora are removed. Pure text cleanup was moved
 `internal/mail`; deterministic classification directly enforces the existing 0.60
 gate. All 13 migrations, historical vector schemas, cached mail, journal evidence,
 AI provider/consent/settings foundation and narrow draft recovery remain.
-Keyword search, selected-email summary and Chrome have not been implemented.
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the current composition.
+Generative contraction is also implemented: only `SummarizeEmail` remains on the
+provider interface; desktop provider selection, consented selected-email summary
+and migration 014 are in place. Generic AI/reply/draft creation code is removed,
+with only journal codecs and GET-only historical draft recovery retained.
+Keyword search, additional concrete adapters and Chrome remain future work.
+See [ARCHITECTURE.md](../ARCHITECTURE.md) for the current composition.
 
 ## Basis and scope precedence
 
@@ -25,8 +44,8 @@ these are not application source to read or delete. The exact file disposition
 inventory appears at the end of this document. This review does not claim that
 application tests or native integration checks were run for a documentation change.
 
-Read [AGENTS.md](../AGENTS.md), [ARCHITECTURE.md](ARCHITECTURE.md),
-[PRODUCT_PLAN.md](PRODUCT_PLAN.md), [IPC/contracts](../contracts/README.md), the
+Read [AGENTS.md](../../AGENTS.md), [ARCHITECTURE.md](../ARCHITECTURE.md),
+[PRODUCT_PLAN.md](../PRODUCT_PLAN.md), [IPC/contracts](../../contracts/README.md), the
 actual frontend composition, Go composition, Tauri routing and migrations 001–013.
 Some older documentation reports schema 10/12; the current embedded migration set
 ends at **013_retrieval_passages.sql**. Source and migration checksums, rather than

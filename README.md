@@ -1,16 +1,28 @@
 # MailPilot
 
-Local-first email assistant built with Go, React + TypeScript, Tauri 2, and SQLite.
+Local-first intelligent Gmail management built with Go, React + TypeScript,
+Tauri 2 and SQLite. The intended core is one shared local preprocessing, chunking,
+embedding and vector-retrieval pipeline supporting semantic search, category
+suggestions and optional answers grounded in approved email evidence.
 
-The active scope is defined in [AGENTS.md](AGENTS.md). The
-[focused product plan](docs/PRODUCT_PLAN.md) and
-[contraction plan](docs/CONTRACTION_PLAN.md) describe the target and retirement order.
-Ask, semantic search/indexing, semantic classification, model setup, AI replies
-and new Gmail drafts have no active entry points. Semantic/model implementation
-packages, workers and setup scripts have been removed; historical database records
-and narrow draft recovery remain.
-Keyword search, selected-email summaries, additional AI providers and Chrome are
-future work, not enabled by this contraction.
+**Current status:** Gmail OAuth/keyring, bounded initial/incremental sync, cached
+plain-text reading, category management, deterministic review/risk explanations,
+confirmed label organization, selected-email Summary and historical draft recovery
+are implemented. Keyword search, chunk indexing, embeddings, semantic classification
+and retrieval-augmented questions are planned. Historical vector tables are inert;
+no model/runtime setup is currently required. OpenAI is the only installed functional
+generative adapter. This documentation reset changes no runtime behavior.
+
+The planned local model/tokenizer will ship with the app; no user Python or
+post-install model download. Target English first and about 10,000 cached messages.
+AI replies/composition, new Gmail drafts, sending and Chrome integration are outside
+the immediate scope. Existing Summary remains until a later tested transition.
+
+Read [AGENTS.md](AGENTS.md) for engineering rules, the single
+[product plan](docs/PRODUCT_PLAN.md) for scope/milestones and
+[architecture](docs/ARCHITECTURE.md) for implemented versus intended boundaries.
+The [documentation audit](docs/DOCUMENTATION_AUDIT.md) explains the reset;
+[legacy records](docs/archive/LEGACY_FEATURES.md) preserve migration/recovery history.
 
 This bootstrap opens a native desktop window and checks the real Go backend and SQLite database. A healthy startup displays:
 
@@ -48,7 +60,8 @@ rustc --version
 
 The native build and smoke test have been verified on Apple Silicon macOS. Windows/Linux targets are planned and need native qualification. Cross-compilation is deliberately rejected by the sidecar build script; build on the target OS/architecture.
 
-MailPilot requires no Python, MiniLM, ONNX, model downloads or index setup.
+The current runtime requires no Python, MiniLM, ONNX, model download or index setup.
+Bundled local inference is future work, not an installation prerequisite today.
 
 ## Install and run
 
@@ -89,7 +102,7 @@ The packaged macOS executable is `src-tauri/target/release/bundle/macos/MailPilo
 
 ## Configuration and local storage
 
-No `.env` file is loaded. OAuth client configuration comes from `MAILPILOT_GOOGLE_CLIENT_ID` and `MAILPILOT_GOOGLE_CLIENT_SECRET` at runtime, never frontend build configuration. User access/refresh tokens are never read from environment variables; refresh tokens use the OS keyring. See [setup instructions](docs/GMAIL_SETUP.md). Defaults come from the OS application data directory; the native host passes that default to Go. Standalone core startup resolves the corresponding platform directory itself.
+The app does not automatically load `.env`; a developer may explicitly source local OAuth client configuration in their shell. OAuth client configuration comes from `MAILPILOT_GOOGLE_CLIENT_ID` and `MAILPILOT_GOOGLE_CLIENT_SECRET` at runtime, never frontend build configuration. User access/refresh tokens are never read from environment variables; refresh tokens use the OS keyring. See [setup instructions](docs/GMAIL_SETUP.md). Defaults come from the OS application data directory; the native host passes that default to Go. Standalone core startup resolves the corresponding platform directory itself.
 
 | Setting        | Default                                                 | Override                                                                      |
 | -------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -104,7 +117,7 @@ Default desktop locations:
 - Windows: `%APPDATA%\com.mailpilot.desktop\mailpilot.db`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/com.mailpilot.desktop/mailpilot.db`
 
-SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Version 1 creates the migration ledger and non-secret settings; version 2 adds normalized email storage, accounts, labels, local categories, analysis results and a journal for future reversible actions. SQL-free repositories support transactional idempotent writes and account-scoped retrieval; version 3 adds cached body completeness and provider content identity for bounded Gmail imports. Version 4 adds category metadata/defaults, and version 5 adds structured rule evidence and complete classification assessments, including unclassified results. Version 6 adds immutable organization plans and remote-write evidence under the action journal. SQLite files are not encrypted.
+SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Current migrations 001–014 retain mail/cache, category/review, label/risk journals, incremental checkpoints, historical vector/draft structures and selected AI-provider settings. Historical vector tables are not an active index. See [schema responsibilities](docs/ARCHITECTURE.md#implemented-persistence-and-immutable-history) for the preserved migration groups. SQLite files are not encrypted.
 
 Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to private IPC. Logs omit secrets, message content and filesystem paths. This phase has no persistent log files or telemetry.
 
@@ -113,7 +126,7 @@ Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to pr
 Run from the repository root after installing dependencies:
 
 ```sh
-gofmt -w backend
+gofmt -l backend
 cd backend
 go vet ./...
 go test -race ./...
@@ -177,7 +190,7 @@ AGENTS.md                      Engineering rules
 
 Go owns business behavior and persistence. Rust only starts the fixed packaged binary, validates a bounded protocol, and handles native lifecycle; it uses `std::process` rather than installing a shell plugin. The frontend cannot run shell commands, access arbitrary files/SQL, select executables, or invoke arbitrary Go methods. A versioned handshake precedes database initialization; frontend capabilities allow health, Gmail connection, sync, cached-mail, category management, classification review and organization commands. The host alone opens a validated Google authorization URL in the system browser.
 
-The architecture's dependency recommendations are adopted only as needed: modernc SQLite avoids a Go C toolchain, React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. TanStack Query, the full Gmail SDK and AI/vector dependencies remain deferred. Dependency purposes and official documentation are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
+The architecture's dependency recommendations are adopted only as needed: modernc SQLite avoids a Go C toolchain, React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. TanStack Query, the full Gmail SDK and AI/vector dependencies remain deferred. Current and planned package responsibilities are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
 
 ## Inbox synchronization
 
@@ -216,7 +229,7 @@ Categories map to `MailPilot/<category name>` user labels. Existing exact-name l
 
 ## Phishing feature extraction
 
-The Go extractor returns structured address/authentication, URL/link, attachment, HTML-form and language observations with parser limitations. It is separate from scoring and uses no network, LLM or external threat service. Authentication header claims remain unverified; missing content/evidence never establishes safety. This stage has no risk score, persistence or UI yet. See [supported signals, limits and synthetic fixtures](docs/PHISHING_FEATURES.md).
+The Go extractor returns structured address/authentication, URL/link, attachment, HTML-form and language observations with parser limitations. It is separate from scoring and uses no network, LLM or external threat service. Authentication header claims remain unverified; missing content/evidence never establishes safety. The extractor itself produces observations; the separate implemented risk engine scores them, and cached-mail views persist/display the explained result. See [supported signals, limits and synthetic fixtures](docs/PHISHING_FEATURES.md).
 
 ### Review high-risk mail in Gmail organization
 
@@ -226,18 +239,25 @@ Set `MAILPILOT_RISK_HIGH_THRESHOLD=75` before starting the desktop app to change
 
 **Preview undo last batch** and its separate confirmation remove only verified additions, preserving pre-existing and unrelated labels. Created labels remain in Gmail. Interrupted or uncertain writes require reconciliation first. Schema migration 7 preserves existing plans and makes category references optional for risk proposals.
 
-## AI settings and historical draft recovery
+## Optional AI summaries and historical draft recovery
 
-Open **AI settings and historical draft recovery → Optional AI settings** to keep
-or update the existing OpenAI model/key configuration. Keys remain in OS credential
-storage; saving settings never uploads mail. No summary or generation workflow is
-exposed yet. The shared provider/consent foundation remains for future bounded
-single-email summaries and additional providers.
+In **Optional AI settings**, choose an installed provider and an explicit model,
+then save its API key. OpenAI is the only currently installed adapter. Keys use
+OS credential storage and are scoped by profile, account and provider; settings
+never upload mail. AI-disabled mode leaves ordinary mail features available.
 
-Historical uncertain/conflicting draft actions can be reconciled with read-only
-Gmail requests and explicitly acknowledged after review. No new draft, reply,
-thread context or arbitrary prompt can be submitted. Old draft previews cannot be
-resumed for creation. Undo is unavailable; handle the draft manually in Gmail.
+Open a cached message and choose **Preview email summary**. Review the exact
+bounded payload, provider/model, fixed policy and any truncation; explicitly
+approve before choosing **Summarize selected email**. The result contains a brief
+summary, explicit requests and stated deadlines. No thread or unrelated mail is
+included, and no free-form prompt is accepted. Complete cached bodies are required.
+Model output can be wrong; verify it against the source. See [AI boundaries and
+limits](docs/GENERATIVE_AI.md).
+
+**Historical draft recovery** can reconcile existing uncertain/conflicting actions
+using Gmail reads and record explicit local acknowledgment. It needs no AI key and
+cannot create, resume, resend or delete drafts. The only active AI workflow is the
+selected-email summary; no reply generation, thread summaries or mailbox chat remain.
 
 Cached message subjects in the mailbox open a reader with
 sender, To/CC, timestamp, body, attachment metadata, cached Gmail labels,
@@ -247,10 +267,19 @@ messages; email links remain inactive and remote content is never loaded. Long
 bodies offer “Load more cached text.” Missing content is reported without a Gmail
 fetch. Attachment downloads and rich HTML display are not implemented.
 
-### Retired implementation references
+### Documentation and historical compatibility
 
-[Ask](docs/ASK_MAILPILOT.md), [semantic search](docs/SEMANTIC_SEARCH.md),
-[semantic classification](docs/SEMANTIC_CLASSIFICATION.md) and
-[reply drafting](docs/REPLY_DRAFTING.md) describe historical implementations only.
-The semantic/Ask guides record removal; previous implementation details remain in
-Git history. No model installation is part of setup.
+- [Product plan](docs/PRODUCT_PLAN.md): the sole scope/milestone authority.
+- [Architecture](docs/ARCHITECTURE.md): current implementation, intended shared
+  pipeline, ownership, source/index lifecycle and security boundaries.
+- [IPC contracts](contracts/README.md): implemented methods and synthetic examples;
+  archival fixtures do not reactivate retired Ask/search/draft operations.
+- [Gmail setup](docs/GMAIL_SETUP.md), [AI boundaries](docs/GENERATIVE_AI.md),
+  [risk features](docs/PHISHING_FEATURES.md) and
+  [historical draft recovery](docs/REPLY_DRAFTING.md): focused technical references.
+- [Documentation audit](docs/DOCUMENTATION_AUDIT.md) and
+  [legacy compatibility records](docs/archive/LEGACY_FEATURES.md): disposition of
+  superseded plans, migration evidence and earlier technical reviews.
+
+No model installation is part of the current setup. Archived plans and old prompt
+numbers are not implementation instructions.

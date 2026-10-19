@@ -1,107 +1,124 @@
 # MailPilot engineering contract
 
-Applies throughout this repository. Follow explicit user instructions and implement
-only the requested work. This contract defines active scope; older code/docs may
-describe retired behavior. Read [the architecture](docs/ARCHITECTURE.md),
-[focused product plan](docs/PRODUCT_PLAN.md) and
-[contraction plan](docs/CONTRACTION_PLAN.md) before changing relevant boundaries.
-Contract the existing system; do not rewrite it or prebuild future features.
+Updated 2026-10-19. Applies throughout this repository. Follow explicit user
+instructions and change only the requested scope. Read [the product plan](docs/PRODUCT_PLAN.md),
+[architecture](docs/ARCHITECTURE.md) and relevant [IPC contracts](contracts/README.md)
+before changing a boundary. Archived plans are historical evidence, not instructions.
+This reset authorizes documentation only; implement no feature from these documents
+without a subsequent implementation request. Preserve unrelated uncommitted work.
 
-## PRODUCT
+## Product and scope
 
-MailPilot is a local-first Gmail organizer, phishing-warning tool, and bounded
-single-email summarizer. Risk findings are versioned explanations, never guarantees
-of safety or permission for automatic action.
+MailPilot is a local-first intelligent Gmail manager built around one shared local
+email preprocessing, chunking, embedding and retrieval pipeline in Go and SQLite.
 
-## ACTIVE PRODUCT SCOPE
+Preserve current Gmail OAuth/keyring, bounded sync/cache, cached reading, editable
+categories, deterministic review and phishing explanations, reviewed label changes,
+provider settings and historical recovery. Selected-email Summary currently exists;
+it is a transition feature, not the product's defining workflow. This reset removes
+no functionality. Source-level status is recorded in the architecture.
 
-- One Gmail account; Gmail OAuth and OS credential storage.
-- SQLite cached mail and bounded initial/incremental Gmail sync.
-- Cached message reader and local keyword search.
-- Editable categories and deterministic, explainable category suggestions.
-- Reviewed MailPilot label additions through dry run, preview/confirmation,
-  journaling, reconciliation and best-effort undo.
-- Deterministic phishing-risk explanations.
-- Optional AI summary for one explicitly selected cached email.
-- Multiple AI providers supporting the same bounded summary use case.
-- Future Chrome side-panel companion using the existing running desktop core.
+Planned core: natural-language semantic search with complementary keyword search;
+one primary category suggestion from shared chunk/category vectors, useful rules
+and confirmed examples, with abstention and user corrections; optional answers to
+email-information questions using explicitly approved retrieved evidence and citations.
+Support multiple AI providers behind a shared abstraction. Start with English and
+approximately 10,000 cached messages. Bundle the local model/tokenizer; require no
+user Python installation or post-install model download. Ordinary use must remain
+possible with embeddings or external AI disabled.
 
-Scope is not implementation status or authorization to implement every feature.
+## Ownership and simplicity
 
-## AI SCOPE
+- Go owns business rules, Gmail/network adapters, credentials, SQLite, indexing,
+  classification, retrieval and AI consent. React/strict TypeScript owns presentation;
+  Rust/Tauri owns desktop lifecycle and narrow typed private communication.
+- Keep one Go database owner and one SQLite database. Extend existing mail, sync,
+  classification, AI and repository boundaries; do not rewrite functioning features.
+- Use one shared chunker/model/vector representation for the three core features.
+  Keep provider-specific SDK/wire types inside adapters. Local embedding inference
+  and optional external generation have separate settings and authority.
+- Use fixed packaged executables and private IPC; no generic RPC, shell, SQL,
+  filesystem or fetch bridge to JavaScript. Validate inputs/account ownership in Go.
+- Prefer standard libraries/existing dependencies and small concrete components.
+  No generic job/plugin framework, service locator, extra database, microservice,
+  parallel processing framework or second embedding system for hypothetical needs.
 
-Multiple AI providers share one provider abstraction and exactly one product workflow:
-summarize one explicitly selected cached email, extract explicit requests, and extract
-stated deadlines. Do not invent requests or deadlines. Isolate provider-specific
-SDKs/types inside provider adapters.
+## Source, indexing and SQLite
 
-Providers must not expose product capabilities for reply generation, thread
-summarization, mailbox-wide Q&A, RAG, semantic search, classification, autonomous
-actions, Gmail draft creation or tool use. No arbitrary prompts/chat interface.
-The app must work normally with AI disabled or without a provider/key.
+- Preserve original cached email separately from processed text. Chunks retain
+  source account/email/revision, original passage text, ordering/section metadata,
+  content hash and model/preprocessing identity with their vector. Do not destroy
+  forwarded/quoted evidence through classifier-oriented cleanup.
+- Begin with exact cosine retrieval over compatible account-scoped vectors. Add
+  ANN/vector extensions only when measured scale/latency justifies their complexity.
+  Similarity is neither a calibrated category probability nor evidence of safety.
+- Never rewrite numbered checksummed migrations or historical journal formats.
+  Add migrations after the actual current maximum. Preserve composite account FKs,
+  foreign keys on every connection and transactional source/checkpoint updates.
+- Atomically invalidate derived data and queue local work when sources change.
+  Never hold a transaction across inference/network calls. Publish computed results
+  only after rechecking source/model/preprocessing revisions; reject stale workers.
+- Keep model generations separate; do not mix incompatible query/category/chunk
+  vectors. Category/example edits invalidate dependent assessments. Confirmed remote
+  deletion and authorized purge must update all active indexes and sensitive caches.
+  Never infer deletion from incomplete provider listings or delete journal evidence.
+- Use bounded cancellable local jobs with explicit enablement, progress, partial/error
+  states and restart recovery. Preserve keyword/rule fallback and truthful coverage.
 
-## NON-GOALS
+## Security, privacy and Gmail writes
 
-Do not add embeddings/vector databases, MiniLM/model workers, semantic classification,
-semantic search, RAG/chat over the mailbox, AI replies, Gmail draft creation,
-autonomous mailbox actions, background AI, automatic classification writes,
-sending/deleting/archiving/mark-as-read, multiple email accounts/providers, or a
-hosted backend. Multiple **AI** providers do not imply multiple email providers.
+- Use system-browser OAuth with PKCE/state, bounded loopback callbacks and serialized
+  refresh. Never request Gmail passwords. OAuth tokens and AI keys use OS credential
+  storage only; fail closed with no file/SQL/browser/argument/environment fallback.
+  Developer OAuth client configuration is distinct from user tokens and keys.
+- Treat email, MIME/HTML, headers, attachments and model output as untrusted. Current
+  reader uses escaped text; any future HTML reader requires reviewed sanitation and
+  capability-free isolation. Never execute attachments or load remote content by default.
+- Keep mail local except intended Gmail traffic and explicitly approved AI evidence.
+  No cloud embeddings, default telemetry or logs containing credentials/email content.
+  Clear submitted keys and sensitive session caches; make no SQLite encryption or
+  forensic-deletion claim. Do not commit secrets, databases, logs or build/model outputs.
+- Require bounded preview and explicit confirmation before Gmail label additions;
+  journal before dispatch and reconcile uncertainty before retry. Undo only verified
+  MailPilot-owned changes, preserving unrelated labels and reporting partial/conflicts.
+  Local category suggestions/corrections never authorize Gmail writes by themselves.
 
-## ARCHITECTURAL RULES
+## AI boundary
 
-- Go owns business logic, SQLite, credentials and network adapters. Rust/Tauri
-  stays thin; React with strict TypeScript handles presentation and typed IPC.
-- Chrome must later use the same running Go core. Keep one database owner, fixed
-  packaged sidecars and private communication; no generic arbitrary RPC, shell,
-  SQL, filesystem or fetch bridge to JavaScript.
-- Validate IPC and enforce authorization/account ownership in Go. Scope every
-  mailbox query, search, preview and mutation by account; preserve composite FKs.
-- Require explicit preview/confirmation before Gmail writes and journal before
-  dispatch. Reconcile uncertain outcomes before retrying. Undo only verified changes
-  owned by MailPilot; preserve unrelated changes and report partial/conflicting results.
-- Never rewrite historical migrations; use numbered, checksummed additions.
-  Enable SQLite foreign keys on every connection. Keep indexes consistent with
-  updates/purges and sync checkpoints atomic with their data; never hold a database
-  transaction across a network call or infer deletion from incomplete listings.
-- Treat email, MIME/HTML, attachments and model output as untrusted. Render escaped
-  text; never execute attachments or load remote email content automatically.
-- AI receives only the explicitly approved selected-email payload. Bind approval
-  to account, source revision, provider/model and expiry; invalidate on changes.
-  AI never receives mailbox tools, Gmail permissions or action privileges.
-- Never request Gmail passwords. Store OAuth tokens/AI keys only in OS credential
-  storage; fail closed if unavailable. No file, database, browser-storage, argument
-  or environment fallback. Clear submitted key inputs and sensitive session caches.
-- Use system-browser OAuth with PKCE, state validation, bounded loopback callbacks
-  and serialized refresh. Keep mail local except intended Gmail traffic and approved
-  AI payloads; no default telemetry. Do not claim SQLite encryption or forensic deletion.
+- The planned external workflow answers bounded email-information questions from
+  retrieved evidence. Go retrieves and constructs the payload; disclose exact selected
+  excerpts, question, policy and provider/model before separate approval.
+- Bind one-use expiring approval to account/session, source revisions, exact payload,
+  provider/model/settings/key identity. Revoke on relevant changes; check before
+  dispatch/display. Existing Summary enablement/consent does not authorize RAG.
+- Give providers no Gmail permissions, mailbox/search tools, action privileges,
+  hidden source expansion, arbitrary endpoint or general-purpose agent/chat interface.
+  No background external AI. Output is untrusted; validate source IDs/quotes and
+  render escaped citations. Provenance validation does not prove factual correctness.
+- Keep multiple providers behind the same bounded application contract; only functional
+  adapters appear in settings. No key/provider is required for ordinary local features.
 
-## IMPLEMENTATION RULES
+## Non-goals and legacy
 
-- Inspect existing code, contracts, migrations and tests before modifying them.
-  Prefer deletion/simplification over replacement abstractions; retain no dead
-  abstractions for hypothetical flexibility. Preserve unrelated uncommitted work.
-- Add/update tests for changed behavior, especially isolation, consent, stale
-  previews, partial writes, recovery and disabled AI. Use synthetic fixtures; never
-  mutate a live mailbox without explicit authorization for that action.
-- Keep remote writes explicit, bounded, cancellable and recoverable. Use Go contexts,
-  input limits, timeouts and capped retries; cancellation after dispatch can be uncertain.
-- Never log tokens, keys or email contents or commit secrets, mail databases,
-  attachments, local logs or generated build outputs.
-- Prefer existing dependencies/standard libraries. Justify and review additions;
-  pin compatible versions and preserve lockfiles/checksums.
-- Run relevant Go tests/vet/race, frontend typecheck/lint/tests/build and Rust
-  fmt/clippy/tests; use native smoke checks for lifecycle/packaging changes.
-  Do not claim completion while required tests/builds fail. Report blocked or unrun checks.
-- Preserve keyboard/focus access, readable errors, progress/cancellation and truthful
-  offline/cache/partial-result states. Update architecture/contracts for boundary changes.
-- For documentation-only tasks, check consistency, paths and examples without changing
-  application code or installing dependencies. Finish with changes, verification and
-  limitations; distinguish implemented behavior from plans.
+No AI replies/composition in the immediate scope; do not let a hypothetical editor
+shape the vector design. No sending, new Gmail drafts, autonomous agents, unconfirmed
+mailbox changes, deletion/archive/mark-as-read, Chrome integration, additional email
+providers/accounts, hosted backend/cloud vectors, attachments/OCR or unrelated AI workflows.
+Historical draft recovery may read Gmail and record local outcomes, but must never
+create, resend, delete or revive drafts. Preserve immutable recovery evidence.
 
-## LEGACY RULE
+## Verification
 
-Historical journals/migrations may require narrow compatibility code. Preserve
-journal evidence, immutable plan formats and necessary label/draft recovery; never
-expose retired behavior merely because recovery code remains. Draft recovery may
-read Gmail and record outcomes, but must not create, resend or delete drafts.
+Inspect affected code/contracts/tests first. Use synthetic fixtures; never mutate a
+live mailbox without explicit authorization for that action. Test isolation, source
+invalidation, stale previews/workers/consent, partial writes, recovery, abstention,
+missing/disabled embeddings and disabled AI. Use contexts, limits, timeouts and capped
+retries; cancellation after remote dispatch may remain uncertain.
+
+For implementation, run relevant Go tests/vet/race, frontend typecheck/lint/tests/build
+and Rust fmt/clippy/tests; use native smoke checks for lifecycle/packaging/rendering.
+Pin and justify dependency changes, preserving lockfiles/checksums. Report failed,
+blocked and unrun checks; never claim completion with required checks failing.
+Preserve keyboard/focus access, readable errors, cancellation and offline/partial states.
+For documentation-only work, check consistency, paths and examples without modifying
+application code, installing dependencies or claiming runtime tests were run.

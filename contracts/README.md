@@ -1,17 +1,21 @@
 # Local IPC, protocol version 1
 
+Status reviewed 2026-10-19. This file documents implemented IPC, not future feature
+authorization. [The architecture](../docs/ARCHITECTURE.md) describes the planned
+shared local chunk/vector pipeline; [the product plan](../docs/PRODUCT_PLAN.md)
+defines scope/milestones. No retrieval/index/evidence-answer command is added by
+this documentation reset. Summary remains implemented. Historical fixtures are
+compatibility/negative-test examples; see [legacy notes](../docs/archive/LEGACY_FEATURES.md).
+
 Active contraction status (2026-10-16): `ask.manage` / `ask_manage` and
 `search.semantic` / `semantic_search` are removed, including indexing. Their
 fixtures and sections below are historical references. `reply.manage` / `reply_manage`
-accepts only status, configure/disable for retained provider settings, and
-reconcile/resolve/cancel for historical actions. All previous prepare/generate/
-preview_draft/create/undo_preview requests reject even with approval. Thread or
-arbitrary prompt fields cannot be supplied to retained operations. Historical
-preview bodies are never restored as editable/creatable sessions; returned preview
-and review IDs are empty. Existing outcome records and immutable migrations remain.
-A cached-message summary endpoint and keyword-search endpoint do not yet exist.
+accepts only historical status/reconcile/resolve/cancel. Its request contains no
+prompt, body, thread, model, key or creation fields. Old drafting fixtures are archival
+and rejected at the active request boundary. Historical migrations/journals remain.
+AI settings and one selected-email summary are defined below; no keyword endpoint exists.
 
-The trusted native host launches the fixed bundled Go executable and owns its private stdin/stdout pipes. UTF-8 JSON-RPC 2.0 objects are newline-delimited, with a 64 KiB frame limit, string request IDs (1–64 characters), and no batches or notifications in this bootstrap. One request executes at a time. The Go request timeout is five seconds; the host waits at most seven seconds. A broken or timed-out transport is closed and requires an application restart.
+The trusted native host launches the fixed bundled Go executable and owns its private stdin/stdout pipes. UTF-8 JSON-RPC 2.0 objects are newline-delimited, with a 64 KiB frame limit, string request IDs (1–64 characters), and no batches or notifications in this bootstrap. One request executes at a time. The Go request timeout is normally five seconds and the host waits seven seconds; classification.review uses 30 seconds in Go and 32 seconds in the host. A broken or timed-out transport is closed and requires an application restart.
 
 Initialize before database access:
 
@@ -44,12 +48,12 @@ The Tauri `health` command takes no arguments. Rust sends:
     "protocolVersion": 1,
     "backend": "connected",
     "database": "connected",
-    "schemaVersion": 2
+    "schemaVersion": 14
   }
 }
 ```
 
-`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. Schema version 2 includes normalized mailbox persistence and the action journal; migration 1 remains the unchanged settings foundation. The wire protocol remains version 1.
+`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. The current migration set ends at schema version 14; the example reflects that baseline. Migration 2 introduced normalized mail/journal storage, and migration 1 remains the unchanged settings foundation. The wire protocol remains version 1.
 
 The host may send `shutdown` with empty parameters, receiving `{"stopping":true}`, or close stdin for clean shutdown. The UI cannot invoke initialize, shutdown, SQL, shell commands, filesystem paths, or arbitrary method names. Unknown fields/methods, mismatched protocol versions and malformed requests are rejected. Standard JSON-RPC error codes are used, plus `-32001` for a missing handshake; errors contain no underlying database paths or diagnostics. Logs are structured JSON on stderr.
 
@@ -141,7 +145,7 @@ Responses contain accountId, rows (at most five), hasMore, and optional safe cod
 
 `classification_review({request})` maps only to `classification.review`. [classification-v1.json](classification-v1.json) is the shared synthetic compatibility fixture checked by Go, Rust and TypeScript.
 
-Requests contain exactly operation (`list` or `run`), accountId and offset (0–1,000,000). An empty accountId is permitted for list to resolve the current session; run requires the current account’s ID. Go checks authorization and account ownership. Calls have the existing five-second deadline and process/list at most five cached emails, with hasMore for pagination. Run affects only local assessments. It cannot accept email content, category IDs, provider instructions or model output from JavaScript.
+Requests contain exactly operation (`list` or `run`), accountId and offset (0–1,000,000). An empty accountId is permitted for list to resolve the current session; run requires the current account’s ID. Go checks authorization and account ownership. Calls have a 30-second Go deadline (32-second native wait) and process/list at most five cached emails, with hasMore for pagination. Run affects only local assessments. It cannot accept email content, category IDs, provider instructions or model output from JavaScript.
 
 Responses contain accountId, rows, hasMore, processed (successfully saved assessments, including abstentions), errors (per-row failures), and optional safe code. Each row includes email_id, sender, subject, bodyState, state, predictions, nullable timestamp and optional code. Row states are not_reviewed, unclassified, classified, stale, error. At most one prediction is returned per email. Only classified rows carry predictions; only classified/unclassified rows carry a timestamp. A prediction includes email_id, category_id, category_name, confidence (greater than zero through one), classifier_name, classifier_version, reasons (one to six nonblank strings, maximum 160 UTF-8 bytes each), and timestamp (UTC epoch milliseconds). IDs and classifier metadata are bounded; raw message bodies/HTML are never returned. A prediction’s email identity and timestamp must match its row.
 
@@ -204,44 +208,44 @@ scores and an empty `assessment.candidates` compatibility array. Historical SQLi
 candidate/score data remains decodable, but old engine versions are stale and
 are not exposed as current predictions. No `embedding_unavailable` error is emitted.
 
-## Reviewed reply drafting (protocol v1 additive extension)
+## AI settings and selected-email summaries (protocol v1)
 
-The main-window `reply_manage` command maps only to `reply.manage`.
-[reply-drafting-v1.json](reply-drafting-v1.json) is the shared Go/Rust/TypeScript
-compatibility fixture. Ship the strict host, frontend and core together.
+[ai-settings-v1.json](ai-settings-v1.json) defines `ai.settings` / `ai_settings`:
+status, configure, disable. Fields: operation, accountId, provider, model, apiKey.
+Configure requires the current account, a registered provider and model; blank key
+uses only that provider's saved OS key. Status accepts no model/provider/key fields;
+disable accepts only accountId. Unknown fields reject. Responses return account,
+selected provider/model, enabled, registered providers `{id, external}` and safe code;
+API keys are never returned. Provider selection is persisted by additive migration 014.
 
-Requests use operation, accountId, emailId, includeThread, instruction, tone,
-previewId, jobId, actionId, approved, body, model and apiKey. Operations are status,
-configure, disable, prepare, generate, preview_draft, create, reconcile, resolve,
-undo_preview and cancel. Unknown fields/operations and unrelated nonempty fields
-are rejected. IDs are at most 100 UTF-8 bytes, instruction 1,000, reviewed body
-6,000, model 128, inbound API key 2,048. Tones are Professional, Friendly, Concise
-and Formal. Status may omit account identity; every other operation requires the
-authorized account. No sending or destructive operation is accepted.
+[email-summary-v1.json](email-summary-v1.json) defines `email.summarize` /
+`email_summarize`: preview, approve, status, cancel, clear. Fields: operation,
+accountId, emailId, previewId, jobId, approved. All operations require exactly one
+selected cached account/email ID. Approve requires its preview ID and `approved:true`;
+cancel requires its job ID; other operations reject approval/job/preview fields.
+There are no prompts, raw email bodies, thread selectors, tools or model overrides.
 
-Prepare selects cached context locally. Generate requires the exact AI preview
-ID and approved=true; preview_draft requires the current review ID and edited
-body; create requires the saved action ID, digest and approved=true, with no
-replacement body. Resolve requires a completed reconciliation and explicit
-approval. Cancel requires the current job ID. Settings, generation, creation and
-reconciliation run as bounded cancellable jobs polled through status.
+Responses have state idle/preview/running/completed/error, scoped identities,
+provider/model/external, preview/job ID, expiry, exact email/policy disclosure,
+truncated flag, nullable result and safe code. Result is
+`{summary, requests: string[], deadlines: string[]}`. Input is capped at 6,000 UTF-8
+bytes; summary at 4,000; each extraction array at ten verbatim source excerpts of
+500 bytes each. Unknown/unsupported output rejects. Raw provider response/error
+bodies never cross IPC. Responses are capped at 48 KiB after JSON escaping.
+Consent is single use, expires in five minutes and is invalidated by source,
+settings, account or reader-lifecycle changes. Provider calls are bounded background
+jobs; status never uploads mail and cancellation suppresses late output.
 
-Responses contain accountId, state, configured, provider, model, external, jobId,
-previewId, reviewId, expiresAt (UTC epoch milliseconds), context, instruction,
-policy, to, subject, body, sourceCount, truncated, actionId, draftId, reconciled,
-undoAvailable and a fixed safe code. There is no API key response field.
-Context is at most 6,000 bytes, instruction 1,500, policy 1,000, recipient 320,
-subject 512, body 6,000 and sourceCount 0–5; total responses are capped at 48 KiB.
-States are idle, configuring, ai_preview, generating, editing, draft_preview,
-creating, reconciling, created, uncertain, conflict, resolved and error.
-UndoAvailable is always false; undo_preview reports undo_unavailable.
+## Historical draft recovery (restricted protocol v1)
 
-Preview contents are sensitive and rendered only as escaped text. Pending AI
-consent is memory-only. Migration 11 persists reviewed Gmail draft plans and
-outcomes; no secret or AI prompt history is stored. Disconnect revokes consent,
-cancels work and suppresses late results. Uncertain remote writes remain in the
-journal and cannot be automatically replayed. The native smoke test exercises
-this command's unauthorized-account rejection.
+[draft-recovery-v1.json](draft-recovery-v1.json) defines the active `reply.manage` /
+`reply_manage` subset. Requests contain operation, accountId, jobId, actionId,
+approved. Status rejects control fields; reconcile requires account/action; resolve
+also requires explicit approval after reconciliation; cancel requires account/job.
+Responses contain accountId, state, jobId, to, subject, actionId, draftId, reconciled,
+code. No historical body, consent context, editable preview or AI settings is exposed.
+Recovery does not need AI and cannot create drafts. The old
+[reply-drafting-v1.json](reply-drafting-v1.json) remains an archival/rejection fixture.
 
 ### Cached message reader (compatible v1)
 
