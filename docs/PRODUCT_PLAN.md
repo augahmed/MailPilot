@@ -10,11 +10,12 @@ The [vector architecture plan](VECTOR_ARCHITECTURE_PLAN.md) supplies the concret
 reuse/removal map, logical schema, shared interfaces and compatibility gates for
 these same milestones. It is a technical supplement, not a second scope/prompt plan.
 
-Status: the subsequently authorized SQLite persistence portion of M2 is implemented
-by migration 015 and `Store.Chunks()`. M1 chunking and the remaining inference,
-coordination, search, classification and AI milestones are still planned. No model,
-new dependency, credentials or public IPC changed. Further work requires a scoped
-implementation request; this document does not start it.
+Status: M1 deterministic source/chunking and the SQLite persistence portion of M2
+are implemented through migrations 015–016, `mail.Chunker`, the pinned offline
+WordPiece tokenizer and `app.CachedChunker` in manual sync. Inference, embedding
+coordination, search, classification and AI milestones are still planned. No model
+weights, new Go dependency or new public command were added. Further work requires
+a scoped implementation request; this document does not start it.
 
 ## 1. Product purpose
 
@@ -152,9 +153,8 @@ Generation is optional and no provider/key is needed for local search/classifica
 | M7 — Desktop qualification                 | Coordinate core/host/UI contracts and packaging; document privacy/licenses, real resource budgets and known limitations.                                                                                                           | Required language/toolchain checks, native smoke/upgrade tests, measured evaluations and accessible end-to-end workflows pass or exact blockers remain reported.                          |
 
 Milestones are coherent slices, not a second list of copyable implementation prompts.
-M1 is the recommended first application change after the bounded M0 model/tokenizer
-decision. Supporting reading fixes may be separately requested without changing
-that dependency order. Do not add AI routes before reliable local retrieval/evidence.
+M1 is implemented with tokenizer parity fixtures; native inference qualification
+remains open in M0/M2. Supporting reading fixes may be separately requested. Do not add AI routes before reliable local retrieval/evidence.
 
 ## 5. Evaluation, operational limits and decisions still open
 

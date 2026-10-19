@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"mailpilot.local/core/internal/repository"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -62,7 +64,7 @@ func TestChunkMigrationUpgradesFourteenWithoutReinterpretingHistory(t *testing.T
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if s.SchemaVersion() != 15 {
+	if s.SchemaVersion() != 16 {
 		t.Fatal("missing migration 015")
 	}
 	for _, table := range []string{"email_chunks", "chunk_embeddings", "index_state"} {
@@ -119,5 +121,73 @@ func TestChunkMigrationFailureIsAtomic(t *testing.T) {
 	}
 	if err = db.QueryRow(`SELECT count(*) FROM reply_draft_actions WHERE id=?`, plan.ID).Scan(&journals); err != nil || journals != 1 {
 		t.Fatal("recovery evidence lost", err)
+	}
+}
+
+func TestProvenanceMigrationPreservesExistingChunksAndVectors(t *testing.T) {
+	ctx := context.Background()
+	old, dir := historicalStore(t, 15)
+	a := account(t, old, "provenance-upgrade")
+	_, input := chunkFixture(t, old, a, "one")
+	c := input.Chunks[0]
+	if _, err := old.db.Exec(`INSERT INTO email_chunks VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, "old-chunk", a, input.EmailID, 0, c.SectionType, c.Text, c.TokenCount, input.SourceRevision, c.StartOffset, c.EndOffset, hashText(c.Text), input.PreprocessingVersion); err != nil {
+		t.Fatal(err)
+	}
+	vector, err := encodeVector([]float32{.25, .75}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = old.db.Exec(`INSERT INTO chunk_embeddings VALUES(?,?,?,?,?,?,?)`, a, "old-chunk", input.Model.ID, input.Model.Version, 2, vector, "ready"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = old.db.Exec(`INSERT INTO index_state VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, a, input.EmailID, input.SourceRevision, input.PreprocessingVersion, input.IndexVersion, input.Model.ID, input.Model.Version, 2, "old-generation", "complete", "ready", 42); err != nil {
+		t.Fatal(err)
+	}
+	if err = old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	state, err := s.Chunks().State(ctx, a, input.EmailID)
+	if err != nil || state.ContentStatus != "complete" || state.Generation != "old-generation" || state.Status != "ready" {
+		t.Fatal("existing index changed", err)
+	}
+	chunks, err := s.Chunks().List(ctx, a, input.EmailID, repository.Page{Limit: 10})
+	if err != nil || len(chunks) != 1 || chunks[0].SourceKind != "" || chunks[0].ContextText != "" || chunks[0].ID != "old-chunk" {
+		t.Fatal("legacy provenance invented", err)
+	}
+	cached, err := s.Chunks().Embedding(ctx, a, input.EmailID, "old-chunk", input.Model)
+	if err != nil || !reflect.DeepEqual(cached.Vector, []float32{.25, .75}) {
+		t.Fatal("existing vector altered", err)
+	}
+}
+
+func TestProvenanceMigrationFailureRollsBackAddedColumns(t *testing.T) {
+	old, dir := historicalStore(t, 15)
+	if _, err := old.db.Exec(`CREATE TRIGGER chunks_mapping_changed AFTER UPDATE ON emails BEGIN SELECT 1; END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(context.Background(), dir)
+	if err == nil {
+		_ = s.Close()
+		t.Fatal("conflicting migration accepted")
+	}
+	db, err := sql.Open("sqlite", filepath.Join(dir, "mailpilot.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var n int
+	if err = db.QueryRow(`SELECT count(*) FROM pragma_table_info('email_chunks') WHERE name='source_kind'`).Scan(&n); err != nil || n != 0 {
+		t.Fatal("partial ALTER TABLE committed", err)
+	}
+	if err = db.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 15 {
+		t.Fatal("partial ledger committed", err)
 	}
 }

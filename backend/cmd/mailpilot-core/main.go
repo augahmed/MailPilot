@@ -108,6 +108,12 @@ func run() int {
 		application.Auth = authentication
 		synchronization = mailsync.New(ctxRoot, authentication.Session, func(account domain.AccountID) mailsync.Reader { return gmail.NewProvider(account, authentication) }, store.Emails(), cfg.InitialSyncLimit)
 		application.Sync = synchronization
+		chunking, err := app.NewCachedChunker(store.Emails(), store.Chunks())
+		if err != nil {
+			return nil, err
+		}
+		synchronization.SetChunkProcessor(chunking.Prepare)
+		synchronization.SetCachedChunkProcessor(chunking.PrepareCached)
 		application.Emails = store.Emails()
 		application.Categories = store.Categories()
 		rules, err := classification.NewRuleBasedClassifier(classification.StarterConfig())

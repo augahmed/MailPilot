@@ -1,10 +1,10 @@
 # Shared email chunk-and-vector architecture plan
 
-Reviewed 2026-10-19 against the current working tree. **Persistence slice implemented:**
-migration 015 and `Store.Chunks()` now provide the three-table storage contract in
-section 4, under a subsequent explicit implementation request. Chunking, model
-inference, job coordination, retrieval, classification and IPC remain planned.
-Preserve unrelated uncommitted work. This document does not authorize further implementation.
+Reviewed 2026-10-19 against the current working tree. **Persistence and chunking
+slices implemented:** migrations 015–016, `Store.Chunks()`, `mail.Chunker`, pinned
+local WordPiece tokenization and `app.CachedChunker` during manual sync. Model
+inference, embedding job coordination, retrieval, semantic classification and new
+IPC remain planned. Preserve unrelated work; this plan does not authorize more implementation.
 
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) remains the sole product scope/milestone authority;
 [ARCHITECTURE.md](ARCHITECTURE.md) describes runtime/trust boundaries. This document
@@ -37,12 +37,13 @@ there is an FTS5 test probe but no product keyword index or search endpoint.
 
 Source composition in `backend/cmd/mailpilot-core/main.go` currently wires
 `RuleBasedClassifier`, `ClassificationReview`, `Organization`, `CachedReader`,
-`AIService` and GET-only `ReplyMaintenance`. It wires no chunker, embedding adapter,
+`AIService` and GET-only `ReplyMaintenance`. It also wires `CachedChunker` into manual sync. It wires no embedding adapter,
 index coordinator or retriever. OpenAI is the only real installed AI adapter;
 multiple-provider substitution is supported by the shared boundary and synthetic
 adapters, not evidence of additional shipped providers. Summary still exists.
 
-There are 15 migration files; 015 adds the shared chunk persistence layer.
+There are 16 migration files; 015 adds shared chunk persistence and 016 adds source
+provenance/context plus independent projected body coverage.
 Historical vector tables are inert. The current AI interface only summarizes one
 selected cached email. New retrieval/semantic classification/evidence QA cannot be
 enabled by changing settings or restoring archived UI handlers.
@@ -56,7 +57,7 @@ creation/sending, agents/mailbox tools, Chrome or extra email providers in this 
 ## 2. Exact reuse, extension and retirement map
 
 Paths in this table exist unless explicitly marked absent/planned. "Extend" means
-later scoped implementation with tests except the persistence slice in section 4. No
+later scoped implementation with tests except the implemented persistence/chunking slices in section 4. No
 existing application source, migration, journal, database or model data is deleted.
 
 | Current path(s)                                                                                                                                                                                                                                                                                     | Action in the shared design                                                                                                                                                                                                                                           |
@@ -127,7 +128,8 @@ loading fails or local semantic processing is disabled.
 ## 4. Proposed SQLite schema and constraints
 
 Migration [015_chunk_storage.sql](../backend/internal/store/sqlite/migrations/015_chunk_storage.sql)
-is the implemented storage contract below. Category/keyword extensions remain logical
+and [016_chunk_provenance.sql](../backend/internal/store/sqlite/migrations/016_chunk_provenance.sql)
+are the implemented storage contract below. Category/keyword extensions remain logical
 proposals. All additions stay in the existing database and use new checksummed
 migrations after the actual maximum.
 No rewrite, backfill guessing, drop or automatic purge of existing user records.
@@ -154,22 +156,22 @@ and per-email state. This supersedes the earlier proposal for vectors inline in
 chunk rows plus profile/chunk-set/work tables. There is one shared vector store;
 `chunk_embeddings` is its sole embedding table, not a second pipeline or cache.
 
-| Table | Implemented fields and ownership |
-| --- | --- |
-| `email_chunks` | Opaque `id`; `account_id`, `email_id`, contiguous zero-based `chunk_index`; `section_type`, exact `text`, `token_count`; `source_revision`, half-open UTF-8 byte `start_offset`/`end_offset`, text SHA-256 `content_hash`, `preprocessing_version`. Composite email FK with cascade, unique account/email/ordinal and account/chunk identity. |
-| `chunk_embeddings` | `account_id`, `chunk_id`, `model_id`, `model_version`, `dimension`, nullable `vector_data`, `status` (`pending`, `ready`, `failed`). Composite account/chunk FK with cascade; primary key account/chunk/model/version. Ready BLOB byte length must equal dimension × 4; other statuses carry no vector. |
-| `index_state` | Account/email primary key and cascading composite email FK; source/preprocessing/index versions; active model/version/dimension; opaque `generation` work token; source `body_state`; index `status` and nullable `last_indexed_at`. No scheduler, lease, retry or profile framework. |
+| Table              | Implemented fields and ownership                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `email_chunks`     | Opaque `id`; `account_id`, `email_id`, contiguous zero-based `chunk_index`; `section_type`, exact `text`, `token_count`; `source_revision`, half-open UTF-8 byte `start_offset`/`end_offset`, text SHA-256 `content_hash`, `preprocessing_version`; 016 adds `source_kind`, `section_index`, `section_start_offset`, `section_end_offset`, `context_text`. Composite email FK with cascade, unique account/email/ordinal and account/chunk identity. |
+| `chunk_embeddings` | `account_id`, `chunk_id`, `model_id`, `model_version`, `dimension`, nullable `vector_data`, `status` (`pending`, `ready`, `failed`). Composite account/chunk FK with cascade; primary key account/chunk/model/version. Ready BLOB byte length must equal dimension × 4; other statuses carry no vector.                                                                                                                                              |
+| `index_state`      | Account/email primary key and cascading composite email FK; source/preprocessing/index versions; active model/version/dimension; opaque `generation` work token; source `body_state` and projected `content_status`; index `status` and nullable `last_indexed_at`. No scheduler, lease, retry or profile framework.                                                                                                                                 |
 
 SQL-free contract: [repository/chunks.go](../backend/internal/repository/chunks.go).
 Concrete implementation: [sqlite/chunks.go](../backend/internal/store/sqlite/chunks.go).
 `Store.Chunks()` provides `Replace`, `State`, paged `List`, `SaveEmbeddings` and
-`Embedding`. No public IPC, inference, network calls, application coordinator or
-historical-vector fallback is added. Stored text remains untrusted. Callers own
-faithful normalization/chunking and truthful upstream body completeness.
+`Embedding`. No new public command, inference, network calls or historical-vector fallback
+is added. `app.CachedChunker` now supplies versioned chunks to this store during
+manual sync; stored text remains untrusted. Upstream body completeness is retained.
 
 `Replace` validates and atomically replaces a complete chunk snapshot. Shuffled
 input is sorted and must have contiguous ordinals. Identical snapshots retain IDs,
-generation and timestamps. Unchanged exact text/section/token-count/preprocessing
+generation and timestamps. Unchanged exact text/context/section/token-count/preprocessing
 inputs reuse vectors, including chunks moved to new ordinals. Matching prefers
 original ordinals for duplicates; reuse is bounded to the same account and email.
 Removed/changed inputs cascade their vectors; preprocessing changes require new
@@ -200,7 +202,7 @@ converted or marked ready automatically.
 
 State is `pending` for complete sources with no ready vectors, `partial` for some
 ready vectors or any unknown/unavailable body with usable chunks, `ready` only
-when all chunks have valid vectors and body state is complete, `unavailable` for
+when all chunks have valid vectors and cached/projected body coverage is complete, `unavailable` for
 zero chunks, and `stale` after invalidation. Individual failures stay in embedding
 status. `last_indexed_at` is set when every stored chunk has a valid vector, including
 partial-body coverage; consumers must also inspect body/index status. It is cleared
@@ -212,17 +214,85 @@ and report incomplete coverage.
 Bounds: 4,096 chunks and 4 MiB aggregate text per snapshot, 64 KiB per chunk,
 100 embedding writes per atomic batch, dimension 1–8,192; paged chunk reads use the
 existing 1–100 row limit. Offsets measure bytes into a caller-defined normalized
-section and must span exactly the stored text. This slice cannot verify mappings
-against a not-yet-implemented source projector, tokenize, silently truncate, or
-promise coverage for rejected oversized inputs. No transaction crosses inference.
+section and must span exactly the stored text. The chunker now produces/reproduces these named projection mappings. The store
+validates spans; it does not silently truncate or promise coverage for rejected
+oversized inputs. Legacy chunks retain unknown mapping fields. No transaction crosses inference.
 
 Existing migrations 001–014, original emails, category assignments and label/draft
 journals are unchanged. Old noncanonical source hashes remain readable; indexing
 requires a current 64-character canonical hash, obtained through normal import, not
 an automatic migration rewrite. Semantic rules/consent/recovery formats are unchanged.
-There is no automatic chunk backfill and no model installed by this migration.
+Migration itself does not backfill. A later manual sync performs bounded cached
+chunk preparation; no inference model is installed or executed.
 Future coordinator/profile/category metadata must extend this shared store only as
 needed and preserve its account, revision and vector-validation guarantees.
+
+### Implemented deterministic chunk production
+
+Source files: `internal/mail/sections.go`, `chunks.go`, `wordpiece/tokenizer.go`,
+`internal/app/chunks.go`. One pure-Go tokenizer uses the selected MiniLM vocabulary
+at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`; vocabulary SHA-256 is
+`07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3`.
+Text assets, configuration, license and notice are embedded in the Go binary.
+There is no native tokenizer dependency, weight download, Python requirement or
+inference. 167 frozen parity cases come from Hugging Face tokenizers 0.21.4 and the
+pinned official tokenizer.json, with padding/truncation disabled. This qualifies
+these tokenizer cases, not embedding quality/native runtime compatibility.
+
+`mail.Sections` accepts already MIME/charset-decoded cached mail, preserves the cache,
+normalizes line endings/NULs into named `subject`, `body_text`, `body_html` projections,
+and performs bounded text-only HTML extraction. Source offsets are half-open UTF-8
+byte offsets in those projections; section index and full section span are stored.
+They are not offsets into raw HTML/MIME. Re-running the same preprocessing version
+on the unchanged cached source reproduces them. Existing rule/Summary `CleanBody`
+and escaped reading are unchanged.
+
+Sections distinguish `subject`, `authored`, `quoted`, `forwarded`, `signature` using
+conventional reply/forward/signature markers and HTML blockquote/class hints.
+Wrapped reply attributions are recognized. These are structural heuristics, never
+authentication. No recognized section is stripped; forwarded headers/content remain
+as evidence. Attached messages remain attachment metadata, not hidden body fetches.
+MIME alternatives are selected without concatenating duplicate HTML alternatives.
+When plain and HTML represent the same text, use one projection with HTML hints;
+otherwise plain is primary and only additional HTML paragraphs are retained. Exact
+whitespace-normalized comparisons prevent duplicate alternative paragraphs; this is
+not semantic deduplication and cannot reconstruct omitted MIME parts.
+
+Chunk indices are contiguous and deterministic. Each section is chunked separately
+with a 256-token total model-input ceiling, including CLS/SEP plus bounded context.
+Prefer paragraph/sentence ends in the latter part of the window; otherwise split at
+whole-word WordPiece boundaries. Passage overlap starts at about 32 tokens and can
+expand to a whole word; no overlap crosses a section. `TokenCount` is the exact
+`ModelInput` count including specials, without padding. The stored passage remains
+an exact projection substring; `context_text` contains its small subject/section
+prefix. Only about 22 subject tokens plus `Subject:` (at most 256 subject bytes)
+repeat; the complete subject is also chunked once. Arbitrary headers and recipient
+lists are never repeated as model input. A changed context invalidates vector reuse.
+
+`ContentStatus` distinguishes complete/partial/unavailable projected body coverage
+from the cached `BodyState`. Subject-only evidence never claims a complete body.
+No vectors are computed; fresh embedding rows remain pending with NULL data.
+Model recipe: `1110a243fdf4-wordpiece-v1-subject24-section-v1-u17.0.0-nfd17.0.0`, dimension 384;
+preprocessing: `email-sections-v1-wp-07eced375cec-256-32-u17.0.0-nfd17.0.0`. Both include the
+Go Unicode and NFD table versions so toolchain upgrades cannot silently reuse
+incompatible vectors. Any algorithm/tokenizer/input
+policy change requires an explicit recipe/preprocessing version and rebuild.
+
+Bounds additionally include 1 MiB per cached body representation, 32 KiB subject,
+32,768 plain-text newlines, 100,000 HTML tokens/128 nesting levels and 262,144 raw
+WordPiece tokens per input. Excessive source, section/chunk counts or giant
+single passages return a content error; they are not silently truncated. Context
+cancellation is checked during parsing/tokenization/chunking and persistence.
+
+`CachedChunker.Prepare` reads one committed cached message and atomically replaces
+its derived chunks; concurrent source changes reject publication. Manual sync also
+calls `PrepareCached` to scan at most 10,000 summaries and attempt at most its sync
+limit of missing/stale recipes; current recipes skip body reads/tokenization. No
+background scheduler or wider Gmail fetch is added. Source/checkpoints commit first;
+chunking failures leave cached mail readable, report `chunking_failed`, and are
+retried in later manual cache passes. New source/model/preprocessing revisions
+invalidate old work through the existing shared store. Native packaging remains CGO
+free for this slice. Full inference/runtime packaging is still a separate gate.
 
 ### Category records using the same pipeline
 
@@ -272,7 +342,8 @@ source/profile change, disconnect, cancel or purge → revoke old work epoch
 - Preserve original reading text. Normalize MIME alternatives once and retain unique
   authored/quoted/forward/signature sections with source mapping. Do not feed the
   shared pipeline through the current destructive `CleanBody` function.
-- Queue local work only after explicit semantic enablement. Update source/checkpoint,
+- Future embedding work queues require explicit semantic enablement. Current manual
+  sync performs local source/chunk preparation only, without inference. Update source/checkpoint,
   FTS and desired work state atomically; do not add an inference call to the sync
   transaction. Unchanged imports reuse compatible current generations.
 - Claim bounded work in a short transaction; copy source/category snapshots and
@@ -308,12 +379,12 @@ WordPiece truncation limit. This is a compact English-first baseline, not a meas
 MailPilot winner or a promise of retrieval/category accuracy. [Model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2).
 
 Use a maintained Go C-API binding, initially evaluating
-[`yalue/onnxruntime_go`](https://github.com/yalue/onnxruntime_go), and a pure-Go
-WordPiece tokenizer, initially evaluating [`sugarme/tokenizer`](https://github.com/sugarme/tokenizer).
+[`yalue/onnxruntime_go`](https://github.com/yalue/onnxruntime_go). Reuse the implemented
+`internal/mail/wordpiece` tokenizer rather than introducing a second tokenizer.
 The binding requires CGO and a matching native runtime library. Tokenizer support
 must be proven against the selected artifact's normalization, special tokens,
 input IDs, masks and truncation; a library name is not evidence of parity.
-These are proposed dependencies, **not installed, pinned or approved by benchmarks**
+The ONNX binding/runtime are proposed dependencies, **not installed, pinned or approved by benchmarks**
 in this task. Pin one compatible released binding/runtime/tokenizer combination,
 immutable model revision and SHA-256 manifest before the implementation lands.
 

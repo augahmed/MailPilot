@@ -89,3 +89,41 @@ func TestSessionCancellationAndDisconnectedStart(t *testing.T) {
 		t.Fatal("disconnected sync allowed")
 	}
 }
+
+func TestLegacySyncChunksOnlyCommittedMail(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlite.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Accounts().Upsert(ctx, domain.Account{ID: "a", Provider: "fixture", ProviderAccountID: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	reader := readerStub{list: func(context.Context, provider.ListMessagesOptions) (provider.MessagePage, error) {
+		return provider.MessagePage{Messages: []provider.MessageReference{{AccountID: "a", ProviderID: "one"}}}, nil
+	}, fetch: func(context.Context, domain.ProviderMessageID) (domain.Email, error) {
+		return domain.Email{AccountID: "a", ProviderID: "one", BodyText: "source", BodyState: "complete", ReceivedAt: time.Unix(1, 0)}, nil
+	}}
+	s := New(ctx, func() (domain.AccountID, context.Context, error) { return "a", ctx, nil }, func(domain.AccountID) Reader { return reader }, db.Emails(), 10)
+	defer s.Clear()
+	called := false
+	backfill := false
+	s.SetCachedChunkProcessor(func(_ context.Context, a domain.AccountID, limit int) (int, error) {
+		backfill = true
+		if a != "a" || limit != 10 {
+			t.Error("bad cache scope/limit")
+		}
+		return 0, nil
+	})
+	s.SetChunkProcessor(func(ctx context.Context, a domain.AccountID, id domain.ProviderMessageID) error {
+		called = true
+		_, err := db.Emails().GetByProviderID(ctx, a, id)
+		return err
+	})
+	s.Start()
+	p := finished(t, s)
+	if !called || !backfill || p.Errors != 0 || p.Imported != 1 {
+		t.Fatalf("missing post-commit hook: %+v", p)
+	}
+}

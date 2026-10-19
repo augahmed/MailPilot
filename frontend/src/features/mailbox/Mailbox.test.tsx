@@ -134,3 +134,25 @@ it("shows recovery, durable continuation and removed counts, and allows cancella
   fireEvent.click(screen.getByRole("button", { name: "Stop sync" }));
   await waitFor(() => expect(syncCommand).toHaveBeenCalledWith("cancel"));
 });
+
+it("keeps cached mail readable when local processing fails", async () => {
+  vi.mocked(syncCommand).mockResolvedValue({
+    state: "completed",
+    accountId: "a",
+    limit: 500,
+    discovered: 1,
+    imported: 1,
+    updated: 0,
+    errors: 1,
+    capped: false,
+    code: "chunking_failed",
+  });
+  render(<Mailbox connectionRevision={0} />);
+  expect(
+    await screen.findByRole("cell", { name: "Sender" }),
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Their original content is saved/),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

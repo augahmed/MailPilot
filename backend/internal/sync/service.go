@@ -35,17 +35,19 @@ type Progress struct {
 	Capped          bool             `json:"capped"`
 }
 type Service struct {
-	checkpoints repository.SyncRepository
-	gate        chan struct{}
-	mu          sync.Mutex
-	root        context.Context
-	session     Session
-	factory     Factory
-	emails      repository.EmailRepository
-	limit       int
-	progress    Progress
-	cancel      context.CancelFunc
-	generation  uint64
+	prepareChunks func(context.Context, domain.AccountID, domain.ProviderMessageID) error
+	prepareCache  func(context.Context, domain.AccountID, int) (int, error)
+	checkpoints   repository.SyncRepository
+	gate          chan struct{}
+	mu            sync.Mutex
+	root          context.Context
+	session       Session
+	factory       Factory
+	emails        repository.EmailRepository
+	limit         int
+	progress      Progress
+	cancel        context.CancelFunc
+	generation    uint64
 }
 
 func New(root context.Context, session Session, factory Factory, emails repository.EmailRepository, limit int) *Service {
@@ -53,6 +55,15 @@ func New(root context.Context, session Session, factory Factory, emails reposito
 }
 
 func (s *Service) SetCheckpoints(store repository.SyncRepository) { s.checkpoints = store }
+
+// SetChunkProcessor configures local, bounded post-commit processing before jobs
+// start. It is independent of optional embedding inference or external AI consent.
+func (s *Service) SetChunkProcessor(prepare func(context.Context, domain.AccountID, domain.ProviderMessageID) error) {
+	s.prepareChunks = prepare
+}
+func (s *Service) SetCachedChunkProcessor(prepare func(context.Context, domain.AccountID, int) (int, error)) {
+	s.prepareCache = prepare
+}
 func (s *Service) Cancel() Progress {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -124,6 +135,18 @@ func (s *Service) run(ctx context.Context, account domain.AccountID, g uint64, r
 			defer func() { <-s.gate }()
 		case <-ctx.Done():
 			return
+		}
+	}
+	if s.prepareCache != nil {
+		failed, err := s.prepareCache(ctx, account, s.limit)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			failed++
+		}
+		if failed > 0 {
+			s.update(g, func(p *Progress) { p.Errors += failed; p.Code = "chunking_failed" })
 		}
 	}
 	if changes, ok := reader.(provider.ChangeReader); ok && s.checkpoints != nil {
@@ -246,6 +269,14 @@ func (s *Service) run(ctx context.Context, account domain.AccountID, g uint64, r
 					p.Imported++
 				}
 			})
+			if s.prepareChunks != nil {
+				if err := s.prepareChunks(ctx, account, email.ProviderID); err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					report("chunking_failed")
+				}
+			}
 			if email.BodyState != "complete" {
 				report("body_unavailable")
 			}

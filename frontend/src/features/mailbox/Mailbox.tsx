@@ -153,7 +153,9 @@ export function Mailbox({
             ? "Reconnect Gmail before syncing."
             : progress.code === "body_unavailable"
               ? "Some bodies are stored separately by Gmail and were not downloaded. Their metadata is cached."
-              : "Some changes could not be synchronized. Successful changes are saved; run sync again to retry unfinished work."}
+              : progress.code === "chunking_failed"
+                ? "Some cached messages could not be processed. Their original content is saved. Sync again to retry."
+                : "Some changes could not be synchronized. Successful changes are saved; run sync again to retry unfinished work."}
         </p>
       )}
       {error && (

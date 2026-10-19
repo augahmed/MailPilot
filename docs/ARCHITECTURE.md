@@ -3,8 +3,9 @@
 Updated 2026-10-19 for the shared local retrieval direction. This document is the
 technical authority; [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the sole scope/milestone
 plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. The later
-authorized persistence slice adds migration 015 and typed chunk storage only;
-chunking, inference, indexing coordination, retrieval and new IPC remain planned. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
+authorized persistence/chunking slices add migrations 015–016, typed storage and
+bounded cached source projection during manual sync. Inference, embedding scheduling,
+retrieval and new IPC remain planned. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
 
 [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) is the detailed technical
 supplement for the same scope: exact source reuse/disabled paths, logical shared
@@ -21,14 +22,14 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 
 | Area | Implemented now | Planned or limited |
 | --- | --- | --- |
-| Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | No semantic model/runtime, inference helper or chunk/retrieval service is composed. |
+| Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | A cached chunker runs within manual sync; no inference runtime/helper or retrieval service is composed. |
 | Gmail | System-browser OAuth/keyring; one account; manual bounded initial Inbox and incremental history sync; normalized local cache. | No complete mailbox/Sent/attachment coverage, background scheduling or second email provider. Thread retrieval returns unsupported. |
 | Reader | `mail.read` returns revision-checked paged escaped text; HTML-only bodies use HTML-to-text extraction; metadata and phishing explanations are shown. | No rich HTML sanitizer/renderer, remote content or attachment download. Cold-start restoration checks Gmail online. |
 | Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | No active semantic classifier, automatic full-cache assessment, confirmed-example workflow or user-facing primary-override system. |
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
 | AI | `ai.settings`, provider-scoped OS keys and one approved cached-email Summary through `SummarizeEmail`; OpenAI is the only installed functional adapter. | No evidence-question operation, retrieved context, tools, replies, new drafts or general chat. |
-| Search/storage | SQLite migrations 001–015, shared chunk/embedding persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Neither keyword search nor semantic search/indexing is an active product service. Old vector schemas are inert. |
+| Search/storage | SQLite migrations 001–016, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Neither keyword search nor semantic search/indexing is an active product service. Old vector schemas are inert. |
 | Historical recovery | GET-only Gmail draft matching and local status/reconcile/resolve/cancel for old journal actions. | No draft creation, resending, remote deletion or reactivation of historical previews. |
 
 Composition is in [main.go](../backend/cmd/mailpilot-core/main.go). Actual command
@@ -61,7 +62,7 @@ a crashed sidecar disables actions rather than replaying uncertain writes.
 | `backend/internal/app` | Authorized reader/category/review/organization/AI use cases, bounded jobs and consent. Organization logic already lives here; do not invent a parallel package. |
 | `backend/internal/auth`, `credentials` | OAuth sessions, serialized refresh, keyring-only tokens/keys and redacted secret handling. |
 | `backend/internal/provider/gmail`, `sync` | Gmail translation, bounded network calls, import/history and checkpoint consistency. |
-| `backend/internal/mail` | Existing bounded MIME/charset/text utilities; extend with versioned shared source sections/chunking only when requested. |
+| `backend/internal/mail` | Bounded MIME/charset/text utilities, shared source projections/sections/chunks and pinned offline MiniLM WordPiece tokenizer. No inference/network access. |
 | `backend/internal/repository`, `store/sqlite` | SQL-free consumer contracts, explicit SQL, embedded immutable migrations and transactional data lifecycle. |
 | `backend/internal/classification`, `risk` | Category decisions and independent deterministic risk analysis. |
 | `backend/internal/ai`, `ai/openai` | Shared optional generation/consent/settings and isolated provider-specific transport. Local embedding inference is a distinct narrow adapter. |
@@ -105,7 +106,7 @@ the same adapter/conventions; they are additional source types, not another mode
 system. External generation is optional and separate from local inference. Email
 composition, model-controlled search agents and Chrome are not consumers in this scope.
 
-## 4. Source preservation and chunk contract (planned)
+## 4. Source preservation and chunk contract
 
 Original decoded plain text, HTML, ordered headers, completeness and provider/source
 identity remain in cached mail. Never replace them with cleaned text. Reading needs
@@ -120,7 +121,7 @@ preparation must preserve meaningful paragraphs, mark quote/signature/forward
 sections, avoid duplicate MIME alternatives and keep offset/source mapping.
 No attachment download or hidden body fetch is introduced by local processing.
 
-Each planned chunk must retain:
+Source/chunk requirements:
 
 - Account ID, source email ID and composite FK, source/content revision and
   preprocessing version. Provider IDs remain opaque and account-scoped.
@@ -132,8 +133,9 @@ Each planned chunk must retain:
 - Text/content hash and completeness/omission metadata.
 - Model/tokenizer/encoding fingerprint, dimension and associated finite vector.
 
-Use bounded paragraph-aware tokenizer-based chunks with modest overlap; finalize
-sizes against the selected model. Earlier 256/32-token values are experiments.
+The implemented chunker budgets 256 total MiniLM WordPiece tokens including
+CLS/SEP and bounded subject/section context, with about 32 passage tokens overlap
+adjusted to whole words. Paragraph/sentence boundaries are preferred when practical.
 Include prefixes within model token limits. Do not split UTF-8, silently truncate
 coverage, drop unique quoted content or treat overlapping chunks as corroboration.
 Missing/oversized/unsupported mail remains visibly partial or unavailable.
@@ -188,6 +190,7 @@ Current source-of-truth DDL is [the migrations directory](../backend/internal/st
 | 013 | Historical passage-vector/retrieval-index identities. |
 | 014 | Selected provider in non-secret historical `reply_ai_settings`; existing OpenAI settings/key identity retained. |
 | 015 | Shared `email_chunks`, model-versioned `chunk_embeddings`, per-email `index_state`, composite ownership and atomic source/deletion invalidation triggers. |
+| 016 | Named source projections, section indices/spans, bounded context prefix and independent projected-content coverage; existing unknown mappings preserved. |
 
 The historical `email_embeddings`, `category_embeddings`, `email_passage_vectors`
 and `email_retrieval_indexes` have no active inference/retrieval consumers.
@@ -205,7 +208,13 @@ chunks, and rejects stale work. Source changes retain inaccessible old chunks on
 until refresh for cache reuse; confirmed deletion removes them. Vector BLOBs are
 little-endian float32 with dimension/length checks plus Go finite/nonzero validation.
 Unknown or unavailable bodies remain partial; an empty projection is unavailable.
-No inference, chunk production, scheduling or retrieval consumer is wired. See the
+Manual sync wires `app.CachedChunker` to the shared `mail.Chunker` before sync
+for bounded cache backfill and after each cache/checkpoint commit. Processing errors
+retain source mail/checkpoints, report `chunking_failed`, and leave old chunks stale.
+Backfill skips current recipes and retries missing/stale work on later manual sync.
+It scans at most 10,000 cached summaries and attempts at most the configured sync
+limit per run; no full-cache completion is implied. No inference, embedding scheduler
+or retrieval consumer is wired. See the
 [implemented schema and lifecycle](VECTOR_ARCHITECTURE_PLAN.md#implemented-minimal-shared-index-records)
 for exact fields, statuses, bounds and timestamp semantics. Historical vectors are
 never read as current chunks; no migrations, assignments or journals are rewritten.
@@ -382,10 +391,9 @@ Measure English search quality/category abstention, 10,000-message performance a
 installer resources; publish denominators and misses. Targets are in the product
 plan and remain unmeasured here.
 
-Next planned source slice, after model/tokenizer feasibility: extend
-`internal/mail` with loss-preserving versioned source sections and one shared chunk
-contract/chunker, including original passage text, mapping/order/section/hash/revision
-fixtures. Leave reading, risk and rules' existing cleanup stable. Reuse the implemented
-chunk storage and extend it only when required; do not revive old Ask, add an AI editor
-or start with a replacement application architecture. The sole milestone authority
-is [PRODUCT_PLAN.md](PRODUCT_PLAN.md); further services require explicit authorization.
+The source/chunk slice is implemented in `internal/mail` and `app.CachedChunker`.
+Next qualify one packaged local inference runtime against the pinned tokenizer and
+model recipe, then extend the existing coordinator/store only as required. Preserve
+reading, risk and rules' existing cleanup. Do not revive old Ask, add an AI editor
+or replace the application architecture. The sole milestone authority is
+[PRODUCT_PLAN.md](PRODUCT_PLAN.md); further services require explicit authorization.

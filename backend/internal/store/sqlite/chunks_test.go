@@ -504,3 +504,35 @@ func TestChunksReuseMovedAndDuplicateInputs(t *testing.T) {
 		t.Fatal("failed status not persisted", err)
 	}
 }
+
+func TestChunkContextChangesCannotReuseCachedVectors(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	a := account(t, s, "chunk-context")
+	_, input := chunkFixture(t, s, a, "one")
+	input.Chunks[0].SourceKind = "body_text"
+	input.Chunks[0].SectionEndOffset = 30
+	input.Chunks[0].ContextText = "Subject: first\n"
+	state, chunks := replaceChunks(t, s, input)
+	readyChunks(t, s, state, chunks)
+	input.Chunks[0].ContextText = "Subject: other\n"
+	next, got := replaceChunks(t, s, input)
+	if next.Status != "partial" || chunks[0].ID == got[0].ID || chunks[1].ID != got[1].ID {
+		t.Fatal("context change reused wrong vector")
+	}
+	if _, err := s.db.Exec(`UPDATE email_chunks SET section_end_offset=1 WHERE id=?`, got[0].ID); err == nil {
+		t.Fatal("invalid source mapping accepted")
+	}
+	readyChunks(t, s, next, got)
+	if _, err := s.db.Exec(`UPDATE email_chunks SET context_text='changed outside repository' WHERE id=?`, got[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := s.Chunks().State(ctx, a, input.EmailID)
+	if err != nil || stale.Status != "stale" {
+		t.Fatal("context SQL update not invalidated", err)
+	}
+	var rows int
+	if err = s.db.QueryRow(`SELECT count(*) FROM chunk_embeddings WHERE chunk_id=?`, got[0].ID).Scan(&rows); err != nil || rows != 0 {
+		t.Fatal("context update kept cached vector", err)
+	}
+}

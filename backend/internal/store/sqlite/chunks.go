@@ -46,17 +46,28 @@ func validModel(m repository.EmbeddingModel) bool {
 }
 func hashText(s string) string { sum := sha256.Sum256([]byte(s)); return hex.EncodeToString(sum[:]) }
 func validChunk(c repository.ChunkInput) bool {
-	return c.Index >= 0 && c.Index < maxChunks && validName(c.SectionType, 64) && len(c.Text) > 0 && len(c.Text) <= maxChunkBytes &&
+	return validMapping(c) && c.Index >= 0 && c.Index < maxChunks && validName(c.SectionType, 64) && len(c.Text) > 0 && len(c.Text) <= maxChunkBytes &&
 		utf8.ValidString(c.Text) && !strings.ContainsRune(c.Text, 0) && strings.TrimSpace(c.Text) != "" && c.TokenCount > 0 && c.TokenCount <= maxChunkBytes &&
 		c.StartOffset >= 0 && c.EndOffset > c.StartOffset && c.EndOffset <= maxSnapshotBytes && c.EndOffset-c.StartOffset == len(c.Text) && c.ContentHash == hashText(c.Text)
 }
+
+func validMapping(c repository.ChunkInput) bool {
+	if len(c.ContextText) > 1024 || !utf8.ValidString(c.ContextText) || strings.ContainsRune(c.ContextText, 0) {
+		return false
+	}
+	if c.SourceKind == "" {
+		return c.SectionIndex == 0 && c.SectionStartOffset == 0 && c.SectionEndOffset == 0
+	}
+	return (c.SourceKind == "subject" || c.SourceKind == "body_text" || c.SourceKind == "body_html") && c.SectionIndex >= 0 && c.SectionIndex < maxChunks && c.SectionStartOffset >= 0 && c.SectionStartOffset <= c.StartOffset && c.SectionEndOffset >= c.EndOffset && c.SectionEndOffset <= maxSnapshotBytes
+}
+func validCoverage(s string) bool { return s == "complete" || s == "partial" || s == "unavailable" }
 
 // Replace performs no normalization or inference. The caller supplies an entire
 // deterministic projection; old data remains visible until the transaction commits.
 func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSnapshot) (repository.IndexState, error) {
 	var result repository.IndexState
 	if input.AccountID == "" || input.EmailID == "" || !validHash(input.SourceRevision) ||
-		!validName(input.PreprocessingVersion, 128) || !validName(input.IndexVersion, 128) || !validModel(input.Model) || len(input.Chunks) > maxChunks {
+		!validName(input.PreprocessingVersion, 128) || !validName(input.IndexVersion, 128) || !validModel(input.Model) || len(input.Chunks) > maxChunks || input.ContentStatus != "" && !validCoverage(input.ContentStatus) {
 		return result, repository.ErrInvalid
 	}
 	// Do not reorder or populate hashes in the caller's backing slice.
@@ -80,12 +91,22 @@ func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSna
 		if revision != input.SourceRevision {
 			return repository.ErrConflict
 		}
+		coverage := input.ContentStatus
+		if coverage == "" {
+			coverage = "partial"
+			if body == "complete" {
+				coverage = "complete"
+			}
+		}
+		if coverage == "complete" && body != "complete" {
+			return repository.ErrInvalid
+		}
 		old, err := readIndexState(ctx, tx, input.AccountID, input.EmailID)
 		hasOld := err == nil
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		same := hasOld && old.Status != repository.IndexStale && old.SourceRevision == revision && old.PreprocessingVersion == input.PreprocessingVersion && old.IndexVersion == input.IndexVersion && old.Model == input.Model && old.BodyState == body
+		same := hasOld && old.Status != repository.IndexStale && old.SourceRevision == revision && old.PreprocessingVersion == input.PreprocessingVersion && old.IndexVersion == input.IndexVersion && old.Model == input.Model && old.BodyState == body && old.ContentStatus == coverage
 		previous, err := readChunks(ctx, tx, input.AccountID, input.EmailID, 0, maxChunks)
 		if err != nil {
 			return err
@@ -96,11 +117,11 @@ func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSna
 		// Match identical inputs at their original ordinal first, then reuse moved
 		// chunks. This avoids re-embedding the tail when a new section is inserted.
 		type cacheKey struct {
-			hash, section, preprocessing string
-			tokens                       int
+			hash, section, preprocessing, context string
+			tokens                                int
 		}
 		key := func(c repository.ChunkInput, preprocessing string) cacheKey {
-			return cacheKey{c.ContentHash, c.SectionType, preprocessing, c.TokenCount}
+			return cacheKey{c.ContentHash, c.SectionType, preprocessing, c.ContextText, c.TokenCount}
 		}
 		byInput := make(map[cacheKey][]int, len(previous))
 		for i, p := range previous {
@@ -156,10 +177,10 @@ func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSna
 				if previous[p].ChunkInput != c || previous[p].SourceRevision != revision {
 					same = false
 				}
-				_, err = tx.ExecContext(ctx, `UPDATE email_chunks SET chunk_index=?,source_revision=?,start_offset=?,end_offset=? WHERE account_id=? AND id=? AND (chunk_index<>? OR source_revision<>? OR start_offset<>? OR end_offset<>?)`, c.Index, revision, c.StartOffset, c.EndOffset, input.AccountID, id, c.Index, revision, c.StartOffset, c.EndOffset)
+				_, err = tx.ExecContext(ctx, `UPDATE email_chunks SET chunk_index=?,source_revision=?,start_offset=?,end_offset=?,source_kind=?,section_index=?,section_start_offset=?,section_end_offset=? WHERE account_id=? AND id=? AND (chunk_index<>? OR source_revision<>? OR start_offset<>? OR end_offset<>? OR source_kind<>? OR section_index<>? OR section_start_offset<>? OR section_end_offset<>?)`, c.Index, revision, c.StartOffset, c.EndOffset, c.SourceKind, c.SectionIndex, c.SectionStartOffset, c.SectionEndOffset, input.AccountID, id, c.Index, revision, c.StartOffset, c.EndOffset, c.SourceKind, c.SectionIndex, c.SectionStartOffset, c.SectionEndOffset)
 			} else {
 				same = false
-				_, err = tx.ExecContext(ctx, `INSERT INTO email_chunks(id,account_id,email_id,chunk_index,section_type,text,token_count,source_revision,start_offset,end_offset,content_hash,preprocessing_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, id, input.AccountID, input.EmailID, c.Index, c.SectionType, c.Text, c.TokenCount, revision, c.StartOffset, c.EndOffset, c.ContentHash, input.PreprocessingVersion)
+				_, err = tx.ExecContext(ctx, `INSERT INTO email_chunks(id,account_id,email_id,chunk_index,section_type,text,token_count,source_revision,start_offset,end_offset,content_hash,preprocessing_version,source_kind,section_index,section_start_offset,section_end_offset,context_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, input.AccountID, input.EmailID, c.Index, c.SectionType, c.Text, c.TokenCount, revision, c.StartOffset, c.EndOffset, c.ContentHash, input.PreprocessingVersion, c.SourceKind, c.SectionIndex, c.SectionStartOffset, c.SectionEndOffset, c.ContextText)
 			}
 			if err != nil {
 				return err
@@ -178,7 +199,7 @@ func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSna
 				return err
 			}
 		}
-		result = repository.IndexState{AccountID: input.AccountID, EmailID: input.EmailID, SourceRevision: revision, PreprocessingVersion: input.PreprocessingVersion, IndexVersion: input.IndexVersion, Model: input.Model, Generation: newID(), BodyState: body}
+		result = repository.IndexState{AccountID: input.AccountID, EmailID: input.EmailID, SourceRevision: revision, PreprocessingVersion: input.PreprocessingVersion, IndexVersion: input.IndexVersion, Model: input.Model, Generation: newID(), BodyState: body, ContentStatus: coverage}
 		if same {
 			result.Generation = old.Generation
 			result.LastIndexedAt = old.LastIndexedAt
@@ -186,7 +207,7 @@ func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSna
 		if err = refreshIndexStatus(ctx, tx, &result); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO index_state(account_id,email_id,source_revision,preprocessing_version,index_version,model_id,model_version,dimension,generation,body_state,status,last_indexed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,email_id) DO UPDATE SET source_revision=excluded.source_revision,preprocessing_version=excluded.preprocessing_version,index_version=excluded.index_version,model_id=excluded.model_id,model_version=excluded.model_version,dimension=excluded.dimension,generation=excluded.generation,body_state=excluded.body_state,status=excluded.status,last_indexed_at=excluded.last_indexed_at`, result.AccountID, result.EmailID, result.SourceRevision, result.PreprocessingVersion, result.IndexVersion, result.Model.ID, result.Model.Version, result.Model.Dimension, result.Generation, result.BodyState, result.Status, timeValue(result))
+		_, err = tx.ExecContext(ctx, `INSERT INTO index_state(account_id,email_id,source_revision,preprocessing_version,index_version,model_id,model_version,dimension,generation,body_state,status,last_indexed_at,content_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,email_id) DO UPDATE SET source_revision=excluded.source_revision,preprocessing_version=excluded.preprocessing_version,index_version=excluded.index_version,model_id=excluded.model_id,model_version=excluded.model_version,dimension=excluded.dimension,generation=excluded.generation,body_state=excluded.body_state,status=excluded.status,last_indexed_at=excluded.last_indexed_at,content_status=excluded.content_status`, result.AccountID, result.EmailID, result.SourceRevision, result.PreprocessingVersion, result.IndexVersion, result.Model.ID, result.Model.Version, result.Model.Dimension, result.Generation, result.BodyState, result.Status, timeValue(result), result.ContentStatus)
 		return err
 	})
 	if err != nil {
@@ -211,7 +232,7 @@ func readIndexState(ctx context.Context, tx *sql.Tx, a domain.AccountID, e domai
 	var last sql.NullInt64
 	s.AccountID = a
 	s.EmailID = e
-	err := tx.QueryRowContext(ctx, `SELECT source_revision,preprocessing_version,index_version,model_id,model_version,dimension,generation,body_state,status,last_indexed_at FROM index_state WHERE account_id=? AND email_id=?`, a, e).Scan(&s.SourceRevision, &s.PreprocessingVersion, &s.IndexVersion, &s.Model.ID, &s.Model.Version, &s.Model.Dimension, &s.Generation, &s.BodyState, &s.Status, &last)
+	err := tx.QueryRowContext(ctx, `SELECT source_revision,preprocessing_version,index_version,model_id,model_version,dimension,generation,body_state,status,last_indexed_at,content_status FROM index_state WHERE account_id=? AND email_id=?`, a, e).Scan(&s.SourceRevision, &s.PreprocessingVersion, &s.IndexVersion, &s.Model.ID, &s.Model.Version, &s.Model.Dimension, &s.Generation, &s.BodyState, &s.Status, &last, &s.ContentStatus)
 	s.LastIndexedAt = optionalTime(last)
 	return s, err
 }
@@ -248,7 +269,7 @@ func (r *chunkRepository) State(ctx context.Context, a domain.AccountID, e domai
 	return s, nil
 }
 func readChunks(ctx context.Context, tx *sql.Tx, a domain.AccountID, e domain.EmailID, offset, limit int) ([]repository.EmailChunk, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id,chunk_index,section_type,text,token_count,source_revision,start_offset,end_offset,content_hash,preprocessing_version FROM email_chunks WHERE account_id=? AND email_id=? ORDER BY chunk_index LIMIT ? OFFSET ?`, a, e, limit, offset)
+	rows, err := tx.QueryContext(ctx, `SELECT id,chunk_index,section_type,text,token_count,source_revision,start_offset,end_offset,content_hash,preprocessing_version,source_kind,section_index,section_start_offset,section_end_offset,context_text FROM email_chunks WHERE account_id=? AND email_id=? ORDER BY chunk_index LIMIT ? OFFSET ?`, a, e, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +277,7 @@ func readChunks(ctx context.Context, tx *sql.Tx, a domain.AccountID, e domain.Em
 	result := []repository.EmailChunk{}
 	for rows.Next() {
 		c := repository.EmailChunk{AccountID: a, EmailID: e}
-		if err := rows.Scan(&c.ID, &c.Index, &c.SectionType, &c.Text, &c.TokenCount, &c.SourceRevision, &c.StartOffset, &c.EndOffset, &c.ContentHash, &c.PreprocessingVersion); err != nil {
+		if err := rows.Scan(&c.ID, &c.Index, &c.SectionType, &c.Text, &c.TokenCount, &c.SourceRevision, &c.StartOffset, &c.EndOffset, &c.ContentHash, &c.PreprocessingVersion, &c.SourceKind, &c.SectionIndex, &c.SectionStartOffset, &c.SectionEndOffset, &c.ContextText); err != nil {
 			return nil, err
 		}
 		if !validChunk(c.ChunkInput) || !validHash(c.SourceRevision) || !validName(c.PreprocessingVersion, 128) {
@@ -355,7 +376,7 @@ func refreshIndexStatus(ctx context.Context, tx *sql.Tx, s *repository.IndexStat
 	s.Status = repository.IndexPending
 	if total == 0 {
 		s.Status = repository.IndexUnavailable
-	} else if s.BodyState != "complete" || ready > 0 && ready < total {
+	} else if s.BodyState != "complete" || s.ContentStatus != "complete" || ready > 0 && ready < total {
 		s.Status = repository.IndexPartial
 	} else if ready == total {
 		s.Status = repository.IndexReady

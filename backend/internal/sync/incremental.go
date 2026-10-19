@@ -91,6 +91,14 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 		if err := commit(next, email, removed); err != nil {
 			return err
 		}
+		if email != nil && s.prepareChunks != nil {
+			if err := s.prepareChunks(ctx, a, id); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				s.update(g, func(p *Progress) { p.Errors++; p.Code = "chunking_failed" })
+			}
+		}
 		budget--
 		s.update(g, func(p *Progress) {
 			if deleted && exists {

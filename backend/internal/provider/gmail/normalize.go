@@ -166,12 +166,21 @@ func normalize(account domain.AccountID, m message, labels map[string]domain.Ema
 				}
 			}
 			if mimeType == "multipart/alternative" {
-				for _, t := range texts {
-					if strings.TrimSpace(t) != "" {
-						return t, strings.Join(htmls, "\n"), nil
+				// Alternatives describe the same body. Retain one representation of
+				// each type, never concatenate multiple HTML alternatives as new mail.
+				var alternativeHTML string
+				for _, h := range htmls {
+					if strings.TrimSpace(h) != "" {
+						alternativeHTML = h
+						break
 					}
 				}
-				return "", strings.Join(htmls, "\n"), nil
+				for _, t := range texts {
+					if strings.TrimSpace(t) != "" {
+						return t, alternativeHTML, nil
+					}
+				}
+				return "", alternativeHTML, nil
 			}
 			// Mixed siblings may have distinct bodies; derive HTML fallback per sibling.
 			for i := range texts {
@@ -184,9 +193,12 @@ func normalize(account domain.AccountID, m message, labels map[string]domain.Ema
 			}
 			return strings.TrimSpace(strings.Join(texts, "\n")), strings.Join(htmls, "\n"), nil
 		}
-		if p.Body.AttachmentID != "" && p.Body.Data == "" {
+		if p.Body.Data == "" && (p.Body.AttachmentID != "" || p.Body.Size != nil && *p.Body.Size > 0) {
 			e.BodyState = "unavailable"
 			return "", "", nil
+		}
+		if p.Body.Size != nil && *p.Body.Size < 0 {
+			return "", "", provider.ErrMalformed
 		}
 		if len(p.Body.Data) > 2*mailtext.MaxBodyBytes {
 			return "", "", provider.ErrMalformed
@@ -194,6 +206,10 @@ func normalize(account domain.AccountID, m message, labels map[string]domain.Ema
 		data, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(p.Body.Data, "="))
 		if err != nil {
 			return "", "", provider.ErrMalformed
+		}
+		if p.Body.Size != nil && *p.Body.Size > int64(len(data)) {
+			// Retain the available fragment, but never advertise a complete body.
+			e.BodyState = "unavailable"
 		}
 		total += len(data)
 		if total > mailtext.MaxBodyBytes {

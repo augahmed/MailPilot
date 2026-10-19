@@ -15,7 +15,8 @@ type EmbeddingModel struct {
 	Dimension int
 }
 
-// ChunkInput uses half-open UTF-8 byte offsets into the section's normalized text.
+// ChunkInput uses half-open UTF-8 byte offsets into its named source projection
+// (a caller-defined projection for legacy rows without SourceKind).
 // Index must be contiguous from zero. Hash is SHA-256 of Text; empty computes it.
 // SectionType names a normalized section (e.g. subject, body); it grants no trust.
 type ChunkInput struct {
@@ -24,6 +25,13 @@ type ChunkInput struct {
 	TokenCount             int
 	StartOffset, EndOffset int
 	ContentHash            string
+	// SourceKind identifies the deterministic subject/plain/HTML projection.
+	// Legacy rows have no mapping. Offsets are bytes within that projection.
+	SourceKind                           string
+	SectionIndex                         int
+	SectionStartOffset, SectionEndOffset int
+	// ContextText is the bounded model-input prefix; Text stays an exact passage.
+	ContextText string
 }
 
 type EmailChunk struct {
@@ -44,6 +52,7 @@ type ChunkSnapshot struct {
 	IndexVersion                         string
 	Model                                EmbeddingModel
 	Chunks                               []ChunkInput
+	ContentStatus                        string // complete, partial, unavailable; empty derives cached coverage.
 }
 
 const (
@@ -64,6 +73,7 @@ type IndexState struct {
 	IndexVersion, Generation             string
 	Model                                EmbeddingModel
 	Status, BodyState                    string
+	ContentStatus                        string
 	LastIndexedAt                        *time.Time
 }
 

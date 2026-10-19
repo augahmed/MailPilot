@@ -8,12 +8,13 @@ suggestions and optional answers grounded in approved email evidence.
 **Current status:** Gmail OAuth/keyring, bounded initial/incremental sync, cached
 plain-text reading, category management, deterministic review/risk explanations,
 confirmed label organization, selected-email Summary and historical draft recovery
-are implemented. Keyword search, chunk indexing, embeddings, semantic classification
-and retrieval-augmented questions are planned. Historical vector tables are inert;
-no model/runtime setup is currently required. OpenAI is the only installed functional
-generative adapter. This documentation reset changes no runtime behavior.
+are implemented. Manual sync also prepares deterministic local text chunks with
+bundled MiniLM WordPiece tokenization, section provenance and pending embedding
+rows. Keyword search, inference, semantic classification and evidence questions
+remain planned. Historical vector tables are inert; no model/runtime setup is
+currently required. OpenAI is the only installed functional generative adapter.
 
-The planned local model/tokenizer will ship with the app; no user Python or
+The tokenizer vocabulary is embedded in Go; the planned inference model will also ship with the app; no user Python or
 post-install model download. Target English first and about 10,000 cached messages.
 AI replies/composition, new Gmail drafts, sending and Chrome integration are outside
 the immediate scope. Existing Summary remains until a later tested transition.
@@ -117,7 +118,7 @@ Default desktop locations:
 - Windows: `%APPDATA%\com.mailpilot.desktop\mailpilot.db`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/com.mailpilot.desktop/mailpilot.db`
 
-SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Current migrations 001–015 retain mail/cache, category/review, label/risk journals, incremental checkpoints, historical vector/draft structures and selected AI-provider settings. Migration 015 adds shared chunk/embedding storage and revision state; no inference or retrieval service is wired. Historical vector tables are not an active index. See [schema responsibilities](docs/ARCHITECTURE.md#implemented-persistence-and-immutable-history) for the preserved migration groups. SQLite files are not encrypted.
+SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Current migrations 001–016 retain mail/cache, category/review, label/risk journals, incremental checkpoints, historical vector/draft structures and selected AI-provider settings. Migration 015 adds shared chunk/embedding storage and revision state; 016 adds chunk provenance/context and projected body coverage. Manual sync prepares cached chunks; no inference or retrieval service is wired. Historical vector tables are not an active index. See [schema responsibilities](docs/ARCHITECTURE.md#implemented-persistence-and-immutable-history) for the preserved migration groups. SQLite files are not encrypted.
 
 Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to private IPC. Logs omit secrets, message content and filesystem paths. This phase has no persistent log files or telemetry.
 

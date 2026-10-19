@@ -80,6 +80,7 @@ export const syncSchema = z
         "pagination_error",
         "storage_error",
         "body_unavailable",
+        "chunking_failed",
         "provider_error",
         "rate_limited",
         "invalid_message",

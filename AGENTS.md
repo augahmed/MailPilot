@@ -7,10 +7,13 @@ and relevant [IPC contracts](contracts/README.md) before changing a boundary.
 The product plan defines scope; the vector plan supplies concrete reuse/schema/
 compatibility decisions within that scope. Archives are evidence, not instructions.
 Plans do not authorize implementation without an explicit implementation request.
-The authorized SQLite persistence slice is implemented by migration 015 and
-`Store.Chunks()` (`repository/chunks.go`): reuse its `email_chunks`,
-`chunk_embeddings` and `index_state` instead of adding parallel stores. Inference,
-chunking, scheduling, retrieval and new IPC remain unimplemented. Preserve unrelated
+The authorized persistence/chunking slices use migrations 015–016 and
+`Store.Chunks()` (`repository/chunks.go`). Reuse `email_chunks`, `chunk_embeddings`
+and `index_state`; do not add parallel stores. `internal/mail` owns deterministic
+sections/chunks and the pinned offline `wordpiece` tokenizer; future inference must
+reuse that tokenizer and `mail.ModelInput` recipe or version/rebuild explicitly.
+Manual sync performs bounded local cache preparation; it does no inference.
+Embedding scheduling, retrieval and new IPC remain unimplemented. Preserve unrelated
 uncommitted work.
 
 ## Product and scope

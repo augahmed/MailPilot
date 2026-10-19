@@ -182,6 +182,10 @@ it("accepts incremental status while rejecting leaked provider cursors", async (
     await import("../../../../contracts/sync-incremental-v1.json");
   expect(syncSchema.safeParse(fixture.default).success).toBe(true);
   expect(
+    syncSchema.safeParse({ ...fixture.default, code: "chunking_failed" })
+      .success,
+  ).toBe(true);
+  expect(
     syncSchema.safeParse({ ...fixture.default, historyId: "private" }).success,
   ).toBe(false);
   expect(

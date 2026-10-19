@@ -75,3 +75,28 @@ func TestAttachedMessagesAreNotBody(t *testing.T) {
 		t.Fatal("attached mail escaped into body", err)
 	}
 }
+
+func TestMultipleMIMEAlternativesAreNotConcatenated(t *testing.T) {
+	m := fixture(t, "html")
+	html := m.Payload
+	m.Payload = part{MIMEType: "multipart/alternative", Parts: []part{html, html}}
+	e, err := normalize("account", m, nil)
+	if err != nil || strings.Count(e.BodyText, "Hello & welcome") != 1 {
+		t.Fatal("duplicated alternative body", err)
+	}
+	m = fixture(t, "html")
+	m.Payload.Body.Data = ""
+	size := int64(42)
+	m.Payload.Body.Size = &size
+	e, err = normalize("account", m, nil)
+	if err != nil || e.BodyState != "unavailable" {
+		t.Fatal("missing positive-sized body claimed complete", err)
+	}
+	m = fixture(t, "html")
+	size = 10000
+	m.Payload.Body.Size = &size
+	e, err = normalize("account", m, nil)
+	if err != nil || e.BodyState != "unavailable" || !strings.Contains(e.BodyText, "Hello & welcome") {
+		t.Fatal("available fragment lost or claimed complete", err)
+	}
+}

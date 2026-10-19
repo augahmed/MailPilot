@@ -271,3 +271,39 @@ func TestInitialPartialFailureRetainsAnchorAndRestartsIdempotently(t *testing.T)
 		t.Fatal("did not catch changes during initial import")
 	}
 }
+
+func TestChunkProcessingAfterCheckpointCommitDoesNotLoseCacheOnFailure(t *testing.T) {
+	db, s, r := deltaFixture(t, 10)
+	ctx := context.Background()
+	r.add("one")
+	calls := 0
+	s.SetChunkProcessor(func(ctx context.Context, a domain.AccountID, id domain.ProviderMessageID) error {
+		calls++
+		if _, err := db.Emails().GetByProviderID(ctx, a, id); err != nil {
+			t.Error("chunking ran before source committed", err)
+		}
+		checkpoint, err := db.SyncCheckpoints().Load(ctx, a)
+		if err != nil || checkpoint.Phase == "" {
+			t.Error("chunking ran before checkpoint committed", err)
+		}
+		return repository.ErrStorage
+	})
+	p := runDelta(t, s)
+	if calls != 1 || p.Imported != 1 || p.Errors != 1 || p.Code != "chunking_failed" {
+		t.Fatalf("post-commit chunk error not reported: %+v", p)
+	}
+	if _, err := db.Emails().GetByProviderID(ctx, "a", "one"); err != nil {
+		t.Fatal("chunk error lost source", err)
+	}
+	checkpoint, err := db.SyncCheckpoints().Load(ctx, "a")
+	if err != nil || checkpoint.Phase != "history" {
+		t.Fatal("chunk error lost checkpoint", err)
+	}
+	s.SetChunkProcessor(func(context.Context, domain.AccountID, domain.ProviderMessageID) error { calls++; return nil })
+	r.cursor = "200"
+	r.records = []provider.ChangeRecord{{Cursor: "200", Changes: []provider.MessageChange{{ProviderID: "one"}}}}
+	p = runDelta(t, s)
+	if calls != 2 || r.full != 1 || p.Errors != 0 {
+		t.Fatal("metadata-only reimport skipped chunk processing or fetched body again")
+	}
+}

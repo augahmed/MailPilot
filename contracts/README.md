@@ -48,14 +48,23 @@ The Tauri `health` command takes no arguments. Rust sends:
     "protocolVersion": 1,
     "backend": "connected",
     "database": "connected",
-    "schemaVersion": 15
+    "schemaVersion": 16
   }
 }
 ```
 
-`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. The current migration set ends at schema version 15 (shared chunk persistence); the example reflects that baseline. Migration 2 introduced normalized mail/journal storage, and migration 1 remains the unchanged settings foundation. The wire protocol remains version 1.
+`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. The current migration set ends at schema version 16 (chunk provenance/context and body coverage); the example reflects that baseline. Migration 2 introduced normalized mail/journal storage, and migration 1 remains the unchanged settings foundation. The wire protocol remains version 1.
 
 The host may send `shutdown` with empty parameters, receiving `{"stopping":true}`, or close stdin for clean shutdown. The UI cannot invoke initialize, shutdown, SQL, shell commands, filesystem paths, or arbitrary method names. Unknown fields/methods, mismatched protocol versions and malformed requests are rejected. Standard JSON-RPC error codes are used, plus `-32001` for a missing handshake; errors contain no underlying database paths or diagnostics. Logs are structured JSON on stderr.
+
+Manual sync now prepares local cached chunks without inference, including a bounded
+old/stale-cache pass and post-commit processing of imported/updated messages.
+`sync` progress may report `code: "chunking_failed"`: the cache/checkpoint commit
+succeeded but local processing could not complete. Original mail stays readable;
+missing/stale chunks are retried during later manual sync. This code is accepted by
+the strict frontend schema and produces a specific cache-preservation message.
+There is no new command or authorization for external AI/inference. Tokenization
+and SQLite work are bounded and cancelled with the existing sync session.
 
 Streaming progress, generic background-job APIs and large payload transport remain unimplemented. Bounded sync and mailbox commands are described below. Authentication uses its own bounded background lifecycle, described below.
 
@@ -131,7 +140,7 @@ States: idle, running, completed, error, cancelled. Optional `code` is a safe di
 }
 ```
 
-An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `sync_cancel`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; schemaVersion in health now reports 15. Chunk storage adds no public IPC.
+An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `sync_cancel`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; schemaVersion in health now reports 16. Chunk storage adds no public IPC.
 
 ## Category management (protocol v1 additive extension)
 
