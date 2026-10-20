@@ -25,7 +25,8 @@
     "prepare:embedding": "node scripts/prepare-embedding.mjs",
     "test:embedding:package": "node scripts/smoke-embedding.mjs",
     "test:embedding:assets": "node --test scripts/embedding-artifacts.test.mjs",
-    "test:indexing:native": "node scripts/smoke-indexing.mjs"
+    "test:indexing:native": "node scripts/smoke-indexing.mjs",
+    "test:search:native": "node scripts/smoke-search.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.1",

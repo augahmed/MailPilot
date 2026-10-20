@@ -7,11 +7,13 @@ export function MailReader({
   emailId,
   source,
   onBack,
+  evidence,
 }: {
   accountId: string;
   emailId: string;
   source: string;
   onBack: () => void;
+  evidence?: { text: string; revision: string };
 }) {
   const [page, setPage] = useState<ReadMailResponse | null>(null);
   const [body, setBody] = useState("");
@@ -44,7 +46,12 @@ export function MailReader({
     };
     const load = async () => {
       try {
-        const result = await readCachedMail(accountId, emailId);
+        const result = await readCachedMail(
+          accountId,
+          emailId,
+          0,
+          evidence?.revision ?? "",
+        );
         if (!active) return;
         if (result.code) {
           fail(result.code);
@@ -88,7 +95,7 @@ export function MailReader({
       live.current = false;
       clearTimeout(timer);
     };
-  }, [accountId, emailId, retry]);
+  }, [accountId, emailId, retry, evidence?.revision]);
   const more = async () => {
     if (!page || busy) return;
     setBusy(true);
@@ -149,6 +156,12 @@ export function MailReader({
       )}
       {m && (
         <>
+          {evidence && page?.revision === evidence.revision && (
+            <aside aria-label="Matching search evidence">
+              <h3>Matching search evidence</h3>
+              <blockquote>{evidence.text}</blockquote>
+            </aside>
+          )}
           <dl>
             <dt>From</dt>
             <dd>{addresses([m.sender])}</dd>

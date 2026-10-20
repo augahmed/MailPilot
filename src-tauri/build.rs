@@ -3,6 +3,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "health",
             "local_index",
+            "vector_search",
             "gmail_status",
             "gmail_connect",
             "gmail_check",

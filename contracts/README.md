@@ -1,9 +1,9 @@
 # Local IPC, protocol version 1
 
-Status reviewed 2026-10-19. This file documents implemented IPC, not future feature
+Status reviewed 2026-10-20. This file documents implemented IPC, not future feature
 authorization. [The architecture](../docs/ARCHITECTURE.md) describes the planned
 shared local chunk/vector pipeline; [the product plan](../docs/PRODUCT_PLAN.md)
-defines scope/milestones. The additive local index control is now implemented; retrieval and evidence-answer
+defines scope/milestones. The additive local index control is now implemented; local vector search is now implemented; evidence-answer
 commands remain unimplemented. Summary remains implemented. Historical fixtures are
 compatibility/negative-test examples; see [legacy notes](../docs/archive/LEGACY_FEATURES.md).
 
@@ -344,3 +344,39 @@ Safe codes are `unauthorized`, `validation`, `unavailable`, `busy`, `storage_err
 runtime diagnostics. Disconnect/session replacement cancels work. Neither startup
 nor polling invokes inference; explicit Resume is required after interruption.
 Indexing calls neither Gmail nor external AI and changes no existing AI consent.
+
+## Local vector search (additive protocol-v1 extension)
+
+Tauri `vector_search` forwards to `search.local`; see
+[vector-search-v1.json](vector-search-v1.json) and [service/evaluation details](../docs/VECTOR_SEARCH.md).
+This is separate from the retired `search.semantic` contract. Protocol remains 1.
+
+Every request has exactly `operation`, `accountId`, `jobId`, `query`, `limit` and
+`filter` (`sender`, `after`, `before`, `categoryId`). Start requires a current
+nonempty authorized account, empty job ID, bounded query and 1–20 maximum emails.
+Dates are UTC epoch milliseconds, after inclusive/before exclusive; zero omits.
+Sender is a literal substring; category means assigned local category. Status/cancel
+require empty query, zero limit and an empty filter. Cancel requires account/job;
+status accepts empty account/job to discover the active authorized view. Job IDs
+are 32 characters. No raw vectors, model, path, SQL, endpoint or AI options exist.
+Go rechecks authorization and limits independently of the native/frontend validators.
+
+Responses require `accountId`, `jobId`, `status` (idle/running/complete/cancelled/error),
+`code`, `emails`, `scannedChunks`, `elapsedMs`, `searchableMessages`, `eligibleMessages`.
+Emails contain `emailId`, `readerRevision`, original `subject`, formatted `sender`,
+`receivedAt` (UTC epoch ms), and 1–3 `evidence` records with `chunkId`, raw cosine
+`score` [-1,1], `excerpt` and `sourceRevision` (original content SHA-256). The
+separate reader revision binds the same source to its readable projection and is
+passed as the existing `mail.read` revision when opening a result. It is not the
+source hash. Emails are ranked by their best evidence, with deterministic ties.
+Only complete compatible message generations qualify; coverage reports exclusions.
+
+Safe codes: empty, unauthorized, validation, unavailable, busy, storage_error,
+model_unavailable, inference_failed, stale, cancelled, timeout, too_large. Mail is
+returned only with complete/empty-code status. Up to 20 emails, 3 excerpts of 600
+UTF-8 bytes each, 240 bytes per subject/sender and 48 KiB total after JSON escaping.
+Larger output fails closed. Query inference runs only on explicit start; status
+and cancellation use ordinary 5/7-second IPC deadlines while a bounded cancellable
+local worker runs. Completed snapshots expire after five minutes and are rechecked
+on access. No external AI or Gmail request, persistent search history or automatic
+indexing is added. Session changes clear results; stale/deleted sources revoke them.

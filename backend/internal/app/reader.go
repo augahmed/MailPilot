@@ -2,11 +2,9 @@ package app
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -130,7 +128,7 @@ func (r *CachedReader) Read(ctx context.Context, p ReadMailRequest) ReadMailResp
 	if e.AccountID != account || string(e.ID) != p.EmailID {
 		return readerError("not_found")
 	}
-	revision := fmt.Sprintf("%x", sha256.Sum256([]byte(mailtext.TextProjectionVersion+"\n"+stored.ContentHash)))
+	revision := mailtext.ReaderRevision(stored.ContentHash)
 	if p.Revision != "" && p.Revision != revision {
 		return readerError("stale")
 	}

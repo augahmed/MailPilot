@@ -201,3 +201,22 @@ form textarea {
 .local-email-index progress {
   width: 100%;
 }
+
+.semantic-search select {
+  display: block;
+  max-width: 100%;
+  padding: 0.5rem;
+  font: inherit;
+}
+.semantic-search li {
+  margin-block: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.semantic-search blockquote,
+.mail-reader blockquote {
+  margin-inline: 0;
+  padding-inline-start: 1rem;
+  border-inline-start: 3px solid #d8e1d8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

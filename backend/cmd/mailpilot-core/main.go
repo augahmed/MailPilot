@@ -22,6 +22,7 @@ import (
 	"mailpilot.local/core/internal/logging"
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/provider/gmail"
+	"mailpilot.local/core/internal/retrieval"
 	"mailpilot.local/core/internal/risk"
 	"mailpilot.local/core/internal/store/sqlite"
 	mailsync "mailpilot.local/core/internal/sync"
@@ -68,7 +69,11 @@ func run() int {
 	var replies *app.ReplyService
 	var intelligence *app.AIService
 	var indexing *app.LocalIndex
+	var searching *app.LocalSearch
 	defer func() {
+		if searching != nil {
+			_ = searching.Close(context.Background())
+		}
 		if indexing != nil {
 			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			if err := indexing.Close(closeCtx); err != nil {
@@ -139,6 +144,8 @@ func run() int {
 			return nil, err
 		}
 		application.Index = indexing
+		searching = app.NewLocalSearch(ctxRoot, authentication.Session, retrieval.New(store.Vectors(), localProvider), store.Indexing())
+		application.Search = searching
 		application.Emails = store.Emails()
 		application.Categories = store.Categories()
 		rules, err := classification.NewRuleBasedClassifier(classification.StarterConfig())

@@ -28,6 +28,9 @@ type AuthService interface {
 	AuthCheck() auth.Status
 	AuthDisconnect() auth.Status
 }
+type SearchService interface {
+	SearchLocal(context.Context, app.SearchRequest) app.SearchResponse
+}
 type IndexService interface {
 	ManageIndex(context.Context, app.IndexRequest) app.IndexResponse
 }
@@ -127,6 +130,16 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 					} else {
 						reply.Result = map[string]int{"protocolVersion": domain.ProtocolVersion}
 					}
+				}
+			case "search.local":
+				var params app.SearchRequest
+				searching, ok := service.(SearchService)
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Local search unavailable")
+				} else {
+					reply.Result = searching.SearchLocal(callCtx, params)
 				}
 			case "index.local":
 				var params app.IndexRequest

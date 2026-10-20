@@ -585,6 +585,28 @@ impl Bridge {
         outcome.map_err(str::to_owned)
     }
 
+    pub fn vector_search(
+        &mut self,
+        request: crate::search::SearchRequest,
+    ) -> Result<crate::search::SearchResponse, String> {
+        if !request.valid() {
+            return Err("Invalid vector search request".into());
+        }
+        let account = request.account_id.clone();
+        let response: crate::search::SearchResponse = serde_json::from_value(self.request(
+            "search.local",
+            serde_json::to_value(request).map_err(|_| "Invalid vector search request")?,
+        )?)
+        .map_err(|_| "Invalid vector search response")?;
+        if !response.valid()
+            || (!account.is_empty()
+                && !response.account_id.is_empty()
+                && response.account_id != account)
+        {
+            return Err("Invalid vector search response".into());
+        }
+        Ok(response)
+    }
     pub fn local_index(
         &mut self,
         request: crate::indexing::IndexRequest,

@@ -163,3 +163,40 @@ it("shows cleaned offer text while keeping links and images inactive", async () 
   ).toBeInTheDocument();
   expect(container.querySelector("script,img,iframe,a")).toBeNull();
 });
+
+it("binds search evidence to the cached reader revision and clears it on stale", async () => {
+  const evidence = {
+    text: "Relevant quoted passage",
+    revision: fixture.revision,
+  };
+  render(
+    <MailReader
+      accountId="a"
+      emailId="e"
+      source="search"
+      onBack={vi.fn()}
+      evidence={evidence}
+    />,
+  );
+  expect(await screen.findByText(evidence.text)).toBeVisible();
+  expect(readCachedMail).toHaveBeenCalledWith("a", "e", 0, fixture.revision);
+});
+it("does not show old search evidence when the original source changed", async () => {
+  vi.mocked(readCachedMail).mockResolvedValue({
+    ...fixture,
+    code: "stale",
+    message: null,
+    body: "",
+  });
+  render(
+    <MailReader
+      accountId="a"
+      emailId="e"
+      source="search"
+      onBack={vi.fn()}
+      evidence={{ text: "Old evidence", revision: fixture.revision }}
+    />,
+  );
+  await screen.findByText(/cached message changed/i);
+  expect(screen.queryByText("Old evidence")).toBeNull();
+});

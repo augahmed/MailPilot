@@ -2,8 +2,7 @@
 
 Implemented 2026-10-19. One explicitly started local coordinator connects the
 existing cached email/chunk repository to the bundled MiniLM CPU provider and
-writes vectors to the same SQLite database. Search, semantic classification and
-evidence QA remain separate, unimplemented consumers. No Gmail or external AI
+writes vectors to the same SQLite database. [Shared exact search](VECTOR_SEARCH.md) now consumes completed compatible snapshots through the same provider/store. Semantic classification and evidence QA remain unimplemented. No Gmail or external AI
 adapter is called by indexing.
 
 ## User controls and coverage

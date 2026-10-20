@@ -12,7 +12,9 @@ are implemented. Manual sync also prepares deterministic local text chunks with
 bundled MiniLM WordPiece tokenization, section provenance and pending embedding
 rows. The Local Email Index card explicitly starts/resumes a durable local MiniLM
 indexing run over all live cached mail, with pause/cancel/rebuild and coverage counts.
-Keyword/semantic search, semantic classification and evidence questions remain planned. Historical vector tables are inert; installed users need no model/runtime setup. OpenAI is the only installed functional generative adapter.
+Semantic search now uses the shared local vectors, with sender/date/assigned-category filters and revision-bound excerpts that open the original cached email. Keyword/hybrid search, semantic classification and evidence questions remain planned. Historical vector tables are inert; installed users need no model/runtime setup. OpenAI is the only installed functional generative adapter.
+
+Use **Start indexing** in Local Email Index, then submit a natural-language query in **Semantic search**. Search shows current complete coverage; stale and partial messages are excluded. See [search behavior, evaluation and latency](docs/VECTOR_SEARCH.md).
 
 The tokenizer is embedded in Go; the MiniLM model/native CPU runtime ship as fixed app resources; no user Python or
 post-install model download. Target English first and about 10,000 cached messages.

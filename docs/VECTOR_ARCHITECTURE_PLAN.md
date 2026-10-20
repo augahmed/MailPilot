@@ -1,12 +1,12 @@
 # Shared email chunk-and-vector architecture plan
 
-Reviewed 2026-10-19 against the current working tree. **Persistence and chunking
+Reviewed 2026-10-20 against the current working tree. **Persistence and chunking
 slices implemented:** migrations 015–017, `Store.Chunks()`, `mail.Chunker`, pinned
 local WordPiece tokenization and `app.CachedChunker` during manual sync. A single
 lazy CPU MiniLM provider is now implemented and bundled; real inference is qualified
 in the explicit resumable local indexing workflow. `app.LocalIndex`, durable
 generation-fenced storage and the Local Email Index UI/`index.local` controls are
-implemented. Retrieval and semantic classification remain planned. Preserve unrelated work; this plan does not authorize more implementation.
+implemented. Shared exact vector retrieval and its UI are now implemented ([contract/evaluation](VECTOR_SEARCH.md)); semantic classification and keyword/hybrid retrieval remain planned. Preserve unrelated work; this plan does not authorize more implementation.
 
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) remains the sole product scope/milestone authority;
 [ARCHITECTURE.md](ARCHITECTURE.md) describes runtime/trust boundaries. This document
@@ -40,7 +40,7 @@ there is an FTS5 test probe but no product keyword index or search endpoint.
 Source composition in `backend/cmd/mailpilot-core/main.go` currently wires
 `RuleBasedClassifier`, `ClassificationReview`, `Organization`, `CachedReader`,
 `AIService` and GET-only `ReplyMaintenance`. It also wires `CachedChunker` into manual sync. The local provider is used by `app.LocalIndex` for explicit resumable full-cache
-indexing, with no retriever yet. OpenAI is the only real installed AI adapter;
+indexing and by the shared `retrieval.VectorSearch` for explicit local queries. OpenAI is the only real installed AI adapter;
 multiple-provider substitution is supported by the shared boundary and synthetic
 adapters, not evidence of additional shipped providers. Summary still exists.
 
@@ -446,7 +446,10 @@ model identity, tokenizer and shared chunk store. Future consumers still require
 
 ## 7. Shared retrieval/classification contracts (planned sketches)
 
-The following are consumer-owned design signatures, **not compiling code or a
+The implemented shared retrieval API is `retrieval.VectorSearch.SearchChunks` /
+`Search`, backed by `repository.VectorRepository` and `Store.Vectors()`; see
+[VECTOR_SEARCH.md](VECTOR_SEARCH.md). Classification and keyword/hybrid contracts
+remain future work. The following are consumer-owned design signatures, **not compiling code or a
 new arbitrary IPC surface**. Types are conceptual domain values, not SDK types.
 Implement the smallest concrete methods needed; do not build a repository framework.
 
@@ -606,8 +609,7 @@ Existing session-local reading/search is distinct from secure offline restart.
 The original reset was documentation-only. Subsequently authorized slices have
 implemented chunk storage/production, one native provider, and resumable local
 indexing with migration 017 and a narrow UI/IPC. Qualification is recorded in
-LOCAL_EMBEDDING.md and LOCAL_INDEXING.md. Those slices do not implement retrieval,
-semantic categories, external QA, rich reading or Summary removal. Historical
+LOCAL_EMBEDDING.md and LOCAL_INDEXING.md. The separately authorized [shared exact retrieval slice](VECTOR_SEARCH.md) now implements local semantic search. Semantic categories, keyword/hybrid search, external QA, rich reading and Summary removal remain unimplemented. Historical
 migrations/journals and unrelated work remain preserved. No user mail is used in
 qualification and no commit/push is performed automatically.
 

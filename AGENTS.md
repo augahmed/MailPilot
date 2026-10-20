@@ -1,6 +1,6 @@
 # MailPilot engineering contract
 
-Updated 2026-10-19. Applies throughout this repository. Follow explicit user
+Updated 2026-10-20. Applies throughout this repository. Follow explicit user
 instructions and change only the requested scope. Read [the product plan](docs/PRODUCT_PLAN.md),
 [architecture](docs/ARCHITECTURE.md), [shared vector implementation design](docs/VECTOR_ARCHITECTURE_PLAN.md)
 and relevant [IPC contracts](contracts/README.md) before changing a boundary.
@@ -25,8 +25,7 @@ marks interrupted work resumable; it never auto-starts inference. See
 [local embedding contract](docs/LOCAL_EMBEDDING.md) for bounds, fixed resources,
 cancellation, signing and macOS 13.4+ qualification, and
 [local indexing contract](docs/LOCAL_INDEXING.md) for durable generations, current
-coverage counts and purge/restart fences. Retrieval and semantic classification
-remain unimplemented. Preserve unrelated uncommitted work.
+coverage counts and purge/restart fences. Shared exact `retrieval.VectorSearch` and the `search.local` / `vector_search` UI now consume complete compatible snapshots; see [search contract/evaluation](docs/VECTOR_SEARCH.md). Keyword/hybrid search and semantic classification remain unimplemented. Preserve unrelated uncommitted work.
 
 ## Product and scope
 

@@ -108,7 +108,6 @@ describe("desktop status", () => {
       /Ask MailPilot/i,
       /Search your mailbox/i,
       /Draft a reply/i,
-      /semantic/i,
       /Index cached mail/i,
       /Generate proposed reply/i,
       /Create Gmail draft/i,
@@ -117,6 +116,9 @@ describe("desktop status", () => {
       expect(screen.queryByRole("heading", { name })).toBeNull();
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
+    expect(
+      screen.getByRole("heading", { name: "Semantic search" }),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText(/Optional instruction/i)).toBeNull();
     expect(screen.queryByLabelText(/Include earlier cached/i)).toBeNull();
     expect(

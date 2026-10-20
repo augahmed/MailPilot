@@ -1,12 +1,12 @@
 # MailPilot architecture
 
-Updated 2026-10-19 for the shared local retrieval direction. This document is the
+Updated 2026-10-20 for the shared local retrieval direction. This document is the
 technical authority; [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the sole scope/milestone
 plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. The later
 authorized persistence/chunking slices add migrations 015–017, typed storage and
 bounded cached source projection during manual sync. A lazy CPU MiniLM provider
 is implemented and packaged; explicit resumable indexing/UI now connects it to
-SQLite through `index.local`. Retrieval remains planned. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
+SQLite through `index.local`. Shared exact vector retrieval and a semantic-search UI are now implemented; see [VECTOR_SEARCH.md](VECTOR_SEARCH.md). Historical plans are under [archive](archive/LEGACY_FEATURES.md).
 
 [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) is the detailed technical
 supplement for the same scope: exact source reuse/disabled paths, logical shared
@@ -23,14 +23,14 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 
 | Area | Implemented now | Planned or limited |
 | --- | --- | --- |
-| Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | One explicit resumable indexing job uses the cached chunker/store and lazy native provider. No retrieval consumer or raw inference IPC. |
+| Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | One explicit resumable indexing job uses the cached chunker/store and lazy native provider. One bounded local search worker shares the provider; no raw inference IPC. |
 | Gmail | System-browser OAuth/keyring; one account; manual bounded initial Inbox and incremental history sync; normalized local cache. | No complete mailbox/Sent/attachment coverage, background scheduling, thread-fetch operation or second email provider. |
 | Reader | `mail.read` returns revision-checked paged escaped text from the same cleaned sections used by chunks, preserving useful image descriptions and omitting transport clutter; metadata and phishing explanations are shown. | No rich HTML sanitizer/renderer, remote content or attachment download. Cold-start restoration checks Gmail online. |
 | Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | No active semantic classifier, automatic full-cache assessment, confirmed-example workflow or user-facing primary-override system. |
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
 | AI | `ai.settings`, provider-scoped OS keys and one approved cached-email Summary through `SummarizeEmail`; OpenAI is the only installed functional adapter. | No evidence-question operation, retrieved context, tools, replies, new drafts or general chat. |
-| Search/storage | SQLite migrations 001–017, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Local vector indexing is active on explicit Start/Resume. Neither keyword nor semantic search is implemented. Old vector schemas are inert. |
+| Search/storage | SQLite migrations 001–017, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Local vector indexing is active on explicit Start/Resume. Semantic search is implemented over complete compatible chunk generations; keyword search remains planned. Old vector schemas are inert. |
 | Historical recovery | GET-only Gmail draft matching and local status/reconcile/resolve/cancel for old journal actions. | No draft creation, resending, remote deletion or reactivation of historical previews. |
 
 Composition is in [main.go](../backend/cmd/mailpilot-core/main.go). Actual command
@@ -49,7 +49,7 @@ and external-provider calls. React has no direct database, keyring, Gmail or AI 
 Private newline-delimited JSON-RPC uses handshake/protocol validation, string IDs,
 strict method/field allowlists and 64 KiB frames. The current dispatcher executes
 one request at a time; long workflows use bounded application jobs and polling,
-not a generic job/RPC framework. Most Go calls have a five-second deadline and
+not a generic job/RPC framework. Local query inference runs behind the narrow `search.local` start/status/cancel boundary. Most Go calls have a five-second deadline and
 classification review has 30 seconds; the native bridge has matching longer waits.
 No generic SQL, URL fetch, filesystem or shell bridge; no product HTTP server.
 The temporary OAuth callback and development Vite server are separate from this
@@ -143,7 +143,7 @@ Include prefixes within model token limits. Do not split UTF-8, silently truncat
 coverage, drop unique quoted content or treat overlapping chunks as corroboration.
 Missing/oversized/unsupported mail remains visibly partial or unavailable.
 
-## 5. Local model provider and planned retrieval
+## 5. Local model provider and shared retrieval
 
 The [local embedding contract](LOCAL_EMBEDDING.md) records the implemented single
 MiniLM FP32 ONNX provider, explicit model/artifact/encoding descriptor, 384-dimensional
@@ -275,9 +275,15 @@ resume durable work after crashes without a generic scheduler framework. Enablin
 semantic processing permits local work on the cache, not remote generation/uploads.
 Never infer remote deletion from incomplete Gmail listings.
 
-## 7. Search and classification consumers (planned)
+## 7. Search and classification consumers
 
 ### Semantic search with complementary keyword search
+
+The semantic-only slice is implemented by `retrieval.VectorSearch`, `Store.Vectors()`,
+`app.LocalSearch` and `search.local` / `vector_search`. It supports sender/date/assigned-category
+filters and complete compatible snapshots. [VECTOR_SEARCH.md](VECTOR_SEARCH.md) records
+exact behavior, evaluation and limits. The following keyword/hybrid, label filtering
+and empty-query browsing behavior remains planned.
 
 Validate account, bounded query, filters and pagination in Go. Embed nonempty queries
 locally, compare only current compatible chunks, return original email identities

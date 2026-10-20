@@ -1,6 +1,6 @@
 # MailPilot product plan
 
-Updated 2026-10-19. This is the single authoritative product scope and milestone
+Updated 2026-10-20. This is the single authoritative product scope and milestone
 plan. [ARCHITECTURE.md](ARCHITECTURE.md) defines technical boundaries;
 [AGENTS.md](../AGENTS.md) defines engineering rules; [IPC contracts](../contracts/README.md)
 describe implemented transport only. [Legacy compatibility notes](archive/LEGACY_FEATURES.md)
@@ -14,7 +14,7 @@ Status: M1 source/chunking and M2 persistence plus a lazy packaged CPU MiniLM
 provider plus explicit resumable indexing/UI are implemented. The provider has real synthetic/native and fake-model
 checks; [qualification details](LOCAL_EMBEDDING.md) cover resource/signing/OS limits.
 The coordinator now publishes bounded vector batches through generation-fenced
-SQLite writes. Search, semantic classification and AI milestones remain planned.
+SQLite writes. Exact vector search and its UI are now implemented ([details and measurements](VECTOR_SEARCH.md)); keyword/hybrid search, semantic classification and AI milestones remain planned.
 The additive `index.local` control returns metadata only; external AI consent is
 unchanged. See [local indexing](LOCAL_INDEXING.md) for scope and qualification. Further product work requires a scoped implementation request.
 
@@ -157,8 +157,7 @@ Generation is optional and no provider/key is needed for local search/classifica
 
 Milestones are coherent slices, not a second list of copyable implementation prompts.
 M1 and the M2 storage/provider/coordinator slice are implemented and tested,
-including real offline indexing on synthetic mail. Ten-thousand-message performance
-and retrieval/classification quality qualification remain open. Supporting reading fixes may be separately requested. Do not add AI routes before reliable local retrieval/evidence.
+including real offline indexing on synthetic mail. A 10,000-message/50,000-chunk exact-scan benchmark and a small native synthetic search evaluation are recorded in [VECTOR_SEARCH.md](VECTOR_SEARCH.md). Held-out retrieval/classification quality and keyword fallback remain open; M3 is only partially implemented. Supporting reading fixes may be separately requested. Do not add AI routes before reliable local retrieval/evidence.
 
 ## 5. Evaluation, operational limits and decisions still open
 

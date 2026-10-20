@@ -17,6 +17,39 @@ vi.mock("../mailbox/Mailbox", () => ({
     );
   },
 }));
+vi.mock("../search/SemanticSearch", () => ({
+  SemanticSearch: ({
+    onOpen,
+    onEvidence,
+  }: {
+    onOpen: OpenMail;
+    onEvidence: (v: { text: string; revision: string }) => void;
+  }) => {
+    const [query, setQuery] = useState("");
+    const [hasResult, setHasResult] = useState(true);
+    return (
+      <section>
+        <label>
+          Saved search
+          <input value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
+        <button onClick={() => setHasResult(false)}>
+          Clear search results
+        </button>
+        {hasResult && (
+          <button
+            onClick={(e) => {
+              onEvidence({ text: "Matching chunk", revision: "a".repeat(64) });
+              onOpen("a", "e", e.currentTarget);
+            }}
+          >
+            Open search result
+          </button>
+        )}
+      </section>
+    );
+  },
+}));
 vi.mock("./MailReader", () => ({
   MailReader: ({ onBack, source }: { onBack: () => void; source: string }) => (
     <button onClick={onBack}>Back to {source}</button>
@@ -33,6 +66,31 @@ it("preserves mailbox state and focus without mounting retired entry points", as
   fireEvent.click(screen.getByText("Back to mailbox"));
   expect(screen.getByText("Mailbox page 1")).toBeVisible();
   await waitFor(() => expect(mailbox).toHaveFocus());
-  expect(screen.queryByText("Open search message")).toBeNull();
+  expect(screen.getByText("Open search result")).toBeVisible();
   expect(screen.queryByText("Open cited email")).toBeNull();
+});
+
+it("preserves search state and returns focus after reading its original email", async () => {
+  render(<MailWorkspace connectionRevision={0} />);
+  fireEvent.change(screen.getByLabelText("Saved search"), {
+    target: { value: "paraphrased query" },
+  });
+  const trigger = screen.getByText("Open search result");
+  fireEvent.click(trigger);
+  expect(screen.getByText("Back to search")).toBeVisible();
+  fireEvent.click(screen.getByText("Back to search"));
+  expect(screen.getByLabelText("Saved search")).toHaveValue(
+    "paraphrased query",
+  );
+  await waitFor(() => expect(trigger).toHaveFocus());
+});
+
+it("restores focus to the workspace when a stale result disappeared while reading", async () => {
+  render(<MailWorkspace connectionRevision={0} />);
+  fireEvent.click(screen.getByText("Open search result"));
+  fireEvent.click(screen.getByText("Clear search results"));
+  fireEvent.click(screen.getByText("Back to search"));
+  await waitFor(() =>
+    expect(screen.getByLabelText("Cached email workspace")).toHaveFocus(),
+  );
 });

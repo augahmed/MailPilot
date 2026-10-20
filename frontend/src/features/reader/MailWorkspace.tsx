@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Mailbox } from "../mailbox/Mailbox";
+import { SemanticSearch } from "../search/SemanticSearch";
 import { MailReader } from "./MailReader";
 export function MailWorkspace({
   connectionRevision,
@@ -11,7 +12,12 @@ export function MailWorkspace({
     emailId: string;
     source: string;
   } | null>(null);
+  const [evidence, setEvidence] = useState<{
+    text: string;
+    revision: string;
+  } | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const list = useRef<HTMLDivElement | null>(null);
   const open = (
     source: string,
     accountId: string,
@@ -23,21 +29,37 @@ export function MailWorkspace({
   };
   return (
     <>
-      <div hidden={selection !== null}>
+      <div
+        ref={list}
+        tabIndex={-1}
+        aria-label="Cached email workspace"
+        hidden={selection !== null}
+      >
+        <SemanticSearch
+          onEvidence={setEvidence}
+          onOpen={(accountId, emailId, button) =>
+            open("search", accountId, emailId, button)
+          }
+        />
         <Mailbox
           connectionRevision={connectionRevision}
-          onOpen={(accountId, emailId, button) =>
-            open("mailbox", accountId, emailId, button)
-          }
+          onOpen={(accountId, emailId, button) => {
+            setEvidence(null);
+            open("mailbox", accountId, emailId, button);
+          }}
         />
       </div>
       {selection && (
         <MailReader
           key={`${selection.accountId}/${selection.emailId}`}
           {...selection}
+          evidence={evidence ?? undefined}
           onBack={() => {
             setSelection(null);
-            requestAnimationFrame(() => trigger.current?.focus());
+            requestAnimationFrame(() => {
+              if (trigger.current?.isConnected) trigger.current.focus();
+              else list.current?.focus();
+            });
           }}
         />
       )}

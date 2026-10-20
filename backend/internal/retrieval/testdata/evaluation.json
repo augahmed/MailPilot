@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "description": "Synthetic English smoke evaluation, fixed judgments at email level. Not a held-out mailbox benchmark. No lexical fallback or score threshold. Unrelated queries have no relevant emails and are excluded from Recall denominators.",
+  "messages": [
+    {
+      "id": "flight",
+      "account": "a",
+      "subject": "Travel itinerary",
+      "body": "Your nonstop flight from Boston to Seattle departs November 12 at 8:30 AM. Confirmation code Q7M4ZP. Arrive at the airport two hours early.",
+      "thread": "travel"
+    },
+    {
+      "id": "rent",
+      "account": "a",
+      "subject": "Lease renewal",
+      "body": "Your monthly apartment rent will increase to $1850 starting January. Please sign the lease renewal by December 15.",
+      "thread": "housing"
+    },
+    {
+      "id": "dentist",
+      "account": "a",
+      "subject": "Appointment reminder",
+      "body": "Your dental cleaning is booked for Tuesday at 2 PM with Dr. Elena Ruiz. Call us if you need to reschedule.",
+      "thread": "health"
+    },
+    {
+      "id": "invoice",
+      "account": "a",
+      "subject": "Payment due",
+      "body": "Invoice INV-2048-AX for the Atlas project totals $3250 and is due on November 30. Send payment using the bank details on file.",
+      "thread": "billing"
+    },
+    {
+      "id": "invoice-other",
+      "account": "a",
+      "subject": "Receipt",
+      "body": "Invoice INV-2049-BX was paid in full yesterday. The receipt for the Boreal project is attached.",
+      "thread": "billing"
+    },
+    {
+      "id": "interview",
+      "account": "a",
+      "subject": "Recruiting update",
+      "body": "We would like to invite you to a technical interview for the platform engineering role. Please choose a time next week.",
+      "thread": "career"
+    },
+    {
+      "id": "parcel",
+      "account": "a",
+      "subject": "Shipping update",
+      "body": "Your order has left our warehouse and the courier expects to deliver it on Friday. Tracking reference ZX-88120.",
+      "thread": "delivery"
+    },
+    {
+      "id": "budget-old",
+      "account": "a",
+      "subject": "Atlas launch budget",
+      "body": "The Atlas launch budget is approved for $12000. The launch date is November 9.",
+      "thread": "atlas-thread"
+    },
+    {
+      "id": "budget-new",
+      "account": "a",
+      "subject": "Re: Atlas launch budget",
+      "body": "Correction: the Atlas launch budget is now $9000, not $12000. The launch has moved from November 9 to November 16.",
+      "thread": "atlas-thread"
+    },
+    {
+      "id": "budget-forward",
+      "account": "a",
+      "subject": "Fwd: Atlas launch budget",
+      "body": "Please review this earlier proposal.\n\n----- Forwarded message -----\nThe Atlas launch budget is approved for $12000. The launch date is November 9.",
+      "thread": "atlas-thread"
+    },
+    {
+      "id": "password",
+      "account": "a",
+      "subject": "Security notification",
+      "body": "A new device signed into your account. If this was not you, reset your password through your usual account page.",
+      "thread": "security"
+    },
+    {
+      "id": "school",
+      "account": "a",
+      "subject": "Course registration",
+      "body": "Registration for spring classes opens Monday. Meet your academic advisor before selecting courses.",
+      "thread": "school"
+    },
+    {
+      "id": "maya",
+      "account": "a",
+      "subject": "Observatory keys",
+      "body": "Maya Okafor will bring the observatory keys to the north entrance on Thursday evening. Contact Maya if the gate is locked.",
+      "thread": "observatory"
+    },
+    {
+      "id": "maya-other",
+      "account": "a",
+      "subject": "Lunch with Maya",
+      "body": "Maya Okafor reserved a table for lunch at noon on Wednesday. We will meet at the cafe.",
+      "thread": "lunch"
+    },
+    {
+      "id": "backup",
+      "account": "a",
+      "subject": "Maintenance completed",
+      "body": "The nightly database backup completed successfully. Restore point BKP-7701 is available for seven days.",
+      "thread": "maintenance"
+    },
+    {
+      "id": "garden",
+      "account": "a",
+      "subject": "Community garden",
+      "body": "The volunteers will plant tomatoes and basil in the community garden this Saturday. Bring gloves and a watering can.",
+      "thread": "garden"
+    },
+    {
+      "id": "concert",
+      "account": "a",
+      "subject": "Tickets confirmed",
+      "body": "Your orchestra concert tickets are confirmed for Saturday evening. Doors open at 7 PM.",
+      "thread": "concert"
+    },
+    {
+      "id": "gym",
+      "account": "a",
+      "subject": "Membership renewal",
+      "body": "Your annual fitness center membership renews next month at the standard rate.",
+      "thread": "fitness"
+    },
+    {
+      "id": "tax",
+      "account": "a",
+      "subject": "Tax documents ready",
+      "body": "Your annual tax statement is now available. Keep this document for your income tax return.",
+      "thread": "tax"
+    },
+    {
+      "id": "lunch",
+      "account": "a",
+      "subject": "Team lunch",
+      "body": "The team lunch is in the third floor kitchen at noon. Vegetarian options will be available.",
+      "thread": "lunch-team"
+    },
+    {
+      "id": "release",
+      "account": "a",
+      "subject": "Software release",
+      "body": "Version 4.2 fixes the authentication timeout and improves synchronization reliability. Deploy during the maintenance window.",
+      "thread": "software"
+    },
+    {
+      "id": "insurance",
+      "account": "a",
+      "subject": "Policy update",
+      "body": "Your auto insurance policy renews on December 1. Review coverage and deductibles before renewal.",
+      "thread": "insurance"
+    },
+    {
+      "id": "library",
+      "account": "a",
+      "subject": "Library reminder",
+      "body": "The two books you borrowed are due back at the public library next Tuesday. You can renew online.",
+      "thread": "library"
+    },
+    {
+      "id": "volunteer",
+      "account": "a",
+      "subject": "Food bank shift",
+      "body": "Your volunteer shift at the food bank starts at 9 AM Sunday. Please check in at the loading dock.",
+      "thread": "foodbank"
+    },
+    {
+      "id": "hotel",
+      "account": "a",
+      "subject": "Room reservation",
+      "body": "Your hotel room in Seattle is reserved for November 12 through November 15. Check-in begins at 3 PM.",
+      "thread": "hotel"
+    },
+    {
+      "id": "refund",
+      "account": "a",
+      "subject": "Refund issued",
+      "body": "We have issued a refund of $79 for your returned headphones. It should appear on your card within five business days.",
+      "thread": "refund"
+    },
+    {
+      "id": "coffee",
+      "account": "a",
+      "subject": "Coffee subscription",
+      "body": "Your monthly coffee beans have shipped. This month features a medium roast from Colombia.",
+      "thread": "coffee"
+    },
+    {
+      "id": "meeting",
+      "account": "a",
+      "subject": "Planning session",
+      "body": "The quarterly planning meeting has been moved to Thursday at 10 AM in conference room Cedar. Bring your roadmap.",
+      "thread": "meeting"
+    },
+    {
+      "id": "wifi",
+      "account": "a",
+      "subject": "Network outage",
+      "body": "The office wireless network will be unavailable Wednesday evening during router maintenance.",
+      "thread": "network"
+    },
+    {
+      "id": "flight-private",
+      "account": "b",
+      "subject": "Travel itinerary",
+      "body": "Your nonstop flight from Boston to Seattle departs November 12 at 8:30 AM. Confirmation code Q7M4ZP. Private account itinerary.",
+      "thread": "travel"
+    }
+  ],
+  "queries": [
+    {
+      "kind": "paraphrase",
+      "query": "When does my plane leave for Seattle?",
+      "relevant": ["flight"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "How much will I pay for my apartment next year?",
+      "relevant": ["rent"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "When am I getting my teeth cleaned?",
+      "relevant": ["dentist"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "Did the employer invite me to the next hiring stage?",
+      "relevant": ["interview"]
+    },
+    {
+      "kind": "identifier",
+      "query": "INV-2048-AX",
+      "relevant": ["invoice"]
+    },
+    {
+      "kind": "identifier",
+      "query": "Q7M4ZP",
+      "relevant": ["flight"]
+    },
+    {
+      "kind": "name",
+      "query": "Who is bringing the observatory keys, Maya Okafor?",
+      "relevant": ["maya"]
+    },
+    {
+      "kind": "repeated-thread",
+      "query": "What was the original Atlas launch budget?",
+      "relevant": ["budget-old", "budget-forward"]
+    },
+    {
+      "kind": "conflicting",
+      "query": "What are the different Atlas launch budget and date updates?",
+      "relevant": ["budget-old", "budget-new", "budget-forward"]
+    },
+    {
+      "kind": "cross-account",
+      "query": "Boston to Seattle flight confirmation",
+      "relevant": ["flight"]
+    },
+    {
+      "kind": "unrelated",
+      "query": "Which lunar colony grows purple mushrooms in low gravity?",
+      "relevant": []
+    },
+    {
+      "kind": "unrelated",
+      "query": "Where is the submarine penguin chess championship?",
+      "relevant": []
+    }
+  ]
+}
