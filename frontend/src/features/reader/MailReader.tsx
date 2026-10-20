@@ -201,10 +201,10 @@ export function MailReader({
           </p>
           <h3>Message body</h3>
           <p className="help">
-            Email content is untrusted. Displayed as plain text; links are
-            inactive and remote content is blocked.
+            Cleaned text from the cached email. Links remain inactive and remote
+            images are blocked.
             {m.bodyFormat === "html_text" &&
-              " Text was extracted from cached HTML."}
+              " Includes text extracted from cached HTML."}
           </p>
           {m.bodyError && (
             <p role="alert">Cached body could not be displayed safely.</p>
@@ -225,7 +225,8 @@ export function MailReader({
           {page && page.nextOffset < page.totalBytes && (
             <>
               <p>
-                {page.nextOffset} of {page.totalBytes} cached text bytes loaded.
+                {page.nextOffset} of {page.totalBytes} cleaned text bytes
+                loaded.
               </p>
               <button
                 disabled={busy}

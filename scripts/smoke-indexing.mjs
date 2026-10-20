@@ -45,7 +45,7 @@ try {
       "-p",
       "(version 1) (allow default) (deny network*)",
       binary,
-      "-test.run=^TestNativeLocalIndexSynthetic$",
+      "-test.run=^TestNativeLocalIndex(Synthetic|CleanedNewsletter)$",
       "-test.v",
       "-test.timeout=120s",
     ],
@@ -54,13 +54,15 @@ try {
   const match = result.stdout.match(/INDEX_QUALIFICATION (\{[^\n]+\})/);
   if (
     !match ||
-    !result.stdout.includes("--- PASS: TestNativeLocalIndexSynthetic")
+    !result.stdout.includes("--- PASS: TestNativeLocalIndexSynthetic") ||
+    !result.stdout.includes("--- PASS: TestNativeLocalIndexCleanedNewsletter")
   )
     throw new Error("Missing native indexing evidence");
   const report = {
     ...JSON.parse(match[1]),
     verification: "network-denied-native-index",
     strictCgoChecks: true,
+    cleanedNewsletterVerified: true,
   };
   await mkdir(resolve(root, ".cache"), { recursive: true });
   await writeFile(

@@ -82,6 +82,7 @@ impl IndexResponse {
                 "interrupted",
                 "cache_changed",
                 "model_changed",
+                "preprocessing_changed",
                 "model_unavailable",
                 "inference_failed",
                 "pending_changes",
@@ -108,6 +109,8 @@ mod tests {
         bad["modelPath"] = serde_json::json!("/tmp/model");
         assert!(serde_json::from_value::<IndexRequest>(bad).is_err());
         let mut response = response;
+        response.code = "preprocessing_changed".into();
+        assert!(response.valid());
         response.pending_messages = 0;
         assert!(!response.valid());
     }

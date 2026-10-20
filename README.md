@@ -6,7 +6,7 @@ embedding and vector-retrieval pipeline supporting semantic search, category
 suggestions and optional answers grounded in approved email evidence.
 
 **Current status:** Gmail OAuth/keyring, bounded initial/incremental sync, cached
-plain-text reading, category management, deterministic review/risk explanations,
+cleaned plain-text reading, category management, deterministic review/risk explanations,
 confirmed label organization, selected-email Summary and historical draft recovery
 are implemented. Manual sync also prepares deterministic local text chunks with
 bundled MiniLM WordPiece tokenization, section provenance and pending embedding
@@ -291,3 +291,6 @@ and macOS 13.4+ limitations: [local embedding provider](docs/LOCAL_EMBEDDING.md)
 
 Resumable indexing behavior, coverage definitions, synthetic measurements and native
 verification: [local email indexing](docs/LOCAL_INDEXING.md).
+
+Reader/chunker artifact cleanup, image descriptions and preprocessing refresh:
+[shared readable email text](docs/CLEAN_TEXT.md).

@@ -261,8 +261,9 @@ Recovery does not need AI and cannot create drafts. The old
 `mailbox_read` forwards to `mail.read`. The strict request is
 `{ "accountId": "fixture-account", "emailId": "fixture-message", "offset": 0, "revision": "" }`.
 Both IDs are required and limited to 100 UTF-8 bytes. Offset is a UTF-8 byte
-boundary from 0 to 1 MiB. Continuations require the 64-character content hash
-returned as revision. Changed content returns `stale`; mismatched accounts return
+boundary from 0 to 1 MiB. Continuations require the 64-character opaque SHA-256 of projection version plus
+source hash returned as revision. It is not the original email content hash.
+Changed content or cleanup version returns `stale`; mismatched accounts return
 `unauthorized`. No provider fetch or mailbox write is available from this command.
 
 [mail-reader-v1.json](mail-reader-v1.json) is the synthetic success contract,
@@ -272,7 +273,10 @@ because JSON escaping expands text. Continue until `nextOffset === totalBytes`.
 Metadata includes sender, To, CC, cached labels, attachment metadata, assigned
 categories, a fresh saved category suggestion and local versioned phishing analysis.
 `metadataTruncated` explicitly reports bounded metadata omissions. Timestamps are
-UTC epoch milliseconds. No HTML or attachment bytes cross this command.
+UTC epoch milliseconds. No renderable HTML or attachment bytes cross this command. Reader body text uses
+the same versioned artifact cleanup as the chunker, preserving useful image
+descriptions and quoted/forwarded text. Raw cached mail remains unchanged. See
+[clean text contract](../docs/CLEAN_TEXT.md).
 
 Errors use `code`: unauthorized, validation, not_found, stale, cancelled,
 storage_error or too_large; all content fields are empty and message is null.
@@ -334,7 +338,7 @@ body can produce complete coverage. A failed provider can leave valid source mai
 pending. Every field is required, including `code` (empty on success).
 
 Safe codes are `unauthorized`, `validation`, `unavailable`, `busy`, `storage_error`,
-`interrupted`, `cache_changed`, `model_changed`, `model_unavailable`,
+`interrupted`, `cache_changed`, `model_changed`, `preprocessing_changed`, `model_unavailable`,
 `inference_failed`, `pending_changes`. Errors never contain mail, paths or native
 runtime diagnostics. Disconnect/session replacement cancels work. Neither startup
 nor polling invokes inference; explicit Resume is required after interruption.

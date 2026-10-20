@@ -82,7 +82,7 @@ func TestCachedReaderHTMLFallbackAndSavedCategory(t *testing.T) {
 		t.Fatal(err)
 	}
 	r = reader.Read(ctx, request)
-	if r.Body != email.BodyText || r.Message.BodyFormat != "plain_text" || r.Message.CategoryState != "not_reviewed" {
+	if !strings.Contains(r.Body, email.BodyText) || !strings.Contains(r.Body, "Quoted history") || r.Message.BodyFormat != "html_text" || r.Message.CategoryState != "not_reviewed" {
 		t.Fatal("plain fallback or stale category incorrect")
 	}
 	cancelled, cancel := context.WithCancel(ctx)
@@ -97,5 +97,64 @@ func TestReadMailRequestValidation(t *testing.T) {
 		if p.Valid() {
 			t.Fatal("accepted invalid request")
 		}
+	}
+}
+
+func TestCachedReaderCleansTrackingArtifactsAndKeepsOriginalRiskEvidence(t *testing.T) {
+	store, review, email, _ := reviewFixture(t)
+	ctx := context.Background()
+	rawURL := "<https://click.example.test/u/?qs=" + strings.Repeat("SyntheticTracking", 12) + ">"
+	email.BodyText = "Special offers October 5–16.\n[image: Example logo]\n" + rawURL + "\n[image: Save 14% at Northshop]\n[image: Save 14% at Northshop]\n" + rawURL + "\n> Quoted appointment at noon.\n-- \nSam"
+	if _, err := store.Emails().Upsert(ctx, email); err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.Emails().Get(ctx, "a", email.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := NewCachedReader(review.session, store.Emails(), review, nil)
+	r := reader.Read(ctx, ReadMailRequest{AccountID: "a", EmailID: string(email.ID)})
+	if r.Code != "" || r.Message.BodyError || !strings.Contains(r.Body, "Save 14% at Northshop") || !strings.Contains(r.Body, "> Quoted appointment at noon.") || !strings.Contains(r.Body, "-- \nSam") {
+		t.Fatal("clean reader lost meaningful body", r.Code)
+	}
+	if strings.Contains(r.Body, "[image:") || strings.Contains(r.Body, "SyntheticTracking") || strings.Count(r.Body, "Save 14% at Northshop") != 1 {
+		t.Fatal("reader still displays transport clutter")
+	}
+	after, err := store.Emails().Get(ctx, "a", email.ID)
+	if err != nil || after.ContentHash != before.ContentHash || after.Email.BodyText != email.BodyText || r.Message.Phishing == nil {
+		t.Fatal("clean reader changed source/security evidence")
+	}
+	// A source-only cursor cannot page a differently normalized reader projection.
+	stale := reader.Read(ctx, ReadMailRequest{AccountID: "a", EmailID: string(email.ID), Revision: before.ContentHash})
+	if stale.Code != "stale" || stale.Body != "" {
+		t.Fatal("reader revision omitted cleanup identity")
+	}
+}
+
+func TestCachedReaderDoesNotAppendFormattedPlainAlternative(t *testing.T) {
+	store, review, email, _ := reviewFixture(t)
+	ctx := context.Background()
+	email.BodyText = "*Build your professional\nnetwork.*\n\n*Campus Connect\nhttps://click.engage.example.test/*\nis free for students and alumni.\n\n*Need help?* Email support@example.test\n<support@example.test?utm_source=synthetic?subject=>\nfor support.\n\nUnique plain-only booking ABC123."
+	html := `<p><strong>Build your professional network.</strong></p><p><a href="https://click.engage.example.test/">Campus Connect</a> is free for students and alumni.</p><p><b>Need help?</b> Email <a href="mailto:support@example.test">support@example.test</a> for support.</p>`
+	email.BodyHTML = &html
+	if _, err := store.Emails().Upsert(ctx, email); err != nil {
+		t.Fatal(err)
+	}
+	reader := NewCachedReader(review.session, store.Emails(), review, nil)
+	r := reader.Read(ctx, ReadMailRequest{AccountID: "a", EmailID: string(email.ID)})
+	if r.Code != "" || r.Message == nil || r.Message.BodyError {
+		t.Fatal("reader failed", r.Code)
+	}
+	for _, fact := range []string{"Build your professional network.", "Campus Connect", "Need help?", "support@example.test", "ABC123"} {
+		if strings.Count(r.Body, fact) != 1 {
+			t.Fatalf("reader duplicated or lost %q", fact)
+		}
+	}
+	if strings.Contains(r.Body, "*") || strings.Contains(r.Body, "utm_") || strings.Contains(r.Body, "click.engage") {
+		t.Fatal("plain-alternative formatting and link annotations leaked")
+	}
+	stored, err := store.Emails().Get(ctx, "a", email.ID)
+	if err != nil || stored.Email.BodyText != email.BodyText || *stored.Email.BodyHTML != html {
+		t.Fatal("reading altered original alternatives", err)
 	}
 }

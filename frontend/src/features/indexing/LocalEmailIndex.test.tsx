@@ -93,3 +93,17 @@ describe("Local Email Index", () => {
     expect(screen.getByText("Paused")).toBeInTheDocument();
   });
 });
+
+it("requests explicit resume when email text preparation changes", async () => {
+  vi.mocked(manageIndex).mockResolvedValue({
+    ...status,
+    status: "interrupted",
+    code: "preprocessing_changed",
+  });
+  render(<LocalEmailIndex />);
+  expect(
+    await screen.findByText(/Email text cleanup changed/),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Resume indexing" })).toBeEnabled();
+  expect(manageIndex).toHaveBeenCalledExactlyOnceWith("status");
+});

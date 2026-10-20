@@ -25,7 +25,7 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 | --- | --- | --- |
 | Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | One explicit resumable indexing job uses the cached chunker/store and lazy native provider. No retrieval consumer or raw inference IPC. |
 | Gmail | System-browser OAuth/keyring; one account; manual bounded initial Inbox and incremental history sync; normalized local cache. | No complete mailbox/Sent/attachment coverage, background scheduling or second email provider. Thread retrieval returns unsupported. |
-| Reader | `mail.read` returns revision-checked paged escaped text; HTML-only bodies use HTML-to-text extraction; metadata and phishing explanations are shown. | No rich HTML sanitizer/renderer, remote content or attachment download. Cold-start restoration checks Gmail online. |
+| Reader | `mail.read` returns revision-checked paged escaped text from the same cleaned sections used by chunks, preserving useful image descriptions and omitting transport clutter; metadata and phishing explanations are shown. | No rich HTML sanitizer/renderer, remote content or attachment download. Cold-start restoration checks Gmail online. |
 | Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | No active semantic classifier, automatic full-cache assessment, confirmed-example workflow or user-facing primary-override system. |
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
@@ -222,6 +222,13 @@ only through the separate explicit full-cache index job. See the
 [implemented schema and lifecycle](VECTOR_ARCHITECTURE_PLAN.md#implemented-minimal-shared-index-records)
 for exact fields, statuses, bounds and timestamp semantics. Historical vectors are
 never read as current chunks; no migrations, assignments or journals are rewritten.
+
+The reader and chunker now share [readable text cleanup](CLEAN_TEXT.md), versioned
+`readable-v3`: meaningful image descriptions and quoted/forwarded text are kept;
+tracking/placeholder artifacts are cleaned without modifying original cached mail.
+Reader cursors bind the source hash plus projection version. Old preprocessing
+coverage is excluded and the UI requests explicit Resume to rebuild compatible
+chunks/vectors. Model/tokenizer identity and existing migrations remain unchanged.
 
 ### Implemented local coordinator
 

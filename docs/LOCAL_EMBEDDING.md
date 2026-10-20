@@ -51,7 +51,9 @@ query, err := provider.EmbedQuery(ctx, "When is the project meeting?")
 err = provider.Close(shutdownContext)
 ```
 
-The provider receives canonical document strings from the caller. It adds only
+The provider receives canonical document strings from the caller. Email text is
+cleaned through the shared [readable projection](CLEAN_TEXT.md) before chunking;
+preprocessing identity is separate from the unchanged model/encoder identity. It adds only
 CLS/SEP and padding, never another email context prefix. MiniLM is symmetric:
 queries use the same encoder/pooling without invented query instructions. Reuse
 `mail.ModelInput` and the one tokenizer rather than building another preprocessing

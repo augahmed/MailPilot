@@ -12,6 +12,7 @@ import (
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/embedding/model"
+	mailtext "mailpilot.local/core/internal/mail"
 	"mailpilot.local/core/internal/repository"
 	"mailpilot.local/core/internal/store/sqlite"
 )
@@ -407,5 +408,88 @@ func TestLocalIndexFinishedCoverageTracksNewUnavailableMailWithoutInference(t *t
 	p := indexCommand(s, "status")
 	if p.Status != "partial" || p.UnavailableMessages != 1 || p.CompleteMessages != 1 || p.EligibleMessages != 2 || f.count() != before {
 		t.Fatalf("finished index falsely claimed complete coverage: %+v", p)
+	}
+}
+
+func TestLocalIndexReplacesOldPreprocessingAndEmbedsCleanText(t *testing.T) {
+	s, db, f, emails, _ := indexFixture(t, 1)
+	ctx := context.Background()
+	e := emails[0]
+	e.BodyText = "Double rewards October 5–16.\n[image: Example logo]\n<https://click.example.test/u/?qs=" + strings.Repeat("SyntheticTracking", 12) + ">\n[image: Save 14% at Northshop]\n[image: Save 14% at Northshop]\n> Unique quoted appointment at noon."
+	if _, err := db.Emails().Upsert(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := db.Emails().Get(ctx, "a", e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldProfile := s.profile
+	oldProfile.PreprocessingVersion = "email-sections-v1-wp-07eced375cec-256-32-old"
+	oldRun, err := db.Indexing().Begin(ctx, "a", oldProfile, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunker, err := mailtext.NewChunker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := chunker.Build(ctx, stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.PreprocessingVersion = oldProfile.PreprocessingVersion
+	state, err := db.Indexing().ReplaceIndexed(ctx, oldRun, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunks, err := db.Chunks().List(ctx, "a", e.ID, repository.Page{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := repository.EmbeddingBatch{State: state}
+	for _, c := range chunks {
+		v := make([]float32, 384)
+		v[0] = 1
+		batch.Embeddings = append(batch.Embeddings, repository.ChunkEmbedding{ChunkID: c.ID, Status: "ready", Vector: v})
+	}
+	if _, err = db.Indexing().SaveIndexed(ctx, oldRun, batch); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Indexing().Transition(ctx, oldRun, "complete", ""); err != nil {
+		t.Fatal(err)
+	}
+	p := indexCommand(s, "status")
+	if p.Code != "preprocessing_changed" || p.IndexedMessages != 0 || p.PendingMessages != 1 || f.count() != 0 {
+		t.Fatalf("old preprocessing counted as current or auto-inferred: %+v", p)
+	}
+	var inputs []string
+	f.invoke = func(_ context.Context, texts []string) ([][]float32, error) {
+		for _, text := range texts {
+			if strings.Contains(text, "[image:") || strings.Contains(text, "SyntheticTracking") || strings.Contains(text, "?qs=") {
+				return nil, embedding.ErrInput
+			}
+		}
+		inputs = append(inputs, texts...)
+		return fakeIndexVectors(texts, 384), nil
+	}
+	indexCommand(s, "resume")
+	p = waitIndex(t, s)
+	<-s.worker.done
+	if p.Status != "complete" || p.IndexedMessages != 1 || p.EmbeddingsGenerated == 0 || f.count() != p.EmbeddingsGenerated {
+		t.Fatalf("cleaning upgrade did not vectorize: %+v", p)
+	}
+	joined := strings.Join(inputs, "\n")
+	if !strings.Contains(joined, "Save 14% at Northshop") || !strings.Contains(joined, "Unique quoted appointment at noon.") {
+		t.Fatal("embedding input lost offer/quote facts")
+	}
+	after, err := db.Emails().Get(ctx, "a", e.ID)
+	if err != nil || after.ContentHash != stored.ContentHash || after.Email.BodyText != e.BodyText {
+		t.Fatal("indexing cleanup modified cached source")
+	}
+	count := f.count()
+	indexCommand(s, "start")
+	p = waitIndex(t, s)
+	if p.Status != "complete" || f.count() != count {
+		t.Fatal("unchanged cleaned text was re-embedded")
 	}
 }

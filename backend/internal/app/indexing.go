@@ -194,6 +194,9 @@ func (s *LocalIndex) response(ctx context.Context, a domain.AccountID, code stri
 		if run.Profile != p {
 			result.Status = "interrupted"
 			result.Code = "model_changed"
+			if run.Profile.Model == p.Model && run.Profile.Fingerprint == p.Fingerprint {
+				result.Code = "preprocessing_changed"
+			}
 		} else if code == "" {
 			result.Code = run.Code
 		}

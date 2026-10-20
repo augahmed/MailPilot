@@ -80,7 +80,9 @@ supporting improvement: safe cached HTML formatting with text fallback, separate
 from model preprocessing. It must not block or redesign the shared vector foundation.
 Preserve quotes/signatures and block remote resources; exact Gmail visual parity,
 inline image downloads and interactive HTML are not release promises. The current
-reader is escaped plain text/HTML-to-text, not a sanitized rich renderer.
+reader uses shared cleaned sections (including meaningful image descriptions)
+and escaped plain text; rich HTML rendering remains supporting work. See
+[readable text](CLEAN_TEXT.md).
 
 ### Outside the immediate scope
 

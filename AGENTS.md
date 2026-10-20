@@ -12,6 +12,10 @@ The authorized persistence/chunking/indexing slices use migrations 015–017 and
 and `index_state`; do not add parallel stores. `internal/mail` owns deterministic
 sections/chunks and the pinned offline `wordpiece` tokenizer; inference must
 reuse that tokenizer and `mail.ModelInput` recipe or version/rebuild explicitly.
+The reader and chunker share `mail.Sections` / `ReadableBody` with `readable-v3`
+artifact cleanup; preserve useful image descriptions, quoted/forwarded evidence
+and original raw mail. Bump the text/preprocessing version for cleanup changes;
+never reuse incompatible vectors. See [clean text contract](docs/CLEAN_TEXT.md).
 Manual sync performs bounded local cache preparation; it does no inference.
 One native CPU provider is now implemented in `internal/embedding`; its shared
 `model` identity is used by chunks. Reuse it and the pinned WordPiece tokenizer.

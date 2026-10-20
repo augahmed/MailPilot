@@ -142,3 +142,24 @@ it("accepts the shared version 1 cached reader contract", async () => {
   const fixture = await import("../../../../contracts/mail-reader-v1.json");
   expect(readerSchema.safeParse(fixture.default).success).toBe(true);
 });
+
+it("shows cleaned offer text while keeping links and images inactive", async () => {
+  const text =
+    "Double rewards October 5–16.\nSave 14% at Northshop\nUnique quoted appointment at noon.";
+  const bytes = new TextEncoder().encode(text).length;
+  vi.mocked(readCachedMail).mockResolvedValue({
+    ...fixture,
+    body: text,
+    nextOffset: bytes,
+    totalBytes: bytes,
+    message: { ...fixture.message!, bodyFormat: "html_text" },
+  });
+  const { container } = render(
+    <MailReader accountId="a" emailId="e" source="mailbox" onBack={() => {}} />,
+  );
+  expect(await screen.findByText(/Save 14% at Northshop/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/Cleaned text from the cached email/),
+  ).toBeInTheDocument();
+  expect(container.querySelector("script,img,iframe,a")).toBeNull();
+});

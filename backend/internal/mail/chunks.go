@@ -14,7 +14,7 @@ import (
 const (
 	ChunkTokens          = 256
 	ChunkOverlap         = 32
-	PreprocessingVersion = "email-sections-v1-wp-07eced375cec-256-32-" + wordpiece.NormalizationVersion
+	PreprocessingVersion = "email-sections-" + TextProjectionVersion + "-wp-07eced375cec-256-32-" + wordpiece.NormalizationVersion
 	ChunkIndexVersion    = "email-chunks-v1"
 	maxChunkTextBytes    = 64 * 1024
 )

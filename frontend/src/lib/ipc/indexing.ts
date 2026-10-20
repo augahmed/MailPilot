@@ -55,6 +55,7 @@ export const indexResponseSchema = z
       "interrupted",
       "cache_changed",
       "model_changed",
+      "preprocessing_changed",
       "model_unavailable",
       "inference_failed",
       "pending_changes",

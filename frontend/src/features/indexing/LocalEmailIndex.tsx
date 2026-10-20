@@ -27,6 +27,8 @@ const messages: Partial<Record<IndexResponse["code"], string>> = {
     "The previous run was interrupted. Resume reuses saved embeddings.",
   cache_changed:
     "Cached mail was removed. Resume to index the remaining cache.",
+  preprocessing_changed:
+    "Email text cleanup changed. Resume indexing to refresh the saved chunks and embeddings.",
   model_changed:
     "The embedding model changed. Resume builds a compatible generation.",
   model_unavailable:

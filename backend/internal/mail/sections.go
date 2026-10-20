@@ -28,6 +28,7 @@ type Projection struct {
 type textHint struct {
 	start, end int
 	kind       string
+	image      bool
 }
 
 func canonicalLines(s string) string {
@@ -66,63 +67,61 @@ func Sections(ctx context.Context, e domain.Email) (Projection, error) {
 	if strings.Count(plain, "\n") > 32768 {
 		return Projection{}, ErrContent
 	}
+	plainSections, err := splitSections(ctx, "body_text", plain, nil)
+	if err != nil {
+		return Projection{}, err
+	}
+	plainHints := make([]textHint, 0, len(plainSections))
+	for _, s := range plainSections {
+		plainHints = append(plainHints, textHint{start: s.Start, end: s.End, kind: s.Kind})
+	}
+	plain, plainHints, err = cleanProjection(ctx, plain, plainHints)
+	if err != nil {
+		return Projection{}, err
+	}
 	p.Sources["body_text"] = plain
 	var rendered string
 	var hints []textHint
+	flattenedHTML := false
 	if e.BodyHTML != nil {
 		var err error
 		rendered, hints, err = sectionHTML(ctx, *e.BodyHTML)
 		if err != nil {
 			return Projection{}, err
 		}
+		rendered, hints, err = cleanProjection(ctx, rendered, hints)
+		if err != nil {
+			return Projection{}, err
+		}
 		p.Sources["body_html"] = rendered
-	}
-	var body []Section
-	var err error
-	if strings.TrimSpace(plain) == "" || (rendered != "" && comparisonText(plain) == comparisonText(rendered)) {
-		body, err = splitSections(ctx, "body_html", rendered, hints)
-		if err != nil {
-			return Projection{}, err
-		}
-	} else {
-		body, err = splitSections(ctx, "body_text", plain, nil)
-		if err != nil {
-			return Projection{}, err
-		}
-		// MIME alternatives represent the same content: never concatenate both whole
-		// bodies. Keep only additional HTML paragraphs, including forwarded evidence.
-		known := comparisonText(plain)
-		htmlSections, err := splitSections(ctx, "body_html", rendered, hints)
-		if err != nil {
-			return Projection{}, err
-		}
-		for _, s := range htmlSections {
-			for offset := 0; offset < len(s.Text); {
-				if err := ctx.Err(); err != nil {
-					return Projection{}, err
-				}
-				end := strings.Index(s.Text[offset:], "\n\n")
-				if end < 0 {
-					end = len(s.Text)
-				} else {
-					end += offset + 2
-				}
-				text := s.Text[offset:end]
-				normalized := comparisonText(text)
-				if normalized != "" && !strings.Contains(known, normalized) {
-					extra := s
-					extra.Start += offset
-					extra.End = s.Start + end
-					extra.Text = text
-					body = append(body, extra)
-					if len(body) > MaxSections {
-						return Projection{}, ErrContent
-					}
-					known += " " + normalized
-				}
-				offset = end
+		// Gmail normalization historically populated BodyText with HTMLText's fallback.
+		// Prefer visible HTML when that exact flattened copy includes hidden content;
+		// real distinct plain alternatives still retain their unique evidence below.
+		if strings.TrimSpace(e.BodyText) != "" {
+			legacy, legacyErr := HTMLText(*e.BodyHTML)
+			flattenedHTML = legacyErr == nil && comparisonText(canonicalLines(e.BodyText)) == comparisonText(canonicalLines(legacy))
+			if err := ctx.Err(); err != nil {
+				return Projection{}, err
 			}
 		}
+	}
+	var body []Section
+	if strings.TrimSpace(rendered) == "" && !flattenedHTML {
+		body, err = splitSections(ctx, "body_text", plain, plainHints)
+	} else {
+		// Render one primary MIME representation. Plain-text formatting and generated
+		// link annotations must not cause the HTML body to be appended a second time.
+		body, err = splitSections(ctx, "body_html", rendered, hints)
+		if err == nil && !flattenedHTML {
+			var alternatives []Section
+			alternatives, err = splitSections(ctx, "body_text", plain, plainHints)
+			if err == nil {
+				body, err = supplementAlternative(ctx, body, alternatives)
+			}
+		}
+	}
+	if err != nil {
+		return Projection{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return Projection{}, err
@@ -260,11 +259,11 @@ func sectionHTML(ctx context.Context, value string) (string, []textHint, error) 
 		if kind != lastKind && out.Len() > 0 && strings.TrimSpace(s) != "" {
 			start := out.Len()
 			out.WriteString("\n\n")
-			hints = append(hints, textHint{start, out.Len(), kind})
+			hints = append(hints, textHint{start: start, end: out.Len(), kind: kind})
 		}
 		start := out.Len()
 		out.WriteString(s)
-		hints = append(hints, textHint{start, out.Len(), kind})
+		hints = append(hints, textHint{start: start, end: out.Len(), kind: kind})
 		lastKind = kind
 	}
 	for {
@@ -303,6 +302,27 @@ func sectionHTML(ctx context.Context, value string) (string, []textHint, error) 
 							next.kind = "quoted"
 						case "gmail_signature", "moz-signature":
 							next.kind = "signature"
+						}
+					}
+				}
+			}
+			for _, a := range tok.Attr {
+				if a.Key == "hidden" || (a.Key == "aria-hidden" && strings.EqualFold(a.Val, "true")) {
+					next.hidden = true
+				}
+				if a.Key == "style" && hiddenStyle(a.Val) {
+					next.hidden = true
+				}
+			}
+			if !next.hidden && tok.Data == "img" {
+				for _, a := range tok.Attr {
+					if a.Key == "alt" {
+						label := imageDescription(a.Val)
+						if label != "" {
+							write("\n", next.kind)
+							write(label, next.kind)
+							hints[len(hints)-1].image = true
+							write("\n", next.kind)
 						}
 					}
 				}
@@ -363,6 +383,32 @@ func voidTag(s string) bool {
 	switch s {
 	case "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr":
 		return true
+	}
+	return false
+}
+
+// Inspect only explicit inline hiding declarations; no CSS is evaluated or loaded.
+func hiddenStyle(style string) bool {
+	for _, part := range strings.Split(strings.ToLower(style), ";") {
+		key, value, ok := strings.Cut(part, ":")
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(value), "!important"))
+		switch strings.TrimSpace(key) {
+		case "display":
+			if value == "none" {
+				return true
+			}
+		case "visibility":
+			if value == "hidden" {
+				return true
+			}
+		case "mso-hide":
+			if value == "all" {
+				return true
+			}
+		}
 	}
 	return false
 }

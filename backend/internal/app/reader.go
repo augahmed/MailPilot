@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -128,7 +130,8 @@ func (r *CachedReader) Read(ctx context.Context, p ReadMailRequest) ReadMailResp
 	if e.AccountID != account || string(e.ID) != p.EmailID {
 		return readerError("not_found")
 	}
-	if p.Revision != "" && p.Revision != stored.ContentHash {
+	revision := fmt.Sprintf("%x", sha256.Sum256([]byte(mailtext.TextProjectionVersion+"\n"+stored.ContentHash)))
+	if p.Revision != "" && p.Revision != revision {
 		return readerError("stale")
 	}
 	m := &ReaderMessage{Recipients: []ReaderAddress{}, CC: []ReaderAddress{}, Attachments: []ReaderAttachment{}, Labels: []ReaderLabel{}, Categories: []ReaderCategory{}, ReceivedAt: e.ReceivedAt.UnixMilli(), CachedAt: stored.UpdatedAt.UnixMilli(), BodyState: e.BodyState, BodyFormat: "plain_text", CategoryState: "not_reviewed"}
@@ -176,20 +179,20 @@ func (r *CachedReader) Read(ctx context.Context, p ReadMailRequest) ReadMailResp
 	if err == nil && assessment.InputHash == stored.ContentHash {
 		m.Phishing = riskDTO(assessment.Score, engine.Level(assessment.Score), assessment.AnalyzerVersion, assessment.Findings)
 	}
-	// Use the complete reading text, never the classifier's quote/signature trimming.
-	body := e.BodyText
-	if strings.TrimSpace(body) == "" && e.BodyHTML != nil {
-		m.BodyFormat = "html_text"
-		body, err = mailtext.HTMLText(*e.BodyHTML)
-		if err != nil {
-			body = ""
-			m.BodyError = true
+	// The reader and indexer share one cleaned projection; raw cached mail remains intact.
+	body, format, bodyErr := mailtext.ReadableBody(ctx, e)
+	m.BodyFormat = format
+	if bodyErr != nil {
+		if session.Err() != nil {
+			return readerError("unauthorized")
 		}
-	}
-	if len(body) > mailtext.MaxBodyBytes || !utf8.ValidString(body) {
+		if ctx.Err() != nil {
+			return readerError("cancelled")
+		}
 		body = ""
 		m.BodyError = true
 	}
+
 	if p.Offset > len(body) || (p.Offset < len(body) && !utf8.RuneStart(body[p.Offset])) {
 		return readerError("validation")
 	}
@@ -197,7 +200,7 @@ func (r *CachedReader) Read(ctx context.Context, p ReadMailRequest) ReadMailResp
 	for next < len(body) && !utf8.RuneStart(body[next]) {
 		next--
 	}
-	result := ReadMailResponse{AccountID: p.AccountID, EmailID: p.EmailID, Revision: stored.ContentHash, Offset: p.Offset, NextOffset: next, TotalBytes: len(body), Body: body[p.Offset:next], Message: m}
+	result := ReadMailResponse{AccountID: p.AccountID, EmailID: p.EmailID, Revision: revision, Offset: p.Offset, NextOffset: next, TotalBytes: len(body), Body: body[p.Offset:next], Message: m}
 	// JSON escaping can multiply text size. Shorten the body page first; never
 	// silently discard body text. Excessive metadata is explicitly marked omitted.
 	for {

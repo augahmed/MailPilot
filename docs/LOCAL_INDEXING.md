@@ -73,7 +73,9 @@ by this task.
   through the existing shared store. A changed passage invalidates its vectors;
   matching passages can keep their IDs/vectors even when their order changes.
   A model version change creates a new job generation, retains versioned rows and
-  excludes incompatible vectors from coverage. A fingerprint/dimension change
+  excludes incompatible vectors from coverage. A cleanup/preprocessing change requires explicit Resume to replace incompatible
+  chunks/vectors; `preprocessing_changed` reports that case separately from model
+  changes. See [shared readable text](CLEAN_TEXT.md). A fingerprint/dimension change
   under an already registered version fails closed; bump the recipe version.
 - Startup marks abandoned running jobs interrupted and revokes their generation.
   It never automatically starts model inference. Shutdown and session changes cancel
@@ -123,7 +125,9 @@ The script compiles the native integration test into a temporary fixed app-resou
 layout, copies only bundled assets, and runs under macOS sandbox-exec with **all
 network access denied** and strict CGO pointer checks. It seeds its own synthetic
 SQLite database, indexes 200 messages (40 longer messages), then repeats the run
-and verifies zero regenerated embeddings. It never opens the user's database,
+and verifies zero regenerated embeddings. A second synthetic newsletter test checks
+cleaned inputs, real inference, saved vectors and cached reading without changing
+the original source. It never opens the user's database,
 credentials or mailbox. Machine-readable results go to ignored
 `.cache/local-index-qualification.json`; timing is not a correctness assertion.
 
