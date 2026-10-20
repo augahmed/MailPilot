@@ -65,6 +65,9 @@ func validCoverage(s string) bool { return s == "complete" || s == "partial" || 
 // Replace performs no normalization or inference. The caller supplies an entire
 // deterministic projection; old data remains visible until the transaction commits.
 func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSnapshot) (repository.IndexState, error) {
+	return r.replace(ctx, input, nil)
+}
+func (r *chunkRepository) replace(ctx context.Context, input repository.ChunkSnapshot, run *repository.IndexRun) (repository.IndexState, error) {
 	var result repository.IndexState
 	if input.AccountID == "" || input.EmailID == "" || !validHash(input.SourceRevision) ||
 		!validName(input.PreprocessingVersion, 128) || !validName(input.IndexVersion, 128) || !validModel(input.Model) || len(input.Chunks) > maxChunks || input.ContentStatus != "" && !validCoverage(input.ContentStatus) {
@@ -84,6 +87,14 @@ func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSna
 		}
 	}
 	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
+		if run != nil {
+			if run.AccountID != input.AccountID || run.Profile.Model != input.Model || run.Profile.PreprocessingVersion != input.PreprocessingVersion || run.Profile.IndexVersion != input.IndexVersion {
+				return repository.ErrConflict
+			}
+			if err := checkIndexRun(ctx, tx, *run); err != nil {
+				return err
+			}
+		}
 		revision, body, err := chunkSource(ctx, tx, input.AccountID, input.EmailID)
 		if err != nil {
 			return err
@@ -208,6 +219,9 @@ func (r *chunkRepository) Replace(ctx context.Context, input repository.ChunkSna
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO index_state(account_id,email_id,source_revision,preprocessing_version,index_version,model_id,model_version,dimension,generation,body_state,status,last_indexed_at,content_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,email_id) DO UPDATE SET source_revision=excluded.source_revision,preprocessing_version=excluded.preprocessing_version,index_version=excluded.index_version,model_id=excluded.model_id,model_version=excluded.model_version,dimension=excluded.dimension,generation=excluded.generation,body_state=excluded.body_state,status=excluded.status,last_indexed_at=excluded.last_indexed_at,content_status=excluded.content_status`, result.AccountID, result.EmailID, result.SourceRevision, result.PreprocessingVersion, result.IndexVersion, result.Model.ID, result.Model.Version, result.Model.Dimension, result.Generation, result.BodyState, result.Status, timeValue(result), result.ContentStatus)
+		if err == nil && r.store.version >= 17 {
+			_, err = tx.ExecContext(ctx, `UPDATE index_state SET failure_code='',attempt_generation='' WHERE account_id=? AND email_id=?`, input.AccountID, input.EmailID)
+		}
 		return err
 	})
 	if err != nil {
@@ -392,6 +406,9 @@ func refreshIndexStatus(ctx context.Context, tx *sql.Tx, s *repository.IndexStat
 	return nil
 }
 func (r *chunkRepository) SaveEmbeddings(ctx context.Context, b repository.EmbeddingBatch) (repository.IndexState, error) {
+	return r.saveEmbeddings(ctx, b, nil)
+}
+func (r *chunkRepository) saveEmbeddings(ctx context.Context, b repository.EmbeddingBatch, run *repository.IndexRun) (repository.IndexState, error) {
 	s := b.State
 	if s.AccountID == "" || s.EmailID == "" || !validHash(s.SourceRevision) || !validName(s.Generation, 128) || !validModel(s.Model) || len(b.Embeddings) == 0 || len(b.Embeddings) > maxEmbeddingBatch {
 		return repository.IndexState{}, repository.ErrInvalid
@@ -420,6 +437,14 @@ func (r *chunkRepository) SaveEmbeddings(ctx context.Context, b repository.Embed
 	}
 	var result repository.IndexState
 	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
+		if run != nil {
+			if run.AccountID != s.AccountID || run.Profile.Model != s.Model || run.Profile.PreprocessingVersion != s.PreprocessingVersion || run.Profile.IndexVersion != s.IndexVersion {
+				return repository.ErrConflict
+			}
+			if err := checkIndexRun(ctx, tx, *run); err != nil {
+				return err
+			}
+		}
 		current, err := currentIndex(ctx, tx, s.AccountID, s.EmailID)
 		if err != nil {
 			return err

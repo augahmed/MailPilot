@@ -16,6 +16,7 @@ type Database interface {
 }
 
 type App struct {
+	Index          *LocalIndex
 	AI             *AIService
 	Reader         *CachedReader
 	Replies        *ReplyService
@@ -42,6 +43,9 @@ func (a *App) Health(ctx context.Context) domain.Health {
 
 func (a *App) AuthStatus() auth.Status { return a.Auth.Status() }
 func (a *App) AuthBegin() auth.BeginResult {
+	if a.Index != nil {
+		a.Index.Clear()
+	}
 	if a.AI != nil {
 		a.AI.Clear()
 	}
@@ -55,6 +59,9 @@ func (a *App) AuthBegin() auth.BeginResult {
 }
 func (a *App) AuthCheck() auth.Status { return a.Auth.Check() }
 func (a *App) AuthDisconnect() auth.Status {
+	if a.Index != nil {
+		a.Index.Clear()
+	}
 	if a.AI != nil {
 		a.AI.Clear()
 	}

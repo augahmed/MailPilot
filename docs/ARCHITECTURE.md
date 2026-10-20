@@ -3,9 +3,10 @@
 Updated 2026-10-19 for the shared local retrieval direction. This document is the
 technical authority; [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the sole scope/milestone
 plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. The later
-authorized persistence/chunking slices add migrations 015–016, typed storage and
+authorized persistence/chunking slices add migrations 015–017, typed storage and
 bounded cached source projection during manual sync. A lazy CPU MiniLM provider
-is now implemented and packaged; embedding scheduling, retrieval and new IPC remain planned. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
+is implemented and packaged; explicit resumable indexing/UI now connects it to
+SQLite through `index.local`. Retrieval remains planned. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
 
 [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) is the detailed technical
 supplement for the same scope: exact source reuse/disabled paths, logical shared
@@ -22,14 +23,14 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 
 | Area | Implemented now | Planned or limited |
 | --- | --- | --- |
-| Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | A cached chunker runs within manual sync; a separate lazy native provider is packaged and tested, with no indexing scheduler/retrieval consumer or inference IPC. |
+| Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | One explicit resumable indexing job uses the cached chunker/store and lazy native provider. No retrieval consumer or raw inference IPC. |
 | Gmail | System-browser OAuth/keyring; one account; manual bounded initial Inbox and incremental history sync; normalized local cache. | No complete mailbox/Sent/attachment coverage, background scheduling or second email provider. Thread retrieval returns unsupported. |
 | Reader | `mail.read` returns revision-checked paged escaped text; HTML-only bodies use HTML-to-text extraction; metadata and phishing explanations are shown. | No rich HTML sanitizer/renderer, remote content or attachment download. Cold-start restoration checks Gmail online. |
 | Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | No active semantic classifier, automatic full-cache assessment, confirmed-example workflow or user-facing primary-override system. |
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
 | AI | `ai.settings`, provider-scoped OS keys and one approved cached-email Summary through `SummarizeEmail`; OpenAI is the only installed functional adapter. | No evidence-question operation, retrieved context, tools, replies, new drafts or general chat. |
-| Search/storage | SQLite migrations 001–016, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Neither keyword search nor semantic search/indexing is an active product service. Old vector schemas are inert. |
+| Search/storage | SQLite migrations 001–017, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Local vector indexing is active on explicit Start/Resume. Neither keyword nor semantic search is implemented. Old vector schemas are inert. |
 | Historical recovery | GET-only Gmail draft matching and local status/reconcile/resolve/cancel for old journal actions. | No draft creation, resending, remote deletion or reactivation of historical previews. |
 
 Composition is in [main.go](../backend/cmd/mailpilot-core/main.go). Actual command
@@ -78,7 +79,8 @@ an option only if native feasibility requires it; it cannot own data or network.
 
 ## 3. Intended shared local pipeline (planned)
 
-The diagram describes the target, not current composed services:
+The diagram combines the implemented cache/chunk/embedding/storage flow with planned
+keyword/retrieval/classification/evidence consumers:
 
 ```mermaid
 flowchart TB
@@ -148,7 +150,9 @@ MiniLM FP32 ONNX provider, explicit model/artifact/encoding descriptor, 384-dime
 masked-mean/L2 outputs, reused tokenizer, lazy initialization, bounded batches,
 native cancellation and cleanup. It is separate from SQL and product services.
 `embedding/model` is the shared pure-Go identity consumed by `mail.ChunkModel`.
-There is no embedding scheduler, cloud inference, automatic external AI or new IPC.
+`app.LocalIndex` now owns one explicitly started resumable job, exposed through
+metadata-only `index.local` / Tauri `local_index`. It never calls cloud inference
+or external AI. See [LOCAL_INDEXING.md](LOCAL_INDEXING.md).
 
 Apple Silicon builds now enable CGO and bundle checksummed ONNX weights/runtime
 and notices in fixed resources. Runtime lookup is based only on the sidecar's
@@ -190,6 +194,7 @@ Current source-of-truth DDL is [the migrations directory](../backend/internal/st
 | 014 | Selected provider in non-secret historical `reply_ai_settings`; existing OpenAI settings/key identity retained. |
 | 015 | Shared `email_chunks`, model-versioned `chunk_embeddings`, per-email `index_state`, composite ownership and atomic source/deletion invalidation triggers. |
 | 016 | Named source projections, section indices/spans, bounded context prefix and independent projected-content coverage; existing unknown mappings preserved. |
+| 017 | Durable local index job, model fingerprint/dimension registry, per-message attempt/failure metadata and cache-removal publication revocation. |
 
 The historical `email_embeddings`, `category_embeddings`, `email_passage_vectors`
 and `email_retrieval_indexes` have no active inference/retrieval consumers.
@@ -212,16 +217,29 @@ for bounded cache backfill and after each cache/checkpoint commit. Processing er
 retain source mail/checkpoints, report `chunking_failed`, and leave old chunks stale.
 Backfill skips current recipes and retries missing/stale work on later manual sync.
 It scans at most 10,000 cached summaries and attempts at most the configured sync
-limit per run; no full-cache completion is implied. No inference, embedding scheduler
-or retrieval consumer is wired. See the
+limit per run; no full-cache completion is implied by manual sync. Inference runs
+only through the separate explicit full-cache index job. See the
 [implemented schema and lifecycle](VECTOR_ARCHITECTURE_PLAN.md#implemented-minimal-shared-index-records)
 for exact fields, statuses, bounds and timestamp semantics. Historical vectors are
 never read as current chunks; no migrations, assignments or journals are rewritten.
 
+### Implemented local coordinator
+
+`app.LocalIndex` scans live cached Gmail messages in bounded candidate pages without
+an Inbox/UI/10,000-row cap. It builds stale/missing chunks, embeds only missing
+compatible vectors in batches of four and commits through the existing shared store.
+Generation/source/profile checks fence every background write; complete index status
+is checked transactionally. Pause/cancel retains batches; startup marks interrupted
+runs and requires explicit Resume. Cache removal revokes old jobs before any late
+publication. Rebuild reprojects all messages and reuses valid unchanged vectors.
+Counts distinguish full-body completion, partial coverage, failures, pending work
+and unavailable content. No model/Gmail/network parameters cross IPC. See the
+[implemented indexing contract](LOCAL_INDEXING.md) for lifecycle, identity pinning,
+verification and synthetic measurements.
+
 ### Planned logical additions and publication rules
 
-Extend the implemented chunk/vector/state records only as needed for indexing
-coordination, FTS mapping, category examples/prototypes and assessment/override provenance.
+Extend the implemented chunk/vector/state records only as needed for FTS mapping, category examples/prototypes and assessment/override provenance.
 Reuse compatible existing category assignments; preserve conflicting legacy data
 until explicit resolution rather than deleting extra assignments to force a new rule.
 Those future services and category/keyword schemas are not implemented by the persistence slice.
@@ -391,8 +409,9 @@ installer resources; publish denominators and misses. Targets are in the product
 plan and remain unmeasured here.
 
 The source/chunk slice is implemented in `internal/mail` and `app.CachedChunker`;
-the separate provider/runtime is qualified in `internal/embedding`. Next implement
-only explicitly authorized indexing coordination using that adapter/store. Preserve
+the provider/runtime is qualified in `internal/embedding`, and explicit resumable
+indexing is implemented in `app.LocalIndex`. Future authorized retrieval and category
+consumers must reuse those shared components. Preserve
 reading, risk and rules' existing cleanup. Do not revive old Ask, add an AI editor
 or replace the application architecture. The sole milestone authority is
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md); further services require explicit authorization.

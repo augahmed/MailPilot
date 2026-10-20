@@ -1,3 +1,4 @@
+import { LocalEmailIndex } from "../features/indexing/LocalEmailIndex";
 import { AISettings } from "../features/ai/AISettings";
 import { AIMaintenance } from "../features/replies/AIMaintenance";
 import { MailWorkspace } from "../features/reader/MailWorkspace";
@@ -94,6 +95,7 @@ export function App() {
         key={connectionRevision}
         connectionRevision={connectionRevision}
       />
+      <LocalEmailIndex key={`local-index-${connectionRevision}`} />
       <AISettings key={`ai-settings-${connectionRevision}`} />
       <AIMaintenance key={`maintenance-${connectionRevision}`} />
       <Categories key={`categories-${connectionRevision}`} />

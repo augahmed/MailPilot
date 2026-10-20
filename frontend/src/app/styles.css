@@ -226,3 +226,16 @@ button {
 .reply-drafts select {
   max-width: 100%;
 }
+
+.index-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem;
+}
+.index-counts dd {
+  margin: 0.25rem 0;
+  font-size: 1.5rem;
+}
+.local-email-index progress {
+  width: 100%;
+}

@@ -2,6 +2,7 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "health",
+            "local_index",
             "gmail_status",
             "gmail_connect",
             "gmail_check",

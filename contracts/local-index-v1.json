@@ -1,0 +1,22 @@
+{
+  "request": { "operation": "start", "accountId": "account-a" },
+  "response": {
+    "accountId": "account-a",
+    "status": "running",
+    "generation": "synthetic-generation",
+    "modelId": "sentence-transformers/all-MiniLM-L6-v2",
+    "modelVersion": "synthetic-recipe-v1",
+    "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dimension": 384,
+    "eligibleMessages": 100,
+    "indexedMessages": 20,
+    "completeMessages": 18,
+    "partialMessages": 3,
+    "failedMessages": 1,
+    "pendingMessages": 76,
+    "unavailableMessages": 2,
+    "chunksCreated": 65,
+    "embeddingsGenerated": 60,
+    "code": ""
+  }
+}

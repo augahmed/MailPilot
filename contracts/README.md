@@ -3,8 +3,8 @@
 Status reviewed 2026-10-19. This file documents implemented IPC, not future feature
 authorization. [The architecture](../docs/ARCHITECTURE.md) describes the planned
 shared local chunk/vector pipeline; [the product plan](../docs/PRODUCT_PLAN.md)
-defines scope/milestones. No retrieval/index/evidence-answer command is added by
-this documentation reset. Summary remains implemented. Historical fixtures are
+defines scope/milestones. The additive local index control is now implemented; retrieval and evidence-answer
+commands remain unimplemented. Summary remains implemented. Historical fixtures are
 compatibility/negative-test examples; see [legacy notes](../docs/archive/LEGACY_FEATURES.md).
 
 Active contraction status (2026-10-16): `ask.manage` / `ask_manage` and
@@ -48,12 +48,12 @@ The Tauri `health` command takes no arguments. Rust sends:
     "protocolVersion": 1,
     "backend": "connected",
     "database": "connected",
-    "schemaVersion": 16
+    "schemaVersion": 17
   }
 }
 ```
 
-`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. The current migration set ends at schema version 16 (chunk provenance/context and body coverage); the example reflects that baseline. Migration 2 introduced normalized mail/journal storage, and migration 1 remains the unchanged settings foundation. The wire protocol remains version 1.
+`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. The current migration set ends at schema version 17 (durable local indexing and model identity); the example reflects that baseline. Migration 2 introduced normalized mail/journal storage, and migration 1 remains the unchanged settings foundation. The wire protocol remains version 1.
 
 The host may send `shutdown` with empty parameters, receiving `{"stopping":true}`, or close stdin for clean shutdown. The UI cannot invoke initialize, shutdown, SQL, shell commands, filesystem paths, or arbitrary method names. Unknown fields/methods, mismatched protocol versions and malformed requests are rejected. Standard JSON-RPC error codes are used, plus `-32001` for a missing handshake; errors contain no underlying database paths or diagnostics. Logs are structured JSON on stderr.
 
@@ -63,7 +63,7 @@ old/stale-cache pass and post-commit processing of imported/updated messages.
 succeeded but local processing could not complete. Original mail stays readable;
 missing/stale chunks are retried during later manual sync. This code is accepted by
 the strict frontend schema and produces a specific cache-preservation message.
-There is no new command or authorization for external AI/inference. Tokenization
+The separate local index command below explicitly authorizes local inference only. Tokenization
 and SQLite work are bounded and cancelled with the existing sync session.
 
 Streaming progress, generic background-job APIs and large payload transport remain unimplemented. Bounded sync and mailbox commands are described below. Authentication uses its own bounded background lifecycle, described below.
@@ -306,3 +306,36 @@ The [Ask fixture](ask-v1.json) and semantic-search fixture above remain historic
 examples only. Their frontend schemas, application services and native handlers
 are removed; `ask.manage` and `search.semantic` always reject as unknown methods.
 They provide no arbitrary prompt, model configuration or indexing entry point.
+
+## Local Email Index (additive protocol-v1 extension)
+
+Tauri `local_index` forwards the strictly typed `request` to Go `index.local`.
+See [local-index-v1.json](local-index-v1.json) for the shared fixture and
+[LOCAL_INDEXING.md](../docs/LOCAL_INDEXING.md) for persistence/coverage semantics.
+The request has exactly `operation` (`status`, `start`, `pause`, `resume`, `cancel`,
+`rebuild`) and `accountId` (at most 100 bytes). Mutations require a nonempty account
+matching the current Go session. Status may use an empty ID to select that session.
+No caller-controlled source text, model, path, vectors, limits or executable exists.
+
+This remains protocol 1 because it adds a separately allowlisted method and capability
+without changing existing request/response shapes; old semantic/Ask methods remain
+rejected. Commands use the ordinary five/seven-second transport deadlines and
+return promptly while one local worker runs. The response is bounded scalar metadata
+validated by Go/Rust/TypeScript fixtures, not streamed vectors or generic jobs.
+
+`status` is `idle`, `pending`, `running`, `paused`, `cancelled`, `interrupted`,
+`complete`, `partial` or `failed`. `pending` is projected when a finished run has
+new/stale work. Account/model/fingerprint/dimension/generation identify the compatible
+view. Counts cover eligible/indexed/complete/partial/failed/pending/unavailable
+messages, current chunks and current saved embeddings. See the fixture for exact
+camelCase names. Coverage counts are mutually exclusive; indexed includes complete
+plus partial-body messages whose available vectors are all saved. No unavailable
+body can produce complete coverage. A failed provider can leave valid source mail
+pending. Every field is required, including `code` (empty on success).
+
+Safe codes are `unauthorized`, `validation`, `unavailable`, `busy`, `storage_error`,
+`interrupted`, `cache_changed`, `model_changed`, `model_unavailable`,
+`inference_failed`, `pending_changes`. Errors never contain mail, paths or native
+runtime diagnostics. Disconnect/session replacement cancels work. Neither startup
+nor polling invokes inference; explicit Resume is required after interruption.
+Indexing calls neither Gmail nor external AI and changes no existing AI consent.

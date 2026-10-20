@@ -11,11 +11,12 @@ reuse/removal map, logical schema, shared interfaces and compatibility gates for
 these same milestones. It is a technical supplement, not a second scope/prompt plan.
 
 Status: M1 source/chunking and M2 persistence plus a lazy packaged CPU MiniLM
-provider are implemented. The provider has real synthetic/native and fake-model
+provider plus explicit resumable indexing/UI are implemented. The provider has real synthetic/native and fake-model
 checks; [qualification details](LOCAL_EMBEDDING.md) cover resource/signing/OS limits.
-Embedding scheduling, automatic vector publication, search, semantic classification
-and AI milestones remain planned. No new public inference command or external AI
-consent is added. Further product work requires a scoped implementation request.
+The coordinator now publishes bounded vector batches through generation-fenced
+SQLite writes. Search, semantic classification and AI milestones remain planned.
+The additive `index.local` control returns metadata only; external AI consent is
+unchanged. See [local indexing](LOCAL_INDEXING.md) for scope and qualification. Further product work requires a scoped implementation request.
 
 ## 1. Product purpose
 
@@ -153,8 +154,9 @@ Generation is optional and no provider/key is needed for local search/classifica
 | M7 — Desktop qualification                 | Coordinate core/host/UI contracts and packaging; document privacy/licenses, real resource budgets and known limitations.                                                                                                           | Required language/toolchain checks, native smoke/upgrade tests, measured evaluations and accessible end-to-end workflows pass or exact blockers remain reported.                          |
 
 Milestones are coherent slices, not a second list of copyable implementation prompts.
-M1 is implemented with tokenizer parity fixtures; native inference qualification
-remains open in M0/M2. Supporting reading fixes may be separately requested. Do not add AI routes before reliable local retrieval/evidence.
+M1 and the M2 storage/provider/coordinator slice are implemented and tested,
+including real offline indexing on synthetic mail. Ten-thousand-message performance
+and retrieval/classification quality qualification remain open. Supporting reading fixes may be separately requested. Do not add AI routes before reliable local retrieval/evidence.
 
 ## 5. Evaluation, operational limits and decisions still open
 

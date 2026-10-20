@@ -585,6 +585,28 @@ impl Bridge {
         outcome.map_err(str::to_owned)
     }
 
+    pub fn local_index(
+        &mut self,
+        request: crate::indexing::IndexRequest,
+    ) -> Result<crate::indexing::IndexResponse, String> {
+        if !request.valid() {
+            return Err("Invalid local index request".into());
+        }
+        let account = request.account_id.clone();
+        let response: crate::indexing::IndexResponse = serde_json::from_value(self.request(
+            "index.local",
+            serde_json::to_value(request).map_err(|_| "Invalid local index request")?,
+        )?)
+        .map_err(|_| "Invalid local index response")?;
+        if !response.valid()
+            || (!account.is_empty()
+                && !response.account_id.is_empty()
+                && response.account_id != account)
+        {
+            return Err("Invalid local index response".into());
+        }
+        Ok(response)
+    }
     pub fn auth_status(&mut self, method: &str) -> Result<AuthStatus, String> {
         if ![
             "auth.status",

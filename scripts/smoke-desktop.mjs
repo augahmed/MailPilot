@@ -45,6 +45,7 @@ try {
       !diagnostics.includes('"event":"frontend_reply_ok"') ||
       !diagnostics.includes('"event":"frontend_ai_settings_ok"') ||
       !diagnostics.includes('"event":"frontend_summary_ok"') ||
+      !diagnostics.includes('"event":"frontend_index_ok"') ||
       !diagnostics.includes('"msg":"core stopped"')
     ) {
       throw new Error(
@@ -52,7 +53,7 @@ try {
       );
     }
     console.log(
-      "Native WebView → Tauri → Go → SQLite health, Gmail status, mailbox, cached reader, category, classification, organization, AI settings, selected-email summary and maintenance authorization checks passed; core shut down cleanly.",
+      "Native WebView → Tauri → Go → SQLite health, Gmail status, mailbox, cached reader, category, classification, organization, AI settings, selected-email summary, local index and maintenance authorization checks passed; core shut down cleanly.",
     );
   } finally {
     clearTimeout(deadline);

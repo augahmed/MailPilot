@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "allow-health",
+    "allow-local-index",
     "allow-gmail-status",
     "allow-gmail-connect",
     "allow-gmail-check",

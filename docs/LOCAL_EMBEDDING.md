@@ -2,8 +2,9 @@
 
 Implemented provider scope: one CPU MiniLM provider, independent of SQLite,
 mailbox enumeration, classification, retrieval, external AI and credentials.
-The normal app still prepares chunks only; this task adds no embedding scheduler,
-search command, cloud inference or transfer of existing AI consent.
+The separate [local indexing coordinator](LOCAL_INDEXING.md) now invokes this
+provider after explicit Start/Resume and persists bounded batches. The provider
+itself owns no scheduler/search/SQLite or external AI consent.
 
 ## Model and native runtime
 

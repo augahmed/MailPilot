@@ -28,6 +28,9 @@ type AuthService interface {
 	AuthCheck() auth.Status
 	AuthDisconnect() auth.Status
 }
+type IndexService interface {
+	ManageIndex(context.Context, app.IndexRequest) app.IndexResponse
+}
 type ReaderService interface {
 	ReadMail(context.Context, app.ReadMailRequest) app.ReadMailResponse
 }
@@ -124,6 +127,16 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 					} else {
 						reply.Result = map[string]int{"protocolVersion": domain.ProtocolVersion}
 					}
+				}
+			case "index.local":
+				var params app.IndexRequest
+				indexing, ok := service.(IndexService)
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Local index unavailable")
+				} else {
+					reply.Result = indexing.ManageIndex(callCtx, params)
 				}
 			case "organization.manage":
 				organization, ok := service.(OrganizationService)

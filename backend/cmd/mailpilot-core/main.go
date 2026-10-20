@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"mailpilot.local/core/internal/ai"
 	"mailpilot.local/core/internal/ai/openai"
@@ -16,6 +17,7 @@ import (
 	"mailpilot.local/core/internal/config"
 	"mailpilot.local/core/internal/credentials"
 	"mailpilot.local/core/internal/domain"
+	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/ipc"
 	"mailpilot.local/core/internal/logging"
 	"mailpilot.local/core/internal/provider"
@@ -65,7 +67,17 @@ func run() int {
 	var organization *app.Organization
 	var replies *app.ReplyService
 	var intelligence *app.AIService
+	var indexing *app.LocalIndex
 	defer func() {
+		if indexing != nil {
+			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := indexing.Close(closeCtx); err != nil {
+				logger.Error("index shutdown delayed", "code", "index_shutdown")
+				// Never close SQLite while a cancelled worker can still publish.
+				_ = indexing.Close(context.Background())
+			}
+			cancel()
+		}
 		if intelligence != nil {
 			intelligence.Close()
 		}
@@ -117,6 +129,16 @@ func run() int {
 		}
 		synchronization.SetChunkProcessor(chunking.Prepare)
 		synchronization.SetCachedChunkProcessor(chunking.PrepareCached)
+		localProvider, err := embedding.New()
+		if err != nil {
+			return nil, err
+		}
+		indexing, err = app.NewLocalIndex(ctxRoot, authentication.Session, store.Emails(), store.Chunks(), store.Indexing(), localProvider)
+		if err != nil {
+			_ = localProvider.Close(ctx)
+			return nil, err
+		}
+		application.Index = indexing
 		application.Emails = store.Emails()
 		application.Categories = store.Categories()
 		rules, err := classification.NewRuleBasedClassifier(classification.StarterConfig())

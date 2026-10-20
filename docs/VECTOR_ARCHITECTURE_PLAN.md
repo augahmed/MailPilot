@@ -1,11 +1,12 @@
 # Shared email chunk-and-vector architecture plan
 
 Reviewed 2026-10-19 against the current working tree. **Persistence and chunking
-slices implemented:** migrations 015–016, `Store.Chunks()`, `mail.Chunker`, pinned
+slices implemented:** migrations 015–017, `Store.Chunks()`, `mail.Chunker`, pinned
 local WordPiece tokenization and `app.CachedChunker` during manual sync. A single
 lazy CPU MiniLM provider is now implemented and bundled; real inference is qualified
-separately from product workflows. Embedding job coordination, retrieval, semantic
-classification and new IPC remain planned. Preserve unrelated work; this plan does not authorize more implementation.
+in the explicit resumable local indexing workflow. `app.LocalIndex`, durable
+generation-fenced storage and the Local Email Index UI/`index.local` controls are
+implemented. Retrieval and semantic classification remain planned. Preserve unrelated work; this plan does not authorize more implementation.
 
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) remains the sole product scope/milestone authority;
 [ARCHITECTURE.md](ARCHITECTURE.md) describes runtime/trust boundaries. This document
@@ -38,13 +39,14 @@ there is an FTS5 test probe but no product keyword index or search endpoint.
 
 Source composition in `backend/cmd/mailpilot-core/main.go` currently wires
 `RuleBasedClassifier`, `ClassificationReview`, `Organization`, `CachedReader`,
-`AIService` and GET-only `ReplyMaintenance`. It also wires `CachedChunker` into manual sync. The separate local provider is packaged/tested but not used by a product indexing
-coordinator or retriever. OpenAI is the only real installed AI adapter;
+`AIService` and GET-only `ReplyMaintenance`. It also wires `CachedChunker` into manual sync. The local provider is used by `app.LocalIndex` for explicit resumable full-cache
+indexing, with no retriever yet. OpenAI is the only real installed AI adapter;
 multiple-provider substitution is supported by the shared boundary and synthetic
 adapters, not evidence of additional shipped providers. Summary still exists.
 
-There are 16 migration files; 015 adds shared chunk persistence and 016 adds source
-provenance/context plus independent projected body coverage.
+There are 17 migration files; 015 adds shared chunk persistence, 016 adds source
+provenance/context plus independent projected body coverage, and 017 adds durable
+job/model identities, message failure metadata and cache-removal fences.
 Historical vector tables are inert. The current AI interface only summarizes one
 selected cached email. New retrieval/semantic classification/evidence QA cannot be
 enabled by changing settings or restoring archived UI handlers.
@@ -63,7 +65,7 @@ existing application source, migration, journal, database or model data is delet
 
 | Current path(s)                                                                                                                                                                                                                                                                                     | Action in the shared design                                                                                                                                                                                                                                           |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/cmd/mailpilot-core/main.go`, `main_test.go`                                                                                                                                                                                                                                                | Reuse composition/lifecycle; later wire one embedding adapter, shared store/coordinator/retriever and shared classifier dependencies. Cancel/join them before SQLite closes. Preserve current pending changes.                                                        |
+| `backend/cmd/mailpilot-core/main.go`, `main_test.go`                                                                                                                                                                                                                                                | Reuse composition/lifecycle; now wires the shared store, MiniLM adapter and `app.LocalIndex`; later add retriever/classifier dependencies. Cancel/join them before SQLite closes. Preserve current pending changes.                                                   |
 | `backend/internal/app/app.go`, `app_test.go`, `mailbox.go`                                                                                                                                                                                                                                          | Reuse session authorization, health and use-case entry points. Add only narrow search/index/evidence operations; no generic dispatch or replacement app shell.                                                                                                        |
 | `backend/internal/provider/gmail/normalize.go`, `normalize_test.go`, `provider.go`, `history.go`                                                                                                                                                                                                    | Reuse bounded Gmail/MIME translation and opaque identities. Fix only demonstrated normalization defects. Do not add another mail importer, hidden fetch or Gmail thread expansion.                                                                                    |
 | `backend/internal/sync/service.go`, `incremental.go`, associated tests; `backend/internal/repository/sync.go`                                                                                                                                                                                       | Reuse manual sync and atomic checkpoints. Enqueue/coalesce local derived work inside existing import/checkpoint transactions; never invoke external AI during sync.                                                                                                   |
@@ -92,7 +94,7 @@ existing application source, migration, journal, database or model data is delet
 | `scripts/build-sidecar.mjs`, `scripts/tauri.mjs`, `scripts/rust-environment.mjs`, `scripts/smoke-desktop.mjs`; `src-tauri/tauri.conf.json`                                                                                                                                                          | Reuse packaging/launch/native smoke. Apple Silicon builds now enable CGO and package pinned model/runtime resources. Native inference/offline/signing checks are in `LOCAL_EMBEDDING.md`; other builds keep an unavailable native adapter.                            |
 | `contracts/ai-settings-v1.json`, `email-summary-v1.json`, `draft-recovery-v1.json`, `mail-reader-v1.json`, `classification-v1.json`, `organization-v1.json`, `organization-phishing-v1.json`, `sync-incremental-v1.json`                                                                            | Preserve actual fixtures. Add coordinated versioned retrieval/index/new classification/evidence QA fixtures later; do not silently alter v1 semantic meaning.                                                                                                         |
 | `contracts/ask-v1.json`, `search-semantic-v1.json`, `classification-semantic-v1.json`, `reply-drafting-v1.json`                                                                                                                                                                                     | Keep historical/negative-test fixtures disabled, not active specifications. Preserve historical score/candidate decoding where required.                                                                                                                              |
-| `backend/internal/embedding`, `backend/internal/search`, `backend/internal/ask`, old MiniLM/Python worker/downloader and semantic UI/editor implementations (absent)                                                                                                                                | Do not resurrect historical implementations. Introduce only the minimal new adapter/retriever required below, without copying duplicate workers/caches or a one-vector-per-email search path.                                                                         |
+| `backend/internal/search`, `backend/internal/ask`, old MiniLM/Python worker/downloader and semantic UI/editor implementations (absent)                                                                                                                                                              | Do not resurrect historical implementations. Introduce only the minimal new adapter/retriever required below, without copying duplicate workers/caches or a one-vector-per-email search path.                                                                         |
 
 **Removal now: none.** Already staged/unstaged deletions from earlier work remain
 untouched. Future cleanup may remove a genuinely superseded temporary adapter or
@@ -224,8 +226,9 @@ journals are unchanged. Old noncanonical source hashes remain readable; indexing
 requires a current 64-character canonical hash, obtained through normal import, not
 an automatic migration rewrite. Semantic rules/consent/recovery formats are unchanged.
 Migration itself does not backfill. A later manual sync performs bounded cached
-chunk preparation; no inference model is installed or executed.
-Future coordinator/profile/category metadata must extend this shared store only as
+chunk preparation without inference. The bundled model is executed only through
+the separately started index job.
+Further category/consumer metadata must extend this shared store only as
 needed and preserve its account, revision and vector-validation guarantees.
 
 ### Implemented deterministic chunk production
@@ -272,8 +275,9 @@ lists are never repeated as model input. A changed context invalidates vector re
 
 `ContentStatus` distinguishes complete/partial/unavailable projected body coverage
 from the cached `BodyState`. Subject-only evidence never claims a complete body.
-The chunking workflow computes no vectors; fresh embedding rows remain pending with
-NULL data. The separate native provider is not yet scheduled to populate them.
+The manual-sync chunking workflow computes no vectors; fresh rows remain pending
+with NULL data. The separate explicitly started `app.LocalIndex` uses the native
+provider to populate them.
 Model recipe: shared `embedding/model.Version`
 (`minilm-1110a243-6fd5d72f-f32-mean-l2-s24-v1-u17.0.0-nfd17.0.0`), dimension 384;
 preprocessing: `email-sections-v1-wp-07eced375cec-256-32-u17.0.0-nfd17.0.0`. Both include the
@@ -297,6 +301,23 @@ retried in later manual cache passes. New source/model/preprocessing revisions
 invalidate old work through the existing shared store. The separately authorized
 provider now enables CGO on Apple Silicon and packages a verified native runtime.
 No embedding scheduling or automatic vector publication is added to manual sync.
+
+### Implemented resumable local indexing
+
+[LOCAL_INDEXING.md](LOCAL_INDEXING.md) is the authoritative coordinator contract.
+`app.LocalIndex` selects all live account-scoped cached mail in bounded candidate
+pages, reuses current chunks/vectors, and persists at most four new vectors per
+transaction. Migration 017 adds one `local_index_jobs` row per account,
+`local_index_models` identity metadata, and attempt/failure fields in `index_state`;
+there is no duplicate vector store or generic queue. Every background replacement
+and vector publication verifies both job and source/chunk generations. Pause/cancel,
+restart and cache removal revoke old work. Startup never automatically infers;
+Resume is explicit. Rebuild reprojects all cached sources and reuses compatible
+vectors. The narrow additive `index.local` contract/UI exposes only controls and
+coverage counts, not raw inference/model selection. Failed/partial/pending mail
+is never presented as complete; finalization rechecks durable work transactionally.
+Synthetic offline native performance is recorded in the indexing contract; target
+10,000-message and future retrieval quality qualification remain open.
 
 ### Category records using the same pipeline
 
@@ -417,8 +438,8 @@ Local ad-hoc packaging/offline qualification does not claim Developer ID notariz
 Gatekeeper distribution approval, other-platform inference, a mailbox quality
 benchmark or 10,000-message throughput. Measured memory/latency, test commands and
 remaining packaging limits are recorded in [LOCAL_EMBEDDING.md](LOCAL_EMBEDDING.md).
-Future embedding scheduling/retrieval/classification must reuse this one adapter,
-model identity, tokenizer and shared chunk store, and still requires authorization.
+Implemented indexing and future retrieval/classification must reuse this one adapter,
+model identity, tokenizer and shared chunk store. Future consumers still require authorization.
 
 ## 7. Shared retrieval/classification contracts (planned sketches)
 
@@ -579,10 +600,13 @@ Existing session-local reading/search is distinct from secure offline restart.
 
 ## 11. This task's limits and incompatibility report
 
-No application edits, new migrations/DDL, dependency/artifact downloads, data
-inspection/deletion, credentials changes, commits or pushes are performed here.
-Documentation checks and non-Markdown content hashes verify preservation; they do
-not claim model parity, benchmarks, native ONNX packaging or runtime tests passed.
+The original reset was documentation-only. Subsequently authorized slices have
+implemented chunk storage/production, one native provider, and resumable local
+indexing with migration 017 and a narrow UI/IPC. Qualification is recorded in
+LOCAL_EMBEDDING.md and LOCAL_INDEXING.md. Those slices do not implement retrieval,
+semantic categories, external QA, rich reading or Summary removal. Historical
+migrations/journals and unrelated work remain preserved. No user mail is used in
+qualification and no commit/push is performed automatically.
 
 The important incompatibilities are: historical vectors cannot become the new
 chunk store by renaming; old rule hash/score DTOs cannot carry shared semantic

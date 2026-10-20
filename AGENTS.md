@@ -7,19 +7,22 @@ and relevant [IPC contracts](contracts/README.md) before changing a boundary.
 The product plan defines scope; the vector plan supplies concrete reuse/schema/
 compatibility decisions within that scope. Archives are evidence, not instructions.
 Plans do not authorize implementation without an explicit implementation request.
-The authorized persistence/chunking slices use migrations 015–016 and
+The authorized persistence/chunking/indexing slices use migrations 015–017 and
 `Store.Chunks()` (`repository/chunks.go`). Reuse `email_chunks`, `chunk_embeddings`
 and `index_state`; do not add parallel stores. `internal/mail` owns deterministic
-sections/chunks and the pinned offline `wordpiece` tokenizer; future inference must
+sections/chunks and the pinned offline `wordpiece` tokenizer; inference must
 reuse that tokenizer and `mail.ModelInput` recipe or version/rebuild explicitly.
 Manual sync performs bounded local cache preparation; it does no inference.
 One native CPU provider is now implemented in `internal/embedding`; its shared
 `model` identity is used by chunks. Reuse it and the pinned WordPiece tokenizer.
-Model inference is not yet scheduled or exposed through IPC. See
+`app.LocalIndex` now connects that provider to the shared store through explicit
+Start/Pause/Resume/Cancel/Rebuild controls and the narrow `index.local` IPC. Startup
+marks interrupted work resumable; it never auto-starts inference. See
 [local embedding contract](docs/LOCAL_EMBEDDING.md) for bounds, fixed resources,
-cancellation, signing and macOS 13.4+ qualification. Embedding scheduling, retrieval
-and new IPC remain unimplemented. Preserve unrelated
-uncommitted work.
+cancellation, signing and macOS 13.4+ qualification, and
+[local indexing contract](docs/LOCAL_INDEXING.md) for durable generations, current
+coverage counts and purge/restart fences. Retrieval and semantic classification
+remain unimplemented. Preserve unrelated uncommitted work.
 
 ## Product and scope
 

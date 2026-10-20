@@ -10,8 +10,9 @@ plain-text reading, category management, deterministic review/risk explanations,
 confirmed label organization, selected-email Summary and historical draft recovery
 are implemented. Manual sync also prepares deterministic local text chunks with
 bundled MiniLM WordPiece tokenization, section provenance and pending embedding
-rows. A separate lazy local MiniLM provider is bundled and tested; embedding scheduling,
-keyword search, semantic classification and evidence questions remain planned. Historical vector tables are inert; installed users need no model/runtime setup. OpenAI is the only installed functional generative adapter.
+rows. The Local Email Index card explicitly starts/resumes a durable local MiniLM
+indexing run over all live cached mail, with pause/cancel/rebuild and coverage counts.
+Keyword/semantic search, semantic classification and evidence questions remain planned. Historical vector tables are inert; installed users need no model/runtime setup. OpenAI is the only installed functional generative adapter.
 
 The tokenizer is embedded in Go; the MiniLM model/native CPU runtime ship as fixed app resources; no user Python or
 post-install model download. Target English first and about 10,000 cached messages.
@@ -60,8 +61,8 @@ rustc --version
 
 The native build and smoke test have been verified on Apple Silicon macOS. Windows/Linux targets are planned and need native qualification. Cross-compilation is deliberately rejected by the sidecar build script; build on the target OS/architecture.
 
-The current runtime requires no Python, MiniLM, ONNX, model download or index setup.
-Bundled local inference is future work, not an installation prerequisite today.
+Installed users need no Python, native runtime installation or model download.
+The model/runtime are bundled; local inference is optional and explicitly started.
 
 ## Install and run
 
@@ -117,7 +118,7 @@ Default desktop locations:
 - Windows: `%APPDATA%\com.mailpilot.desktop\mailpilot.db`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/com.mailpilot.desktop/mailpilot.db`
 
-SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Current migrations 001–016 retain mail/cache, category/review, label/risk journals, incremental checkpoints, historical vector/draft structures and selected AI-provider settings. Migration 015 adds shared chunk/embedding storage and revision state; 016 adds chunk provenance/context and projected body coverage. Manual sync prepares cached chunks; a local provider is packaged, but no inference scheduling or retrieval service is wired. Historical vector tables are not an active index. See [schema responsibilities](docs/ARCHITECTURE.md#implemented-persistence-and-immutable-history) for the preserved migration groups. SQLite files are not encrypted.
+SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Current migrations 001–017 retain mail/cache, category/review, label/risk journals, incremental checkpoints, historical vector/draft structures and selected AI-provider settings. Migration 015 adds shared chunk/embedding storage and revision state; 016 adds chunk provenance/context and projected body coverage. Migration 017 adds durable local jobs and model identities without changing historical migrations. Manual sync prepares cached chunks; the explicit local index job generates/persists vectors. Retrieval remains unimplemented. Historical vector tables are not an active index. See [schema responsibilities](docs/ARCHITECTURE.md#implemented-persistence-and-immutable-history) for the preserved migration groups. SQLite files are not encrypted.
 
 Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to private IPC. Logs omit secrets, message content and filesystem paths. This phase has no persistent log files or telemetry.
 
@@ -190,7 +191,7 @@ AGENTS.md                      Engineering rules
 
 Go owns business behavior and persistence. Rust only starts the fixed packaged binary, validates a bounded protocol, and handles native lifecycle; it uses `std::process` rather than installing a shell plugin. The frontend cannot run shell commands, access arbitrary files/SQL, select executables, or invoke arbitrary Go methods. A versioned handshake precedes database initialization; frontend capabilities allow health, Gmail connection, sync, cached-mail, category management, classification review and organization commands. The host alone opens a validated Google authorization URL in the system browser.
 
-The architecture's dependency recommendations are adopted only as needed: modernc SQLite avoids a Go C toolchain, React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. TanStack Query, the full Gmail SDK and AI/vector dependencies remain deferred. Current and planned package responsibilities are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
+The architecture's dependency recommendations are adopted only as needed: SQLite itself uses pure-Go modernc (Apple Silicon inference additionally needs CGO/Xcode command-line tools), React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. TanStack Query, the full Gmail SDK and AI-provider and the single pinned ONNX binding are adopted; additional AI/vector dependencies remain deferred. Current and planned package responsibilities are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
 
 ## Inbox synchronization
 
@@ -287,3 +288,6 @@ numbers are not implementation instructions.
 
 Local inference development, measured model/memory sizes, offline packaging checks
 and macOS 13.4+ limitations: [local embedding provider](docs/LOCAL_EMBEDDING.md).
+
+Resumable indexing behavior, coverage definitions, synthetic measurements and native
+verification: [local email indexing](docs/LOCAL_INDEXING.md).

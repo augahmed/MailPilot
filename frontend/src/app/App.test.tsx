@@ -12,6 +12,10 @@ import {
   getMailbox,
 } from "../lib/ipc/client";
 
+vi.mock("../features/indexing/LocalEmailIndex", () => ({
+  LocalEmailIndex: () => <section>Local Email Index</section>,
+}));
+
 vi.mock("../lib/ipc/client", () => ({
   manageReplies: vi.fn(),
   organize: vi.fn(),
