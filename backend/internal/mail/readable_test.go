@@ -217,3 +217,80 @@ func TestMIMEComparisonPreservesMeaningfulDifferences(t *testing.T) {
 		t.Fatal("comparison erased arithmetic or identifiers")
 	}
 }
+
+// Synthetic newsletter shaped like a generated plain alternative: invisible
+// preview padding and multiline [label tracking-URL] annotations. No real mail,
+// recipient addresses, tracking identities or redirects are used by this fixture.
+func linkedNewsletterFixture() (string, string) {
+	redirect := "https://email.news.example.test/e/c/" + strings.Repeat("SyntheticOpaque_", 16) + "/" + strings.Repeat("a", 64)
+	html := `<div style="display:none">Everything announced this month.</div><h1>Example Update — October 2026</h1><ul><li>Query your projects using natural language. <a href="` + redirect + `">Blog</a></li></ul><h2>More project news</h2><ul><li>Logs move to usage-based pricing with included limits. <a href="` + redirect + `">Changelog</a></li></ul><p>Open-source accounting supports many countries. <a href="` + redirect + `">GitHub</a> <a href="` + redirect + `">Website</a></p><p>©2026 Example Inc.</p>`
+	plain := "Example Update — October 2026\n\n- Query your projects using natural\n  language. [Blog\n  " + redirect + "\n  ]\n- Logs move to usage-based pricing with included\n  limits. [Changelog\n  " + redirect + "\n  ]\n\nOpen-source accounting supports many countries. [GitHub\n" + redirect + "] [\n Website\n" + redirect + "\n]\n\n©2026 Example Inc.\n"
+	return plain, html
+}
+func TestReadableBracketedLinksDoNotAppendSecondNewsletter(t *testing.T) {
+	plain, html := linkedNewsletterFixture()
+	stored := chunkMail(plain)
+	stored.Email.BodyHTML = &html
+	body, _, err := ReadableBody(context.Background(), stored.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, phrase := range []string{"Example Update", "Query your projects", "Logs move", "Open-source accounting", "©2026 Example", "GitHub", "Changelog"} {
+		if strings.Count(body, phrase) != 1 {
+			t.Fatalf("duplicated newsletter passage %q: %q", phrase, body)
+		}
+	}
+	if strings.Contains(body, "SyntheticOpaque") || strings.Contains(body, "[Blog") {
+		t.Fatal("alternative tracking annotations reached reader")
+	}
+	snapshot := buildChunks(t, stored)
+	all := ""
+	for _, c := range bodyChunks(snapshot.Chunks) {
+		all += c.Text
+	}
+	if strings.Count(all, "Query your projects") != 1 || strings.Contains(all, "SyntheticOpaque") {
+		t.Fatal("alternative duplicated in chunk/model input")
+	}
+	if stored.Email.BodyText != plain || *stored.Email.BodyHTML != html {
+		t.Fatal("original links/source changed")
+	}
+}
+func TestReadablePreviewPaddingAndOpaquePathRedirects(t *testing.T) {
+	redirect := "https://email.news.example.test/e/c/" + strings.Repeat("SyntheticOpaque_", 16) + "/" + strings.Repeat("a", 64)
+	padding := strings.Repeat("\u2007\u034f ", 100) + strings.Repeat("\u00ad ", 100)
+	raw := "Release notes\n" + padding + "\nUseful project guidance.\n[Blog\n" + redirect + "\n]\nReservation https://docs.example.test/booking?id=ABC123\nCo\u00adoperate with the team.\nCafe\u034f\u0301 👩‍💻"
+	body, _, err := ReadableBody(context.Background(), domain.Email{BodyText: raw, BodyState: "complete"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(body, "\u2007\u034f") || strings.Contains(body, "\u00ad") || strings.Contains(body, "SyntheticOpaque") {
+		t.Fatal("preview padding or opaque redirect reached readable text")
+	}
+	for _, fact := range []string{"Release notes", "Useful project guidance.", "Blog", "id=ABC123", "Cooperate", "Cafe\u034f\u0301 👩‍💻"} {
+		if !strings.Contains(body, fact) {
+			t.Fatalf("useful text or Unicode lost: %q", fact)
+		}
+	}
+}
+
+func TestReadableOpaqueRedirectRulePreservesOrdinaryLinkEvidence(t *testing.T) {
+	payload := strings.Repeat("SyntheticOpaque_", 16)
+	signature := strings.Repeat("a", 64)
+	for _, raw := range []string{
+		"https://docs.example.test/e/c/" + payload + "/" + signature,
+		"https://email.example.test/booking/" + payload + "/" + signature,
+		"https://email.example.test/e/c/ABC123/" + signature,
+		"https://email.example.test/e/c/" + payload + "/reservation-ABC123",
+		"https://email.example.test/booking?id=ABC123#confirmation",
+	} {
+		clean, tracking := readableURL(raw)
+		if tracking || clean != raw {
+			t.Fatalf("ordinary link evidence changed: %q", raw)
+		}
+	}
+	raw := "https://email.example.test/e/c/" + payload + "/" + signature
+	body, _, err := ReadableBody(context.Background(), domain.Email{BodyText: raw, BodyState: "complete"})
+	if err != nil || body != "https://email.example.test/e/c/" {
+		t.Fatal("URL-only message lost its fallback destination", err)
+	}
+}

@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -156,5 +158,44 @@ func TestCachedReaderDoesNotAppendFormattedPlainAlternative(t *testing.T) {
 	stored, err := store.Emails().Get(ctx, "a", email.ID)
 	if err != nil || stored.Email.BodyText != email.BodyText || *stored.Email.BodyHTML != html {
 		t.Fatal("reading altered original alternatives", err)
+	}
+}
+
+func TestCachedReaderDeduplicatesBracketedNewsletterAndRevokesV3Cursor(t *testing.T) {
+	store, review, email, _ := reviewFixture(t)
+	ctx := context.Background()
+	redirect := "https://email.news.example.test/e/c/" + strings.Repeat("SyntheticOpaque_", 16) + "/" + strings.Repeat("a", 64)
+	html := `<h1>October project update</h1><p>Query projects using natural language. <a href="` + redirect + `">Blog</a></p><p>Usage-based logs include monthly limits. <a href="` + redirect + `">Changelog</a></p><p>©2026 Example Inc.</p>`
+	email.BodyHTML = &html
+	email.BodyText = "October project update\n\n- Query projects using natural language. [Blog\n" + redirect + "\n]\n- Usage-based logs include monthly limits. [Changelog\n" + redirect + "\n]\n\n©2026 Example Inc.\n" + strings.Repeat("\u2007\u034f \u00ad ", 60)
+	if _, err := store.Emails().Upsert(ctx, email); err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.Emails().Get(ctx, "a", email.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := NewCachedReader(review.session, store.Emails(), review, nil)
+	request := ReadMailRequest{AccountID: "a", EmailID: string(email.ID)}
+	got := reader.Read(ctx, request)
+	if got.Code != "" || got.Message == nil || got.Message.BodyError {
+		t.Fatal("reader failed", got.Code)
+	}
+	for _, fact := range []string{"October project update", "Query projects", "Usage-based logs", "©2026 Example"} {
+		if strings.Count(got.Body, fact) != 1 {
+			t.Fatalf("reader duplicates %q", fact)
+		}
+	}
+	if strings.Contains(got.Body, "SyntheticOpaque") || strings.Contains(got.Body, "\u034f") {
+		t.Fatal("reader retained padding or tracking payload")
+	}
+	old := sha256.Sum256([]byte("readable-v3\n" + before.ContentHash))
+	request.Revision = hex.EncodeToString(old[:])
+	if stale := reader.Read(ctx, request); stale.Code != "stale" || stale.Body != "" {
+		t.Fatal("v3 cursor reused for v4 projection", stale.Code)
+	}
+	after, err := store.Emails().Get(ctx, "a", email.ID)
+	if err != nil || after.ContentHash != before.ContentHash || after.Email.BodyText != email.BodyText || *after.Email.BodyHTML != html {
+		t.Fatal("raw links/source were changed", err)
 	}
 }

@@ -424,7 +424,7 @@ func TestLocalIndexReplacesOldPreprocessingAndEmbedsCleanText(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldProfile := s.profile
-	oldProfile.PreprocessingVersion = "email-sections-v1-wp-07eced375cec-256-32-old"
+	oldProfile.PreprocessingVersion = strings.Replace(mailtext.PreprocessingVersion, mailtext.TextProjectionVersion, "readable-v3", 1)
 	oldRun, err := db.Indexing().Begin(ctx, "a", oldProfile, false)
 	if err != nil {
 		t.Fatal(err)

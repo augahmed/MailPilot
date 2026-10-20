@@ -111,7 +111,7 @@ type cleanNativeIndexProvider struct {
 
 func (p *cleanNativeIndexProvider) EmbedDocument(ctx context.Context, texts []string) ([][]float32, error) {
 	for _, text := range texts {
-		if strings.Contains(text, "[image:") || strings.Contains(text, "SyntheticTracking") || strings.Contains(text, "?qs=") || strings.Contains(text, "hidden-preheader") {
+		if strings.Contains(text, "[image:") || strings.Contains(text, "SyntheticTracking") || strings.Contains(text, "?qs=") || strings.Contains(text, "hidden-preheader") || strings.Contains(text, "SyntheticOpaque_") || strings.Contains(text, "\u2007\u034f") {
 			return nil, embedding.ErrInput
 		}
 	}
@@ -119,7 +119,7 @@ func (p *cleanNativeIndexProvider) EmbedDocument(ctx context.Context, texts []st
 	return p.Provider.EmbedDocument(ctx, texts)
 }
 func TestNativeLocalIndexCleanedNewsletter(t *testing.T) {
-	initial, db, _, emails, _ := indexFixture(t, 3)
+	initial, db, _, emails, _ := indexFixture(t, 4)
 	_ = initial.Close(context.Background())
 	e := emails[0]
 	html := `<div style="display:none">hidden-preheader</div><img alt="Use code SAVE14"><p>Save 14% at Northshop</p><blockquote>Unique quoted appointment at noon.</blockquote>`
@@ -145,6 +145,15 @@ func TestNativeLocalIndexCleanedNewsletter(t *testing.T) {
 	if _, err = db.Emails().Upsert(context.Background(), multipart); err != nil {
 		t.Fatal(err)
 	}
+	bracketed := emails[3]
+	redirect := "https://email.news.example.test/e/c/" + strings.Repeat("SyntheticOpaque_", 16) + "/" + strings.Repeat("a", 64)
+	bracketedHTML := `<h1>October engineering update</h1><p>Query projects using natural language. <a href="` + redirect + `">Blog</a></p><p>Usage-based logs include monthly limits. <a href="` + redirect + `">Changelog</a></p><p>©2026 Example Inc.</p>`
+	bracketed.BodyHTML = &bracketedHTML
+	bracketed.BodyText = "October engineering update\n\n- Query projects using natural language. [Blog\n" + redirect + "\n]\n- Usage-based logs include monthly limits. [Changelog\n" + redirect + "\n]\n\n©2026 Example Inc.\n" + strings.Repeat("\u2007\u034f \u00ad ", 60)
+	if _, err = db.Emails().Upsert(context.Background(), bracketed); err != nil {
+		t.Fatal(err)
+	}
+
 	provider, err := embedding.New()
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +163,7 @@ func TestNativeLocalIndexCleanedNewsletter(t *testing.T) {
 	indexCommand(s, "start")
 	p := waitIndex(t, s)
 	<-s.worker.done
-	if p.Status != "complete" || p.IndexedMessages != 3 || p.EmbeddingsGenerated == 0 {
+	if p.Status != "complete" || p.IndexedMessages != 4 || p.EmbeddingsGenerated == 0 {
 		t.Fatalf("clean native indexing failed: %+v", p)
 	}
 	inputs := strings.Join(checked.inputs, "\n")
@@ -164,6 +173,10 @@ func TestNativeLocalIndexCleanedNewsletter(t *testing.T) {
 	if strings.Count(inputs, "Build your professional network.") != 1 || strings.Count(inputs, "Campus Connect") != 1 || strings.Contains(inputs, "utm_source=synthetic") || strings.Contains(inputs, "*Campus") {
 		t.Fatal("duplicate plain/HTML representations reached real inference")
 	}
+	if strings.Count(inputs, "Query projects using natural language.") != 1 || strings.Count(inputs, "Usage-based logs include monthly limits.") != 1 {
+		t.Fatal("bracketed MIME alternative duplicated real embedding inputs")
+	}
+
 	chunks, err := db.Chunks().List(context.Background(), "a", e.ID, repository.Page{Limit: 100})
 	if err != nil {
 		t.Fatal(err)
@@ -183,6 +196,11 @@ func TestNativeLocalIndexCleanedNewsletter(t *testing.T) {
 	if readFallback.Code != "" || strings.Contains(readFallback.Body, "hidden-preheader") || !strings.Contains(readFallback.Body, "Use code SAVE14") {
 		t.Fatal("flattened HTML cache was not cleaned", readFallback.Code)
 	}
+	readBracketed := reader.Read(context.Background(), ReadMailRequest{AccountID: "a", EmailID: string(bracketed.ID)})
+	if readBracketed.Code != "" || strings.Count(readBracketed.Body, "Query projects using natural language.") != 1 || strings.Contains(readBracketed.Body, "SyntheticOpaque_") {
+		t.Fatal("reader and real index disagree on bracketed newsletter cleanup")
+	}
+
 	originalFallback, err := db.Emails().Get(context.Background(), "a", fallback.ID)
 	if err != nil || originalFallback.Email.BodyText != fallback.BodyText {
 		t.Fatal("raw HTML fallback changed", err)

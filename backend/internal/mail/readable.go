@@ -12,11 +12,12 @@ import (
 
 // TextProjectionVersion versions both cleaned source offsets and reader paging.
 // Original cached MIME/text and security-analysis inputs are never modified.
-const TextProjectionVersion = "readable-v3"
+const TextProjectionVersion = "readable-v4"
 
 var imagePlaceholder = regexp.MustCompile(`(?i)\[image:[ \t]*([^\]\r\n]*)\]`)
 var textURL = regexp.MustCompile(`(?i)<?https?://[^\s<>]+>?`)
 var emailLinkAnnotation = regexp.MustCompile(`(?i)<(?:mailto:)?[^<>\s@]+@[^<>\s@]+(?:\?[^<>\r\n]*)?>`)
+var bracketLinkAnnotation = regexp.MustCompile(`(?i)\[([^\[\]]{1,160}?)\s+(https?://[^\s<>\[\]]+)\s*\]`)
 var alternativeEdgePunctuation = regexp.MustCompile(`^[\pP]+|[\pP]+$`)
 var localFootnote = regexp.MustCompile(`(?i)<#(?:m_[^>\s]*|[^>\s]*footnote[^>\s]*)>`)
 
@@ -61,6 +62,58 @@ func trackingParameter(name string) bool {
 	return strings.HasPrefix(name, "utm_") || name == "gclid" || name == "fbclid" || name == "msclkid" || name == "mc_cid" || name == "mc_eid" || name == "mkt_tok"
 }
 
+// Remove generated preview padding, not significant joiners inside words or
+// emoji. Discretionary soft hyphens can also split ordinary searchable words.
+func cleanPreviewPadding(text string) string {
+	text = strings.ReplaceAll(text, "\u00ad", "")
+	runes := []rune(text)
+	var out strings.Builder
+	padding := func(r rune) bool { return r == '\u034f' || r == '\u200b' || r == '\u2060' || r == '\ufeff' }
+	for start := 0; start < len(runes); {
+		if !unicode.IsSpace(runes[start]) && !padding(runes[start]) {
+			out.WriteRune(runes[start])
+			start++
+			continue
+		}
+		end, spaces, hidden := start, 0, 0
+		for end < len(runes) && (unicode.IsSpace(runes[end]) || padding(runes[end])) {
+			if padding(runes[end]) {
+				hidden++
+			} else {
+				spaces++
+			}
+			end++
+		}
+		if hidden > 0 && (spaces > 0 || hidden >= 4) {
+			out.WriteByte(' ')
+		} else {
+			out.WriteString(string(runes[start:end]))
+		}
+		start = end
+	}
+	return out.String()
+}
+
+// A specific email redirect shape, not a generic long-URL rule. Keep ordinary
+// document paths/identifiers. Never decode an opaque payload or follow a link.
+func opaqueEmailRedirect(u *url.URL, emailHost bool) bool {
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if !emailHost || len(parts) != 4 || parts[0] != "e" || parts[1] != "c" || len(parts[2]) < 80 || len(parts[3]) != 64 {
+		return false
+	}
+	for _, r := range parts[2] {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	for _, r := range parts[3] {
+		if !(r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
 // Resolve no redirects. Only transport-looking URLs on tracking hosts lose opaque
 // queries. Ordinary URLs keep meaningful query parameters, paths and fragments.
 func readableURL(token string) (clean string, tracking bool) {
@@ -72,12 +125,21 @@ func readableURL(token string) (clean string, tracking bool) {
 	values, queryErr := url.ParseQuery(u.RawQuery)
 	host := strings.ToLower(u.Hostname())
 	tracker := false
+	emailHost := false
 	labels := strings.Split(host, ".")
 	for _, label := range labels[:max(0, len(labels)-2)] {
+		if label == "email" {
+			emailHost = true
+		}
 		switch label {
 		case "click", "clicks", "track", "tracking", "trk", "links":
 			tracker = true
 		}
+	}
+	if opaqueEmailRedirect(u, emailHost || tracker) {
+		u.Path, u.RawPath, u.RawQuery, u.Fragment = "/e/c/", "", "", ""
+		u.ForceQuery = false
+		return u.String(), true
 	}
 	hasTracking := false
 	for key := range values {
@@ -113,6 +175,8 @@ func cleanProjection(ctx context.Context, text string, hints []textHint) (string
 	}
 	cleaned := make([]readableLine, 0, len(lines))
 	offset, hint := 0, 0
+	annotations := bracketLinkAnnotation.FindAllStringIndex(text, -1)
+	annotation := 0
 	group, lastKind := 0, ""
 	for i, line := range lines {
 		if i%128 == 0 {
@@ -123,6 +187,10 @@ func cleanProjection(ctx context.Context, text string, hints []textHint) (string
 		if line == "" {
 			continue
 		}
+		for annotation < len(annotations) && annotations[annotation][1] <= offset {
+			annotation++
+		}
+		annotated := annotation < len(annotations) && annotations[annotation][0] < offset+len(line)
 		row := readableLine{text: strings.TrimSuffix(line, "\n"), kind: "authored", newline: strings.HasSuffix(line, "\n")}
 		first := offset + len(row.text) - len(strings.TrimLeft(row.text, " \t"))
 		for hint < len(hints) && hints[hint].end <= first {
@@ -138,6 +206,7 @@ func cleanProjection(ctx context.Context, text string, hints []textHint) (string
 		}
 		row.group = group
 		offset += len(line)
+		row.text = cleanPreviewPadding(row.text)
 		prefix, content := quotePrefix(row.text)
 		imageOnly := imagePlaceholder.MatchString(content) && strings.TrimSpace(imagePlaceholder.ReplaceAllString(content, "")) == ""
 		if imageOnly {
@@ -165,13 +234,19 @@ func cleanProjection(ctx context.Context, text string, hints []textHint) (string
 			cursor := 0
 			for _, span := range matches {
 				token := row.text[span[0]:span[1]]
+				suffix := ""
+				if annotated && strings.HasSuffix(token, "]") {
+					token = strings.TrimSuffix(token, "]")
+					suffix = "]"
+				}
 				replacement, tracking := readableURL(token)
-				if tracking && content == token {
+				if tracking && content == token && !annotated {
 					row.removed = true
 					row.fallback = prefix + replacement
 				}
 				out.WriteString(row.text[cursor:span[0]])
 				out.WriteString(replacement)
+				out.WriteString(suffix)
 				cursor = span[1]
 			}
 			out.WriteString(row.text[cursor:])
@@ -283,6 +358,9 @@ func ReadableBody(ctx context.Context, e domain.Email) (string, string, error) {
 // separate lines. These decorations must not make the same HTML prose look new.
 // This key never replaces displayed text or source offsets.
 func alternativeKey(text string) string {
+	// Generated plain parts commonly wrap both label and URL over several lines.
+	// Preserve the label to match visible HTML anchor text, dropping only syntax.
+	text = bracketLinkAnnotation.ReplaceAllString(text, "$1")
 	text = emailLinkAnnotation.ReplaceAllString(text, "")
 	text = textURL.ReplaceAllString(text, "")
 	var key strings.Builder
@@ -306,6 +384,31 @@ func alternativeKey(text string) string {
 	return key.String()
 }
 
+// Plain newsletter generators often join several list items into one paragraph
+// while HTML inserts headings between them. Compare each logical item without
+// treating its soft-wrapped continuation lines as independent evidence.
+func alternativePassageEnd(text string, start int) int {
+	for lineStart := start; lineStart < len(text); {
+		end := strings.IndexByte(text[lineStart:], '\n')
+		if end < 0 {
+			end = len(text)
+		} else {
+			end += lineStart + 1
+		}
+		line := strings.TrimSpace(text[lineStart:end])
+		if lineStart > start {
+			if line == "" {
+				return end
+			}
+			if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") || strings.HasPrefix(line, "• ") {
+				return lineStart
+			}
+		}
+		lineStart = end
+	}
+	return len(text)
+}
+
 // supplementAlternative keeps the primary representation's ordering and authored
 // repetitions. Only passages from the other MIME representation are compared;
 // quotes, forwards and signatures are matched within their own kind.
@@ -323,12 +426,7 @@ func supplementAlternative(ctx context.Context, primary, alternative []Section) 
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			end := strings.Index(s.Text[offset:], "\n\n")
-			if end < 0 {
-				end = len(s.Text)
-			} else {
-				end += offset + 2
-			}
+			end := alternativePassageEnd(s.Text, offset)
 			text := s.Text[offset:end]
 			key := alternativeKey(text)
 			// URL-only passages still carry evidence. Compare their literal text

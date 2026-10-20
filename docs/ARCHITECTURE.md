@@ -224,7 +224,7 @@ for exact fields, statuses, bounds and timestamp semantics. Historical vectors a
 never read as current chunks; no migrations, assignments or journals are rewritten.
 
 The reader and chunker now share [readable text cleanup](CLEAN_TEXT.md), versioned
-`readable-v3`: meaningful image descriptions and quoted/forwarded text are kept;
+`readable-v4`: meaningful image descriptions and quoted/forwarded text are kept;
 tracking/placeholder artifacts are cleaned without modifying original cached mail.
 Reader cursors bind the source hash plus projection version. Old preprocessing
 coverage is excluded and the UI requests explicit Resume to rebuild compatible

@@ -245,7 +245,7 @@ these tokenizer cases, not embedding quality/native runtime compatibility.
 
 `mail.Sections` accepts already MIME/charset-decoded cached mail, preserves the cache,
 normalizes line endings/NULs into named `subject`, `body_text`, `body_html` projections,
-and performs bounded text-only HTML extraction plus shared `readable-v3` cleanup
+and performs bounded text-only HTML extraction plus shared `readable-v4` cleanup
 of transport placeholders/tracking clutter. Useful image descriptions, original
 quotes/forwards and unique alternative text are retained; the reader uses those
 same sections. See [clean text contract](CLEAN_TEXT.md). Source offsets are half-open UTF-8
@@ -283,7 +283,7 @@ with NULL data. The separate explicitly started `app.LocalIndex` uses the native
 provider to populate them.
 Model recipe: shared `embedding/model.Version`
 (`minilm-1110a243-6fd5d72f-f32-mean-l2-s24-v1-u17.0.0-nfd17.0.0`), dimension 384;
-preprocessing: `email-sections-readable-v3-wp-07eced375cec-256-32-u17.0.0-nfd17.0.0`. Both include the
+preprocessing: `email-sections-readable-v4-wp-07eced375cec-256-32-u17.0.0-nfd17.0.0`. Both include the
 Go Unicode and NFD table versions so toolchain upgrades cannot silently reuse
 incompatible vectors. Any algorithm/tokenizer/input
 policy change requires an explicit recipe/preprocessing version and rebuild.

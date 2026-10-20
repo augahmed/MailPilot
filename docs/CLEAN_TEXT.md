@@ -34,6 +34,20 @@ There is no frontend-only cleanup or second embedding/preprocessing pipeline.
   such as `utm_*`, `gclid` and `fbclid` removed. No redirects are followed or decoded
   into new network requests. This is a conservative heuristic, not a URL reputation
   or phishing verdict; unfamiliar links remain literal text.
+- Recognize multiline generated `[Blog URL]`, `[GitHub URL]` and similar link
+  annotations when comparing MIME alternatives. Their visible labels match HTML
+  anchor labels, so brackets and wrapping cannot cause the entire body to be
+  appended again. Keep a compact destination within annotated tracking links
+  during cleanup so matching remains possible after opaque payload removal.
+- Remove runs of invisible preview padding (figure spaces with combining grapheme
+  joiners, zero-width padding and discretionary soft hyphens). Remove discretionary
+  soft hyphens within words so they remain searchable. Preserve significant joiners
+  within words and emoji; never globally erase arbitrary Unicode formatting.
+- Compact the specific `email`/tracking-host `/e/c/<long opaque payload>/<64-hex>`
+  redirect pattern without decoding its payload or following it. Normal document
+  URLs, reservation IDs and unmatched paths remain intact. The original full URLs
+  stay in cached plain text/HTML for source inspection and later link extraction;
+  opaque tracking payloads do not improve semantic matching and are excluded.
 - Remove generated Gmail-local footnote link targets while retaining footnote text.
   Compact repeated blank lines and preserve paragraph structure and Unicode.
 - HTML extraction retains anchor text, meaningful image descriptions and structural
@@ -62,11 +76,16 @@ are untrusted heuristics, not proof of authorship or completeness.
 
 ## Versions, offsets and existing data
 
-`TextProjectionVersion` is **readable-v3**. It is included in the chunk preprocessing
-version (`email-sections-readable-v3-wp-07eced375cec-256-32-…`). Offsets address the
+`TextProjectionVersion` is **readable-v4**. It is included in the chunk preprocessing
+version (`email-sections-readable-v4-wp-07eced375cec-256-32-…`). Offsets address the
 named **cleaned** `body_text` / `body_html` projection, not raw MIME or HTML bytes;
 reprocessing an unchanged source with the same version reproduces those offsets.
 The original cached message and its content hash are never overwritten.
+
+The `readable-v4` update fixes bracketed-link alternative duplication and preview
+padding. Reader cleanup takes effect after restarting the rebuilt app. Existing
+`readable-v3` vectors are excluded; Resume indexing rebuilds them from the cache.
+Opening a message performs no inference, reimport or original-source mutation.
 
 No schema migration or model replacement is required. Model/tokenizer identity
 stays unchanged; prior preprocessing generations are excluded from current index
@@ -84,5 +103,5 @@ protocol 1 with the same reader shape and one additive index error code.
 Regression tests cover synthetic newsletter clutter, image-only offers, HTML and
 MIME alternatives, hidden content, normal URL identifiers, quoted/forwarded content,
 Unicode, stable offsets, paging, original-source preservation and old-index refresh.
-The offline native indexing qualification additionally verifies cleaned newsletter
+The offline native indexing qualification additionally verifies bracketed-link multipart newsletters and cleaned newsletter
 inputs through real MiniLM inference, SQLite vector persistence and cached reading.
