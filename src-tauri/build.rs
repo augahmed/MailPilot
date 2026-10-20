@@ -4,6 +4,7 @@ fn main() {
             "health",
             "local_index",
             "vector_search",
+            "category_vectors",
             "gmail_status",
             "gmail_connect",
             "gmail_check",

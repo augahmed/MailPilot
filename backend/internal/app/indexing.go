@@ -34,6 +34,10 @@ func (r IndexRequest) Valid() bool {
 }
 
 type IndexResponse struct {
+	EligibleCategories  int    `json:"eligibleCategories"`
+	ReadyCategories     int    `json:"readyCategories"`
+	PartialCategories   int    `json:"partialCategories"`
+	PendingCategories   int    `json:"pendingCategories"`
 	AccountID           string `json:"accountId"`
 	Status              string `json:"status"`
 	Generation          string `json:"generation"`
@@ -66,17 +70,18 @@ type indexWorker struct {
 // LocalIndex owns one explicitly started local job, never Gmail or external AI.
 // SQLite state is the resume checkpoint; vectors commit in at most four-item batches.
 type LocalIndex struct {
-	root     context.Context
-	session  func() (domain.AccountID, context.Context, error)
-	emails   repository.EmailRepository
-	chunks   repository.ChunkRepository
-	jobs     repository.IndexRepository
-	embedder localEmbedder
-	chunker  *mailtext.Chunker
-	profile  repository.IndexProfile
-	mu       sync.Mutex
-	worker   *indexWorker
-	closed   bool
+	root            context.Context
+	session         func() (domain.AccountID, context.Context, error)
+	emails          repository.EmailRepository
+	chunks          repository.ChunkRepository
+	jobs            repository.IndexRepository
+	categoryVectors repository.CategoryVectorRepository
+	embedder        localEmbedder
+	chunker         *mailtext.Chunker
+	profile         repository.IndexProfile
+	mu              sync.Mutex
+	worker          *indexWorker
+	closed          bool
 }
 
 func NewLocalIndex(root context.Context, session func() (domain.AccountID, context.Context, error), emails repository.EmailRepository, chunks repository.ChunkRepository, jobs repository.IndexRepository, provider localEmbedder) (*LocalIndex, error) {
@@ -191,7 +196,10 @@ func (s *LocalIndex) response(ctx context.Context, a domain.AccountID, code stri
 	if err == nil {
 		result.Status = run.Status
 		result.Generation = run.Generation
-		if run.Profile != p {
+		// Category work adds pending derivatives without invalidating compatible mail.
+		mailProfile := run.Profile
+		mailProfile.CategoryRecipe = p.CategoryRecipe
+		if mailProfile != p {
 			result.Status = "interrupted"
 			result.Code = "model_changed"
 			if run.Profile.Model == p.Model && run.Profile.Fingerprint == p.Fingerprint {
@@ -217,12 +225,23 @@ func (s *LocalIndex) response(ctx context.Context, a domain.AccountID, code stri
 	result.UnavailableMessages = counts.Unavailable
 	result.ChunksCreated = counts.Chunks
 	result.EmbeddingsGenerated = counts.Embeddings
+	if s.categoryVectors != nil {
+		c, e := s.categoryVectors.Progress(ctx, a, p)
+		if e != nil {
+			result.Code = "storage_error"
+			return result
+		}
+		result.EligibleCategories = c.Eligible
+		result.ReadyCategories = c.Ready
+		result.PartialCategories = c.Partial
+		result.PendingCategories = c.Pending
+	}
 	if result.Status == "complete" || result.Status == "partial" {
 		switch {
-		case counts.Pending > 0 || counts.Embeddings < counts.Chunks:
+		case counts.Pending > 0 || counts.Embeddings < counts.Chunks || result.PendingCategories > 0:
 			result.Code = "pending_changes"
 			result.Status = "pending"
-		case counts.Partial > 0 || counts.Failed > 0 || counts.Unavailable > 0:
+		case counts.Partial > 0 || counts.Failed > 0 || counts.Unavailable > 0 || result.PartialCategories > 0:
 			result.Status = "partial"
 		default:
 			result.Status = "complete"
@@ -247,6 +266,33 @@ func (s *LocalIndex) work(ctx context.Context, run repository.IndexRun) {
 			return
 		}
 		if len(candidates) == 0 {
+			if s.categoryVectors != nil {
+				categories, e := s.categoryVectors.Next(ctx, run)
+				if e != nil {
+					if ctx.Err() == nil {
+						s.finish(run, "failed", "storage_error")
+					}
+					return
+				}
+				if len(categories) > 0 {
+					e = s.indexCategory(ctx, run, categories[0])
+					if e == nil || errors.Is(e, repository.ErrConflict) || errors.Is(e, repository.ErrNotFound) {
+						continue
+					}
+					if ctx.Err() != nil {
+						return
+					}
+					code := "inference_failed"
+					if errors.Is(e, embedding.ErrUnavailable) {
+						code = "model_unavailable"
+					}
+					if errors.Is(e, repository.ErrStorage) {
+						code = "storage_error"
+					}
+					s.finish(run, "failed", code)
+					return
+				}
+			}
 			counts, err := s.jobs.Progress(ctx, run.AccountID, run.Profile)
 			if err != nil {
 				s.finish(run, "failed", "storage_error")

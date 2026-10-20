@@ -8,6 +8,7 @@ import (
 // IndexProfile identifies the only compatible chunk/embedding generation.
 type IndexProfile struct {
 	Model                                           EmbeddingModel
+	CategoryRecipe                                  string
 	PreprocessingVersion, IndexVersion, Fingerprint string
 }
 type IndexRun struct {

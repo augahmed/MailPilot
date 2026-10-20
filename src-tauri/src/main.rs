@@ -2,6 +2,7 @@
 
 mod ai;
 mod bridge;
+mod category_vectors;
 mod indexing;
 mod replies;
 mod search;
@@ -39,6 +40,7 @@ mod capability_tests {
             "allow-email-summarize",
             "allow-local-index",
             "allow-vector-search",
+            "allow-category-vectors",
         ] {
             assert!(permissions.iter().any(|p| p.as_str() == Some(retained)));
         }
@@ -76,6 +78,23 @@ impl SmokeTest {
             && self.index_completed.load(Ordering::SeqCst)
             && self.search_completed.load(Ordering::SeqCst)
     }
+}
+
+#[tauri::command]
+async fn category_vectors(
+    backend: tauri::State<'_, Backend>,
+    request: category_vectors::CategoryVectorRequest,
+) -> Result<category_vectors::CategoryVectorResponse, String> {
+    let backend = backend.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.category_vectors(request),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())?
 }
 
 #[tauri::command]
@@ -540,7 +559,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            vector_search,local_index,health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, sync_cancel, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, reply_manage, ai_settings, email_summarize])
+            category_vectors,vector_search,local_index,health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, sync_cancel, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, reply_manage, ai_settings, email_summarize])
         .build(tauri::generate_context!())
         .expect("failed to build MailPilot desktop application");
 

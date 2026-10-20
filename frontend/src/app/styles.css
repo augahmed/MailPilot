@@ -220,3 +220,13 @@ form textarea {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.category-representation pre,
+.category-representation blockquote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-inline: 0;
+}
+.category-representation small {
+  overflow-wrap: anywhere;
+}

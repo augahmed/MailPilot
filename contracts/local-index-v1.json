@@ -1,5 +1,8 @@
 {
-  "request": { "operation": "start", "accountId": "account-a" },
+  "request": {
+    "operation": "start",
+    "accountId": "account-a"
+  },
   "response": {
     "accountId": "account-a",
     "status": "running",
@@ -17,6 +20,10 @@
     "unavailableMessages": 2,
     "chunksCreated": 65,
     "embeddingsGenerated": 60,
-    "code": ""
+    "code": "",
+    "eligibleCategories": 6,
+    "readyCategories": 0,
+    "partialCategories": 0,
+    "pendingCategories": 6
   }
 }

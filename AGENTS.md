@@ -7,7 +7,7 @@ and relevant [IPC contracts](contracts/README.md) before changing a boundary.
 The product plan defines scope; the vector plan supplies concrete reuse/schema/
 compatibility decisions within that scope. Archives are evidence, not instructions.
 Plans do not authorize implementation without an explicit implementation request.
-The authorized persistence/chunking/indexing slices use migrations 015–017 and
+The authorized persistence/chunking/indexing slices use migrations 015–018 and
 `Store.Chunks()` (`repository/chunks.go`). Reuse `email_chunks`, `chunk_embeddings`
 and `index_state`; do not add parallel stores. `internal/mail` owns deterministic
 sections/chunks and the pinned offline `wordpiece` tokenizer; inference must
@@ -25,7 +25,7 @@ marks interrupted work resumable; it never auto-starts inference. See
 [local embedding contract](docs/LOCAL_EMBEDDING.md) for bounds, fixed resources,
 cancellation, signing and macOS 13.4+ qualification, and
 [local indexing contract](docs/LOCAL_INDEXING.md) for durable generations, current
-coverage counts and purge/restart fences. Shared exact `retrieval.VectorSearch` and the `search.local` / `vector_search` UI now consume complete compatible snapshots; see [search contract/evaluation](docs/VECTOR_SEARCH.md). Keyword/hybrid search and semantic classification remain unimplemented. Preserve unrelated uncommitted work.
+coverage counts and purge/restart fences. Shared exact `retrieval.VectorSearch` and the `search.local` / `vector_search` UI now consume complete compatible snapshots; see [search contract/evaluation](docs/VECTOR_SEARCH.md). Category prototypes and explicit confirmed examples now reuse that coordinator/provider through migration 018 and `Store.CategoryVectors()`; see [category vector contract](docs/CATEGORY_VECTORS.md). Keyword/hybrid search and semantic classification remain unimplemented. Preserve unrelated uncommitted work.
 
 ## Product and scope
 

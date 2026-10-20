@@ -19,7 +19,7 @@ func TestInitializeAndReopen(t *testing.T) {
 	if err := s.Ping(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if s.SchemaVersion() != 17 {
+	if s.SchemaVersion() != 18 {
 		t.Fatal("unexpected schema version")
 	}
 	for pragma, want := range map[string]int{"foreign_keys": 1, "busy_timeout": 5000, "synchronous": 2} {

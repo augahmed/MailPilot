@@ -1,7 +1,7 @@
 # Shared email chunk-and-vector architecture plan
 
 Reviewed 2026-10-20 against the current working tree. **Persistence and chunking
-slices implemented:** migrations 015–017, `Store.Chunks()`, `mail.Chunker`, pinned
+slices implemented:** migrations 015–018, `Store.Chunks()`, `mail.Chunker`, pinned
 local WordPiece tokenization and `app.CachedChunker` during manual sync. A single
 lazy CPU MiniLM provider is now implemented and bundled; real inference is qualified
 in the explicit resumable local indexing workflow. `app.LocalIndex`, durable
@@ -44,9 +44,10 @@ indexing and by the shared `retrieval.VectorSearch` for explicit local queries. 
 multiple-provider substitution is supported by the shared boundary and synthetic
 adapters, not evidence of additional shipped providers. Summary still exists.
 
-There are 17 migration files; 015 adds shared chunk persistence, 016 adds source
+There are 18 migration files; 015 adds shared chunk persistence, 016 adds source
 provenance/context plus independent projected body coverage, and 017 adds durable
-job/model identities, message failure metadata and cache-removal fences.
+job/model identities, message failure metadata and cache-removal fences. Migration
+018 adds shared category prototypes and explicit confirmed-example references.
 Historical vector tables are inert. The current AI interface only summarizes one
 selected cached email. New retrieval/semantic classification/evidence QA cannot be
 enabled by changing settings or restoring archived UI handlers.
@@ -324,12 +325,17 @@ Synthetic offline native performance is recorded in the indexing contract; targe
 
 ### Category records using the same pipeline
 
-| Proposed extension            | Relationship to the shared store                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `category_prototypes`         | PK `(account_id,category_id,profile_id)`; composite category FK and profile/dimension FK; definition hash, preprocessing provenance, status, dimension and normalized vector. Build the category-name/description representation with the same tokenizer/chunker/embedding adapter. If it spans multiple parts, use the same chunking policy and a versioned bounded aggregation; no silent truncation or different category model. |
-| `category_examples`           | PK `(account_id,category_id,email_id)`; composite FKs to category/email; explicitly confirmed source hash and timestamp. Resolve representative chunks from that email's current compatible ready set; store no duplicate example vectors. Changed/deleted sources make examples stale until deliberately reconfirmed.                                                                                                              |
-| Primary preference metadata   | Reuse `email_categories` for compatible accepted assignments; add a small `email_category_preferences` account/email PK with nullable primary category composite FK and explicit revision/provenance only when the correction UI is implemented. Preserve multiple legacy assignments and surface unresolved legacy state; never infer consent to delete them.                                                                      |
-| Assessment evidence extension | Add only necessary versioned source/profile/generation, category-definition/example/override/rule/header hashes and selected chunk references to current assessment storage. Reuse `used_classifier`, `reason`, `candidates_json` and `score_kind`; preserve the legacy fingerprint branch. New DTOs distinguish raw cosine from rule confidence without a duplicate score store. No separate category mailbox-index tables.        |
+`category_prototypes` and `category_examples` are implemented by migration 018,
+sharing `app.LocalIndex` and the local provider. [CATEGORY_VECTORS.md](CATEGORY_VECTORS.md)
+records the versioned aggregation, confirmation, invalidation and inspection contract.
+Primary preferences and semantic assessment extensions below remain planned.
+
+| Proposed extension            | Relationship to the shared store                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `category_prototypes`         | PK `(account_id,category_id,profile_id)`; composite category FK and account/model-version registry FK, with dimension checked on publication; definition hash, preprocessing provenance, status, dimension and normalized vector. Build the category-name/description representation with the same tokenizer/chunker/embedding adapter. If it spans multiple parts, use the same chunking policy and a versioned bounded aggregation; no silent truncation or different category model. |
+| `category_examples`           | PK `(account_id,category_id,email_id)`; composite FKs to category/email; explicitly confirmed source hash and timestamp. Resolve representative chunks from that email's current compatible ready set; store no duplicate example vectors. Changed/deleted sources make examples stale until deliberately reconfirmed.                                                                                                                                                                  |
+| Primary preference metadata   | Reuse `email_categories` for compatible accepted assignments; add a small `email_category_preferences` account/email PK with nullable primary category composite FK and explicit revision/provenance only when the correction UI is implemented. Preserve multiple legacy assignments and surface unresolved legacy state; never infer consent to delete them.                                                                                                                          |
+| Assessment evidence extension | Add only necessary versioned source/profile/generation, category-definition/example/override/rule/header hashes and selected chunk references to current assessment storage. Reuse `used_classifier`, `reason`, `candidates_json` and `score_kind`; preserve the legacy fingerprint branch. New DTOs distinguish raw cosine from rule confidence without a duplicate score store. No separate category mailbox-index tables.                                                            |
 
 One category prototype vector is a category description aggregate, not a revived
 one-vector-per-email search cache. Example comparisons reuse email chunk vectors.

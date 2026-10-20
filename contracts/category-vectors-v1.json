@@ -1,0 +1,42 @@
+{
+  "request": {
+    "operation": "confirm_example",
+    "accountId": "account-a",
+    "categoryId": "jobs",
+    "emailId": "email-a",
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "approved": true
+  },
+  "response": {
+    "accountId": "account-a",
+    "categoryId": "jobs",
+    "status": "ready",
+    "code": "",
+    "sourceHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "modelId": "sentence-transformers/all-MiniLM-L6-v2",
+    "modelVersion": "synthetic-recipe-v1",
+    "dimension": 384,
+    "recipe": "category-prototype-v1-definition-and-examples-equal-unit-mean",
+    "definitionInputs": [
+      "Subject: Jobs",
+      "Subject: Jobs\nEmployment applications and interviews."
+    ],
+    "examples": [
+      {
+        "emailId": "email-a",
+        "subject": "Interview invitation",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "included",
+        "chunks": [
+          {
+            "chunkId": "chunk-a",
+            "section": "authored",
+            "text": "Please join us for an interview on Friday.",
+            "truncated": false,
+            "context": "Subject: Interview invitation\nSection: authored\n"
+          }
+        ]
+      }
+    ]
+  }
+}

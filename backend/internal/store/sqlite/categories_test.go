@@ -20,7 +20,7 @@ func TestCategoryManagement(t *testing.T) {
 	a := account(t, s, "a")
 	b := account(t, s, "b")
 	defaults, err := s.Categories().List(ctx, a)
-	if err != nil || len(defaults) != 7 {
+	if err != nil || len(defaults) != 6 {
 		t.Fatalf("defaults: %d %v", len(defaults), err)
 	}
 	for _, c := range defaults {
@@ -72,7 +72,7 @@ func TestCategoryManagement(t *testing.T) {
 	}
 	account(t, s, "a") // Reconnection/upsert must not restore a deleted default or overwrite edits.
 	after, _ := s.Categories().List(ctx, a)
-	if len(after) != 6 {
+	if len(after) != 5 {
 		t.Fatal("default recreated")
 	}
 	if _, err = s.Categories().Get(ctx, a, free.ID); !errors.Is(err, repository.ErrNotFound) {
@@ -140,7 +140,7 @@ func TestUpgradeCategoriesPreservesLegacyReferences(t *testing.T) {
 	}
 	defer s.Close()
 	rows, err := s.Categories().List(ctx, "a")
-	if err != nil || len(rows) != 8 {
+	if err != nil || len(rows) != 7 {
 		t.Fatal("upgrade defaults", err, len(rows))
 	}
 	legacy, err := s.Categories().Get(ctx, "a", "legacy")

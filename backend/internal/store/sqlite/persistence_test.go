@@ -72,7 +72,7 @@ func TestCleanDatabaseRunsAllMigrations(t *testing.T) {
 			t.Fatalf("new table %s not empty", table)
 		}
 	}
-	if count(t, s, "schema_migrations") != 17 {
+	if count(t, s, "schema_migrations") != 18 {
 		t.Fatal("missing migration")
 	}
 	rows, err := s.db.Query("PRAGMA foreign_key_check")
@@ -126,7 +126,7 @@ func TestUpgradeVersionOnePreservesSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SchemaVersion() != 17 || count(t, s, "settings") != 1 {
+	if s.SchemaVersion() != 18 || count(t, s, "settings") != 1 {
 		t.Fatal("upgrade lost data")
 	}
 	_ = s.Close()
@@ -135,7 +135,7 @@ func TestUpgradeVersionOnePreservesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if count(t, s, "schema_migrations") != 17 {
+	if count(t, s, "schema_migrations") != 18 {
 		t.Fatal("migrations repeated")
 	}
 }
@@ -409,7 +409,7 @@ func TestCategoryAssignmentsAreLocalAndAccountScoped(t *testing.T) {
 		t.Fatal(err)
 	}
 	listed, err := s.Categories().List(ctx, a)
-	if err != nil || len(listed) != 8 || listed[6].Name != "Renamed" {
+	if err != nil || len(listed) != 7 || listed[5].Name != "Renamed" {
 		t.Fatal("category listing incorrect", err)
 	}
 	for i := 0; i < 2; i++ {

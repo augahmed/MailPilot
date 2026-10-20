@@ -323,7 +323,7 @@ matching the current Go session. Status may use an empty ID to select that sessi
 No caller-controlled source text, model, path, vectors, limits or executable exists.
 
 This remains protocol 1 because it adds a separately allowlisted method and capability
-without changing existing request/response shapes; old semantic/Ask methods remain
+with version-matched packaged components; old semantic/Ask methods remain
 rejected. Commands use the ordinary five/seven-second transport deadlines and
 return promptly while one local worker runs. The response is bounded scalar metadata
 validated by Go/Rust/TypeScript fixtures, not streamed vectors or generic jobs.
@@ -380,3 +380,34 @@ and cancellation use ordinary 5/7-second IPC deadlines while a bounded cancellab
 local worker runs. Completed snapshots expire after five minutes and are rechecked
 on access. No external AI or Gmail request, persistent search history or automatic
 indexing is added. Session changes clear results; stale/deleted sources revoke them.
+
+## Local category representations (protocol-v1 extension)
+
+Tauri `category_vectors` forwards strictly typed requests to `categories.vectors`.
+The [shared fixture](category-vectors-v1.json) and [category contract](../docs/CATEGORY_VECTORS.md)
+define the account-scoped representation. Required request fields are `operation`,
+`accountId`, `categoryId`, `emailId`, `revision`, `approved`. Inspect requires empty
+email/revision and false approval. `confirm_example` requires a current reader
+revision (64 lowercase hex), email ID and true explicit approval; `remove_example`
+requires email ID, empty revision and false approval. Go rechecks ownership and
+original source revision transactionally. None of these operations invoke inference.
+
+Every response requires `accountId`, `categoryId`, `status`, `code`, `sourceHash`,
+`modelId`, `modelVersion`, `dimension`, `recipe`, `definitionInputs`, `examples`.
+Status is pending/ready/partial/disabled, or unavailable on error. Safe codes are
+empty, validation, unauthorized, unavailable, not_found, stale, cancelled,
+storage_error, too_large. Errors return empty account/category and no source text.
+Only ready/partial include a current source hash. Up to twenty exact definition
+inputs (16 KiB JSON), ten examples, three chunks each, 120-byte subjects, full
+subject/section context up to 1,024 bytes, and 160-byte UTF-8 passage excerpts
+with a `truncated` flag. Examples carry email ID, confirmed reader revision and
+included/index_pending/source_changed status. Chunk IDs refer to the shared store.
+The entire encoded response is capped at 48 KiB, otherwise fails closed.
+
+`index.local` now also requires `eligibleCategories`, `readyCategories`,
+`partialCategories`, `pendingCategories`; ready + partial + pending equals eligible.
+These fields extend the packaged v1 response and are updated in Go/Rust/TypeScript
+together. Existing email counts retain their meaning. Start/Resume builds pending
+category prototypes after shared mail vectors; existing Pause/Cancel controls apply.
+No model, vectors, caller-provided text, paths, SQL, classification or external AI
+authority crosses this boundary.

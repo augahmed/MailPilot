@@ -6,6 +6,8 @@ import {
   type CategoryRequest,
 } from "../../lib/ipc/client";
 
+import { CategoryRepresentation } from "./CategoryRepresentation";
+
 const messages = {
   unauthorized: "Connect your account to manage its local categories.",
   validation:
@@ -20,6 +22,7 @@ export function Categories() {
   const [offset, setOffset] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [viewing, setViewing] = useState("");
   const [editing, setEditing] = useState<Category | "new" | null>(null);
   const [deleting, setDeleting] = useState<Category | null>(null);
   const [name, setName] = useState("");
@@ -42,6 +45,7 @@ export function Categories() {
     pending.current = true;
     revision.current++;
     setBusy(true);
+    setViewing("");
     setMessage("");
     try {
       const result = await manageCategories(request);
@@ -103,7 +107,7 @@ export function Categories() {
       </h2>
       <p>
         Local categories for this account. Descriptions define what belongs in
-        each category. The starter rules use four default category names.
+        each category. The starter rules use recognized default category names.
         Renamed and custom categories have no automatic rule mapping.
       </p>
       <p role="status">{busy ? "Working…" : message}</p>
@@ -158,6 +162,22 @@ export function Categories() {
                 >
                   Delete {category.name}
                 </button>
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    setViewing(viewing === category.id ? "" : category.id)
+                  }
+                >
+                  {viewing === category.id ? "Hide" : "Show"} representation for{" "}
+                  {category.name}
+                </button>
+                {viewing === category.id && (
+                  <CategoryRepresentation
+                    key={`${page.accountId}:${category.id}:${category.updated_at}`}
+                    accountId={page.accountId}
+                    category={category}
+                  />
+                )}
               </li>
             ))}
           </ul>

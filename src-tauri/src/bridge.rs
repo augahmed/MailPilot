@@ -585,6 +585,29 @@ impl Bridge {
         outcome.map_err(str::to_owned)
     }
 
+    pub fn category_vectors(
+        &mut self,
+        request: crate::category_vectors::CategoryVectorRequest,
+    ) -> Result<crate::category_vectors::CategoryVectorResponse, String> {
+        if !request.valid() {
+            return Err("Invalid category vector request".into());
+        }
+        let account = request.account_id.clone();
+        let category = request.category_id.clone();
+        let response: crate::category_vectors::CategoryVectorResponse =
+            serde_json::from_value(self.request(
+                "categories.vectors",
+                serde_json::to_value(request).map_err(|_| "Invalid category vector request")?,
+            )?)
+            .map_err(|_| "Invalid category vector response")?;
+        if !response.valid()
+            || (response.code.is_empty()
+                && (response.account_id != account || response.category_id != category))
+        {
+            return Err("Invalid category vector response".into());
+        }
+        Ok(response)
+    }
     pub fn vector_search(
         &mut self,
         request: crate::search::SearchRequest,

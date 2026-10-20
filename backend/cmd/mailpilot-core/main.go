@@ -143,6 +143,7 @@ func run() int {
 			_ = localProvider.Close(ctx)
 			return nil, err
 		}
+		indexing.EnableCategoryVectors(store.CategoryVectors())
 		application.Index = indexing
 		searching = app.NewLocalSearch(ctxRoot, authentication.Session, retrieval.New(store.Vectors(), localProvider), store.Indexing())
 		application.Search = searching

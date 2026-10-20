@@ -6,3 +6,7 @@ src-tauri/binaries
 package-lock.json
 AGENTS.md
 docs/ARCHITECTURE.md
+
+# Immutable upstream tokenizer metadata; preserve the packaged reference bytes.
+backend/internal/mail/wordpiece/assets/special_tokens_map.json
+backend/internal/mail/wordpiece/assets/tokenizer_config.json

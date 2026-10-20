@@ -12,7 +12,7 @@ type indexRepository struct{ store *Store }
 
 func (s *Store) Indexing() repository.IndexRepository { return &indexRepository{s} }
 func validProfile(p repository.IndexProfile) bool {
-	return validModel(p.Model) && validName(p.PreprocessingVersion, 128) && validName(p.IndexVersion, 128) && validHash(p.Fingerprint)
+	return (p.CategoryRecipe == "" || p.CategoryRecipe == repository.CategoryRecipe) && validModel(p.Model) && validName(p.PreprocessingVersion, 128) && validName(p.IndexVersion, 128) && validHash(p.Fingerprint)
 }
 func checkIndexRun(ctx context.Context, tx *sql.Tx, r repository.IndexRun) error {
 	if r.AccountID == "" || !validName(r.Generation, 128) || !validProfile(r.Profile) {
@@ -21,7 +21,7 @@ func checkIndexRun(ctx context.Context, tx *sql.Tx, r repository.IndexRun) error
 	return checkIndexRunStatus(ctx, tx, r, "running")
 }
 func checkIndexRunStatus(ctx context.Context, tx *sql.Tx, r repository.IndexRun, status string) error {
-	return exists(ctx, tx, `SELECT 1 FROM local_index_jobs WHERE account_id=? AND generation=? AND status=? AND model_id=? AND model_version=? AND dimension=? AND preprocessing_version=? AND index_version=? AND fingerprint=?`, r.AccountID, r.Generation, status, r.Profile.Model.ID, r.Profile.Model.Version, r.Profile.Model.Dimension, r.Profile.PreprocessingVersion, r.Profile.IndexVersion, r.Profile.Fingerprint)
+	return exists(ctx, tx, `SELECT 1 FROM local_index_jobs WHERE account_id=? AND generation=? AND status=? AND model_id=? AND model_version=? AND dimension=? AND preprocessing_version=? AND index_version=? AND fingerprint=? AND category_recipe=?`, r.AccountID, r.Generation, status, r.Profile.Model.ID, r.Profile.Model.Version, r.Profile.Model.Dimension, r.Profile.PreprocessingVersion, r.Profile.IndexVersion, r.Profile.Fingerprint, r.Profile.CategoryRecipe)
 }
 func (r *indexRepository) Recover(ctx context.Context) error {
 	_, err := r.store.db.ExecContext(ctx, `UPDATE local_index_jobs SET status='interrupted',code='interrupted',generation=lower(hex(randomblob(16))),updated_at=? WHERE status='running'`, nowMillis())
@@ -54,7 +54,7 @@ func (r *indexRepository) Begin(ctx context.Context, a domain.AccountID, p repos
 				return err
 			}
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO local_index_jobs(account_id,generation,model_id,model_version,dimension,preprocessing_version,index_version,fingerprint,status,code,updated_at) VALUES(?,?,?,?,?,?,?,?,'running','',?) ON CONFLICT(account_id) DO UPDATE SET generation=excluded.generation,model_id=excluded.model_id,model_version=excluded.model_version,dimension=excluded.dimension,preprocessing_version=excluded.preprocessing_version,index_version=excluded.index_version,fingerprint=excluded.fingerprint,status='running',code='',updated_at=excluded.updated_at`, a, run.Generation, p.Model.ID, p.Model.Version, p.Model.Dimension, p.PreprocessingVersion, p.IndexVersion, p.Fingerprint, nowMillis())
+		_, err = tx.ExecContext(ctx, `INSERT INTO local_index_jobs(account_id,generation,model_id,model_version,dimension,preprocessing_version,index_version,fingerprint,status,code,updated_at,category_recipe) VALUES(?,?,?,?,?,?,?,?,'running','',?,?) ON CONFLICT(account_id) DO UPDATE SET generation=excluded.generation,model_id=excluded.model_id,model_version=excluded.model_version,dimension=excluded.dimension,preprocessing_version=excluded.preprocessing_version,index_version=excluded.index_version,fingerprint=excluded.fingerprint,category_recipe=excluded.category_recipe,status='running',code='',updated_at=excluded.updated_at`, a, run.Generation, p.Model.ID, p.Model.Version, p.Model.Dimension, p.PreprocessingVersion, p.IndexVersion, p.Fingerprint, nowMillis(), p.CategoryRecipe)
 		return err
 	})
 	if err != nil {
@@ -67,7 +67,7 @@ func (r *indexRepository) Run(ctx context.Context, a domain.AccountID) (reposito
 	if a == "" {
 		return run, repository.ErrInvalid
 	}
-	err := r.store.db.QueryRowContext(ctx, `SELECT generation,model_id,model_version,dimension,preprocessing_version,index_version,fingerprint,status,code FROM local_index_jobs WHERE account_id=?`, a).Scan(&run.Generation, &run.Profile.Model.ID, &run.Profile.Model.Version, &run.Profile.Model.Dimension, &run.Profile.PreprocessingVersion, &run.Profile.IndexVersion, &run.Profile.Fingerprint, &run.Status, &run.Code)
+	err := r.store.db.QueryRowContext(ctx, `SELECT generation,model_id,model_version,dimension,preprocessing_version,index_version,fingerprint,status,code,category_recipe FROM local_index_jobs WHERE account_id=?`, a).Scan(&run.Generation, &run.Profile.Model.ID, &run.Profile.Model.Version, &run.Profile.Model.Dimension, &run.Profile.PreprocessingVersion, &run.Profile.IndexVersion, &run.Profile.Fingerprint, &run.Status, &run.Code, &run.Profile.CategoryRecipe)
 	return run, storageError(err)
 }
 
@@ -136,8 +136,18 @@ func (r *indexRepository) Transition(ctx context.Context, run repository.IndexRu
 			if err != nil {
 				return err
 			}
+			categoryCounts := repository.CategoryVectorProgress{}
+			if run.Profile.CategoryRecipe != "" {
+				categoryCounts, err = categoryVectorProgress(ctx, tx, run.AccountID, run.Profile)
+				if err != nil {
+					return err
+				}
+				if categoryCounts.Pending > 0 {
+					return repository.ErrConflict
+				}
+			}
 			status = "complete"
-			if counts.Partial > 0 || counts.Failed > 0 || counts.Unavailable > 0 {
+			if counts.Partial > 0 || counts.Failed > 0 || counts.Unavailable > 0 || categoryCounts.Partial > 0 {
 				status = "partial"
 			}
 		}

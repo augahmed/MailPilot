@@ -45,6 +45,10 @@ export const indexResponseSchema = z
     unavailableMessages: count,
     chunksCreated: count,
     embeddingsGenerated: count,
+    eligibleCategories: count,
+    readyCategories: count,
+    partialCategories: count,
+    pendingCategories: count,
     code: z.enum([
       "",
       "unauthorized",
@@ -72,6 +76,8 @@ export const indexResponseSchema = z
         r.eligibleMessages &&
       r.indexedMessages <= r.completeMessages + r.partialMessages &&
       r.embeddingsGenerated <= r.chunksCreated &&
+      r.readyCategories + r.partialCategories + r.pendingCategories ===
+        r.eligibleCategories &&
       (r.accountId === "" ||
         (r.dimension > 0 && /^[0-9a-f]{64}$/.test(r.fingerprint))),
   );
