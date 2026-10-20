@@ -4,6 +4,8 @@ import {
   readFileSync,
   statSync,
   copyFileSync,
+  cpSync,
+  mkdirSync,
   mkdtempSync,
   rmSync,
 } from "node:fs";
@@ -60,36 +62,51 @@ try {
     libraryFingerprint(readFileSync(signed)),
     manifest.libraryCodeSha256,
   );
+  // Exercise Tauri's copied sidecar layouts, not only the source binaries path
+  // and installed .app. All layouts must load the same verified model offline.
+  const development = join(temp, "src-tauri");
+  cpSync(resources, join(development, "resources/embedding"), {
+    recursive: true,
+  });
+  for (const profile of ["debug", "release"]) {
+    const directory = join(development, "target", profile);
+    mkdirSync(directory, { recursive: true });
+    const copied = join(directory, "mailpilot-core");
+    copyFileSync(binary, copied);
+    offlineInference(copied);
+  }
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
 // Deny every network operation at OS level, not merely an HTTP proxy setting.
-const run = spawnSync(
-  "/usr/bin/sandbox-exec",
-  [
-    "-p",
-    "(version 1) (allow default) (deny network*)",
-    binary,
-    "--embedding-self-test",
-  ],
-  {
-    encoding: "utf8",
-    timeout: 60000,
-    env: {
-      ...process.env,
-      HTTP_PROXY: "http://127.0.0.1:1",
-      HTTPS_PROXY: "http://127.0.0.1:1",
-      ALL_PROXY: "http://127.0.0.1:1",
+function offlineInference(executable) {
+  const run = spawnSync(
+    "/usr/bin/sandbox-exec",
+    [
+      "-p",
+      "(version 1) (allow default) (deny network*)",
+      executable,
+      "--embedding-self-test",
+    ],
+    {
+      encoding: "utf8",
+      timeout: 60000,
+      env: {
+        ...process.env,
+        HTTP_PROXY: "http://127.0.0.1:1",
+        HTTPS_PROXY: "http://127.0.0.1:1",
+        ALL_PROXY: "http://127.0.0.1:1",
+      },
     },
-  },
-);
-if (run.status !== 0)
-  throw new Error(
-    `Offline packaged inference failed (${run.status}): ${run.stderr}`,
   );
-const result = JSON.parse(run.stdout);
-assert.equal(result.ok, true);
-assert.equal(result.descriptor.dimensions, 384);
+  if (run.status !== 0)
+    throw new Error(`Offline inference failed (${run.status}): ${run.stderr}`);
+  const result = JSON.parse(run.stdout);
+  assert.equal(result.ok, true);
+  assert.equal(result.descriptor.dimensions, 384);
+  return result;
+}
+const result = offlineInference(binary);
 console.log(
   JSON.stringify(
     {
@@ -97,6 +114,7 @@ console.log(
       modelBytes: statSync(join(resources, "model.onnx")).size,
       runtimeBytes: statSync(library).size,
       verified: "signed-app-network-denied",
+      developmentLayoutsVerified: ["debug", "release"],
     },
     null,
     2,

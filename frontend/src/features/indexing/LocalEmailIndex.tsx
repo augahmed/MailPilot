@@ -32,7 +32,7 @@ const messages: Partial<Record<IndexResponse["code"], string>> = {
   model_changed:
     "The embedding model changed. Resume builds a compatible generation.",
   model_unavailable:
-    "The bundled model could not load. Local inference requires Apple Silicon macOS 13.4 or later.",
+    "The local model could not load. Restart MailPilot and try again. If this continues, rebuild or reinstall the app with its bundled model resources. Supported systems require Apple Silicon macOS 13.4 or later.",
   inference_failed:
     "Local inference failed. Resume retries unfinished messages using saved progress.",
   pending_changes:

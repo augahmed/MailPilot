@@ -99,6 +99,16 @@ Production resources resolve only relative to the running fixed Go executable:
 - Installed: `Contents/MacOS/mailpilot-core` → `Contents/Resources/embedding`.
 - Native development: `src-tauri/binaries/mailpilot-core-aarch64-apple-darwin` →
   `src-tauri/resources/embedding`.
+- Tauri's copied development sidecar: `src-tauri/target/debug/mailpilot-core` or
+  `src-tauri/target/release/mailpilot-core` → `src-tauri/resources/embedding`.
+
+`npm run dev` launches the copied sidecar beside the Cargo host. Both development
+layouts reuse the same verified resources prepared by `build:sidecar`; they do not
+copy the model into a second store. The `model_unavailable` status covers missing,
+invalid or unloadable resources as well as unsupported systems; it is not an OS
+version diagnosis. OAuth configuration and external AI keys/settings cannot affect
+the resource path. After rebuilding the sidecar, restart the desktop process before
+retrying; a provider retains its initialization failure for that process lifetime.
 
 Working directory, data directory, environment variables and JavaScript cannot select
 models or libraries. Symlinks and unexpected files/lengths are rejected. Model bytes
@@ -146,6 +156,8 @@ prints bounded descriptor/timing/memory data. It is not available through WebVie
 IPC. `test:embedding:package` runs it from the signed .app under macOS sandbox-exec
 with **all network operations denied**, verifies artifact fingerprints/licenses,
 unit vectors, synthetic relevance and native re-signing compatibility.
+It also executes real inference from copied sidecars in both fixed Cargo profile
+layouts against one temporary resource set, covering `npm run dev` resource lookup.
 
 ## Qualification results and limits
 

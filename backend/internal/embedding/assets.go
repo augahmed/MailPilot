@@ -38,6 +38,13 @@ func resourcesForExecutable(exe string) (string, error) {
 	if name == "mailpilot-core-aarch64-apple-darwin" && filepath.Base(parent) == "binaries" && filepath.Base(filepath.Dir(parent)) == "src-tauri" {
 		return filepath.Join(filepath.Dir(parent), "resources", "embedding"), nil
 	}
+	// Tauri copies externalBin beside its unbundled host executable, removing
+	// the target suffix. Both Cargo profiles reuse the one prepared resource set.
+	target := filepath.Dir(parent)
+	source := filepath.Dir(target)
+	if name == "mailpilot-core" && (filepath.Base(parent) == "debug" || filepath.Base(parent) == "release") && filepath.Base(target) == "target" && filepath.Base(source) == "src-tauri" {
+		return filepath.Join(source, "resources", "embedding"), nil
+	}
 	return "", ErrUnavailable
 }
 

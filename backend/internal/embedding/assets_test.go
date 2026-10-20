@@ -10,13 +10,20 @@ import (
 )
 
 func TestFixedResourcePathsAndSymlinkRejection(t *testing.T) {
-	for _, name := range []string{"/tmp/model.onnx", "/tmp/mailpilot-core", "/tmp/Contents/MacOS/arbitrary-executable", "relative/path", "/tmp/libonnxruntime.dylib"} {
+	for _, name := range []string{"/tmp/model.onnx", "/tmp/mailpilot-core", "/tmp/Contents/MacOS/arbitrary-executable", "relative/path", "/tmp/libonnxruntime.dylib", "/tmp/target/debug/mailpilot-core", "/tmp/src-tauri/target/custom/mailpilot-core", "/tmp/src-tauri/target/debug/arbitrary-executable"} {
 		if _, err := resourcesForExecutable(name); !errors.Is(err, ErrUnavailable) {
 			t.Fatal("untrusted resource root accepted")
 		}
 	}
-	if root, err := resourcesForExecutable("/Applications/MailPilot.app/Contents/MacOS/mailpilot-core"); err != nil || root != "/Applications/MailPilot.app/Contents/Resources/embedding" {
-		t.Fatal("bundle resource resolution", err)
+	for _, layout := range []struct{ executable, root string }{
+		{"/Applications/MailPilot.app/Contents/MacOS/mailpilot-core", "/Applications/MailPilot.app/Contents/Resources/embedding"},
+		{"/tmp/project/src-tauri/binaries/mailpilot-core-aarch64-apple-darwin", "/tmp/project/src-tauri/resources/embedding"},
+		{"/tmp/project/src-tauri/target/debug/mailpilot-core", "/tmp/project/src-tauri/resources/embedding"},
+		{"/tmp/project/src-tauri/target/release/mailpilot-core", "/tmp/project/src-tauri/resources/embedding"},
+	} {
+		if root, err := resourcesForExecutable(layout.executable); err != nil || root != layout.root {
+			t.Fatalf("resource resolution for %s: %s, %v", layout.executable, root, err)
+		}
 	}
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
