@@ -14,7 +14,7 @@ body {
   min-width: 320px;
 }
 main {
-  max-width: 560px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 64px 28px 32px;
 }
@@ -97,6 +97,7 @@ footer {
   margin-top: 20px;
 }
 button {
+  margin: 0.25rem;
   padding: 10px 14px;
   font: inherit;
   border: 1px solid #176348;
@@ -114,9 +115,6 @@ button:focus-visible {
   outline-offset: 3px;
 }
 
-main {
-  max-width: 1000px;
-}
 .sync-counts {
   display: flex;
   flex-wrap: wrap;
@@ -174,9 +172,6 @@ form textarea {
 form textarea {
   min-height: 6rem;
 }
-button {
-  margin: 0.25rem;
-}
 
 .classification-review caption {
   text-align: left;
@@ -192,39 +187,6 @@ button {
 }
 .classification-review td li {
   margin-bottom: 0.5rem;
-}
-
-.mailbox-search p {
-  display: block;
-  overflow-wrap: anywhere;
-}
-.mailbox-search select {
-  display: block;
-  width: 100%;
-  padding: 0.5rem;
-  font: inherit;
-}
-.mailbox-search li {
-  margin-block: 1.25rem;
-  overflow-wrap: anywhere;
-}
-
-.reply-drafts pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  text-align: left;
-}
-.reply-drafts label {
-  display: block;
-  margin: 0.75rem 0;
-}
-.reply-drafts textarea {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-}
-.reply-drafts select {
-  max-width: 100%;
 }
 
 .index-counts {

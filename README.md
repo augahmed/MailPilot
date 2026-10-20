@@ -22,8 +22,7 @@ the immediate scope. Existing Summary remains until a later tested transition.
 Read [AGENTS.md](AGENTS.md) for engineering rules, the single
 [product plan](docs/PRODUCT_PLAN.md) for scope/milestones and
 [architecture](docs/ARCHITECTURE.md) for implemented versus intended boundaries.
-The [documentation audit](docs/DOCUMENTATION_AUDIT.md) explains the reset;
-[legacy records](docs/archive/LEGACY_FEATURES.md) preserve migration/recovery history.
+[Legacy records](docs/archive/LEGACY_FEATURES.md) preserve migration/recovery history.
 
 This bootstrap opens a native desktop window and checks the real Go backend and SQLite database. A healthy startup displays:
 
@@ -173,25 +172,26 @@ backend/
     auth/ credentials/ provider/gmail/   OAuth lifecycle, keyring, Google adapter
     mail/ sync/                    MIME normalization and bounded imports
     classification/                    Local rule engine and starter configuration
-    organize/                          Reviewed Gmail label plans and undo
+    embedding/                         Shared local MiniLM provider and model identity
+    ai/ ai/openai/                     Optional generation and provider transport
     risk/                              Structured offline phishing observations
 frontend/
   src/app/                     Status screen, styles and UI tests
-  src/features/accounts/       Gmail connection controls
-  src/lib/ipc/                 Validated typed health/authentication client
+  src/features/                Gmail, reader, categories, review, indexing, AI and recovery
+  src/lib/ipc/                 Validated typed application commands
 src-tauri/
   src/                         Native lifecycle and private pipe bridge
-  capabilities/                Main-window health and Gmail connection permissions
+  capabilities/                Narrow main-window application permissions
   icons/source.svg             Icon source; raster assets generated at build
-contracts/                     Versioned bootstrap IPC examples
+contracts/                     Versioned IPC and historical rejection fixtures
 scripts/                       Sidecar build and native smoke test
 docs/ARCHITECTURE.md            Overall design and implementation status
 AGENTS.md                      Engineering rules
 ```
 
-Go owns business behavior and persistence. Rust only starts the fixed packaged binary, validates a bounded protocol, and handles native lifecycle; it uses `std::process` rather than installing a shell plugin. The frontend cannot run shell commands, access arbitrary files/SQL, select executables, or invoke arbitrary Go methods. A versioned handshake precedes database initialization; frontend capabilities allow health, Gmail connection, sync, cached-mail, category management, classification review and organization commands. The host alone opens a validated Google authorization URL in the system browser.
+Go owns business behavior and persistence, including reviewed Gmail label plans and undo in `internal/app`. Rust only starts the fixed packaged binary, validates a bounded protocol, and handles native lifecycle; it uses `std::process` rather than installing a shell plugin. The frontend cannot run shell commands, access arbitrary files/SQL, select executables, or invoke arbitrary Go methods. A versioned handshake precedes database initialization; frontend capabilities allow only the commands listed in [the IPC contracts](contracts/README.md). The host alone opens a validated Google authorization URL in the system browser.
 
-The architecture's dependency recommendations are adopted only as needed: SQLite itself uses pure-Go modernc (Apple Silicon inference additionally needs CGO/Xcode command-line tools), React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. TanStack Query, the full Gmail SDK and AI-provider and the single pinned ONNX binding are adopted; additional AI/vector dependencies remain deferred. Current and planned package responsibilities are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
+The architecture's dependency recommendations are adopted only as needed: SQLite itself uses pure-Go modernc (Apple Silicon inference additionally needs CGO/Xcode command-line tools), React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. Local inference uses the single pinned ONNX binding. Gmail and OpenAI adapters use bounded HTTP transport from Go's standard library. Current and planned package responsibilities are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
 
 ## Inbox synchronization
 
@@ -278,9 +278,8 @@ fetch. Attachment downloads and rich HTML display are not implemented.
 - [Gmail setup](docs/GMAIL_SETUP.md), [AI boundaries](docs/GENERATIVE_AI.md),
   [risk features](docs/PHISHING_FEATURES.md) and
   [historical draft recovery](docs/REPLY_DRAFTING.md): focused technical references.
-- [Documentation audit](docs/DOCUMENTATION_AUDIT.md) and
-  [legacy compatibility records](docs/archive/LEGACY_FEATURES.md): disposition of
-  superseded plans, migration evidence and earlier technical reviews.
+- [Legacy compatibility records](docs/archive/LEGACY_FEATURES.md): retired-feature
+  compatibility, superseded plans and migration/recovery evidence.
 
 Installed users perform no model installation; native developers prepare pinned
 artifacts during the build as described in the local embedding contract. Archived plans and old prompt

@@ -7,8 +7,9 @@ defines scope/milestones. The additive local index control is now implemented; r
 commands remain unimplemented. Summary remains implemented. Historical fixtures are
 compatibility/negative-test examples; see [legacy notes](../docs/archive/LEGACY_FEATURES.md).
 
-Active contraction status (2026-10-16): `ask.manage` / `ask_manage` and
-`search.semantic` / `semantic_search` are removed, including indexing. Their
+Retired operations: `ask.manage` / `ask_manage` and
+`search.semantic` / `semantic_search` are removed along with their old indexing paths.
+Current local indexing uses the separate `index.local` contract below. Retired
 fixtures and sections below are historical references. `reply.manage` / `reply_manage`
 accepts only historical status/reconcile/resolve/cancel. Its request contains no
 prompt, body, thread, model, key or creation fields. Old drafting fixtures are archival

@@ -10,7 +10,6 @@ import (
 // account-scoped strings, never numbers or RFC Message-ID header values.
 type AccountID string
 type EmailID string
-type ThreadID string
 type LabelID string
 type CategoryID string
 type ProviderMessageID string
@@ -142,37 +141,6 @@ func (e Email) Validate() error {
 		if attachment.SizeBytes != nil && *attachment.SizeBytes < 0 {
 			return errors.New("attachment size cannot be negative")
 		}
-	}
-	return nil
-}
-
-// EmailThread groups only messages from the same account and provider thread.
-// NextPageToken is opaque; an empty token marks the end of the fetched thread.
-// Never assume fetching one page returns the whole conversation.
-type EmailThread struct {
-	ID            ThreadID
-	AccountID     AccountID
-	ProviderID    ProviderThreadID
-	Emails        []Email
-	NextPageToken string
-}
-
-func (t EmailThread) Validate() error {
-	if t.AccountID == "" || t.ProviderID == "" {
-		return errors.New("thread account and provider IDs are required")
-	}
-	seen := make(map[ProviderMessageID]bool, len(t.Emails))
-	for _, email := range t.Emails {
-		if err := email.Validate(); err != nil {
-			return err
-		}
-		if email.AccountID != t.AccountID || email.ProviderThreadID != t.ProviderID {
-			return errors.New("email does not belong to this thread")
-		}
-		if seen[email.ProviderID] {
-			return errors.New("duplicate message in thread page")
-		}
-		seen[email.ProviderID] = true
 	}
 	return nil
 }

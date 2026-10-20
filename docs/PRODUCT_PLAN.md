@@ -3,8 +3,8 @@
 Updated 2026-10-19. This is the single authoritative product scope and milestone
 plan. [ARCHITECTURE.md](ARCHITECTURE.md) defines technical boundaries;
 [AGENTS.md](../AGENTS.md) defines engineering rules; [IPC contracts](../contracts/README.md)
-describe implemented transport only. [The audit](DOCUMENTATION_AUDIT.md) records
-this documentation reset and the disposition of older plans.
+describe implemented transport only. [Legacy compatibility notes](archive/LEGACY_FEATURES.md)
+record the disposition of older plans and migration/recovery constraints.
 
 The [vector architecture plan](VECTOR_ARCHITECTURE_PLAN.md) supplies the concrete
 reuse/removal map, logical schema, shared interfaces and compatibility gates for

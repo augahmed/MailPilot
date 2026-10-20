@@ -66,12 +66,6 @@ type readOnlyProvider struct{}
 var _ provider.EmailProvider = readOnlyProvider{}
 
 func (readOnlyProvider) Capabilities() provider.Capabilities { return provider.Capabilities{} }
-func (readOnlyProvider) Authenticate(ctx context.Context) (provider.Account, error) {
-	if err := ctx.Err(); err != nil {
-		return provider.Account{}, err
-	}
-	return provider.Account{ID: "account-a", Provider: "fixture", ProviderAccountID: "remote-account", Address: domain.EmailAddress{Address: "person@example.test"}}, nil
-}
 func (readOnlyProvider) ListMessages(ctx context.Context, o provider.ListMessagesOptions) (provider.MessagePage, error) {
 	if err := ctx.Err(); err != nil {
 		return provider.MessagePage{}, err
@@ -90,9 +84,6 @@ func (readOnlyProvider) FetchMessage(ctx context.Context, id domain.ProviderMess
 	}
 	return domain.Email{AccountID: "account-a", ProviderID: id, ReceivedAt: time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)}, nil
 }
-func (readOnlyProvider) FetchThread(context.Context, domain.ProviderThreadID, provider.PageOptions) (domain.EmailThread, error) {
-	return domain.EmailThread{}, provider.ErrUnsupported
-}
 func (readOnlyProvider) ListLabels(context.Context, provider.PageOptions) (provider.LabelPage, error) {
 	return provider.LabelPage{}, nil
 }
@@ -109,10 +100,6 @@ func TestProviderCanBeConsumedWithoutAnSDK(t *testing.T) {
 	var adapter provider.EmailProvider = readOnlyProvider{}
 	var reader provider.Reader = adapter
 	ctx := context.Background()
-	account, err := adapter.Authenticate(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
 	page, err := reader.ListMessages(ctx, provider.ListMessagesOptions{Page: provider.PageOptions{Limit: 10}})
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +108,7 @@ func TestProviderCanBeConsumedWithoutAnSDK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if email.AccountID != account.ID {
+	if email.AccountID != "account-a" || email.AccountID != page.Messages[0].AccountID {
 		t.Fatal("wrong account")
 	}
 	if err := email.Validate(); err != nil {
@@ -134,9 +121,6 @@ func TestProviderCanBeConsumedWithoutAnSDK(t *testing.T) {
 	cancel()
 	if _, err := reader.FetchMessage(cancelled, "remote-message"); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation lost")
-	}
-	if adapter.Capabilities().CreateDrafts {
-		t.Fatal("unsupported draft capability advertised")
 	}
 }
 

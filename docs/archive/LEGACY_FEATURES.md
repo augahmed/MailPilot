@@ -11,8 +11,11 @@ The 2026-10-16 contraction deleted active Ask/mailbox-Q&A, semantic query/index
 services, vector/passage adapters, hybrid/semantic classifiers, MiniLM/Python/ONNX
 worker, downloader and their exclusive tests/corpora. Shared bounded text cleanup
 was moved to `internal/mail`; current composition uses deterministic rules directly.
-No current install/startup path requires a model/interpreter. No user interpreter,
+That contraction removed the old model/interpreter installation path. No user interpreter,
 model directory, cached mail or recovery evidence was deleted by that contraction.
+The current shared pipeline bundles one native MiniLM provider and tokenizer,
+with explicit resumable indexing. See [local embedding](../LOCAL_EMBEDDING.md) and
+[local indexing](../LOCAL_INDEXING.md); the retired Python worker remains absent.
 
 The old `ask.manage`/`ask_manage` and `search.semantic`/`semantic_search` handlers are
 absent and rejected. Historical JSON fixtures remain in [contracts](../../contracts/README.md)
@@ -37,6 +40,9 @@ not permission to drop migration 014. Current executable DDL remains authoritati
   organization previews; historical organization recovery still uses saved evidence.
 - 006/007 organization journals retain immutable digests, before/after membership
   evidence, nullable category references for phishing plans and undo provenance.
+  The older mailbox-action repository also remains: its transition helpers are
+  shared with the organization journal, and its persisted states have compatibility
+  tests. Its lack of production callers does not justify removing recovery machinery.
 - 011 draft journals retain original plan formats, source references, routing/body
   evidence and digests. Read-only reconciliation never becomes draft creation.
 - 014 preserves existing model/enabled settings and OpenAI key identity while adding
@@ -82,13 +88,22 @@ source and new targets from the product plan.
 compatibility content is preserved above. Old corpora/measurements do not qualify
 the future model or prove current performance; do not claim they were rerun.
 
-## Preserved detailed records
+## Documentation cleanup
+
+The superseded documentation-reset audit and earlier maintainability review were
+removed on 2026-10-20. Their current scope and compatibility guidance is covered by
+the product plan, architecture and these notes. The audit's pre-chunking source
+inventory and recommended first implementation task no longer described the code.
+
+Unused mailbox-adapter authentication and thread-fetch contracts, the unsupported
+thread aggregate, retired capability flags and search/editor CSS were also removed.
+OAuth remains owned by `internal/auth`; provider thread IDs and historical draft
+shapes/digests remain intact. All direct dependencies still have current uses.
+
+## Preserved detailed record
 
 - [Contraction record](CONTRACTION_2026-10-16.md): original file disposition, deletion
   order, migration/journal compatibility and hidden-coupling inventory. Paths in its
   historical inventory are snapshots, not a promise that every path still exists.
-- [Earlier maintainability review](ENGINEERING_REVIEW.md): original review observations,
-  including subsequently retired reply/Ask/runtime dependencies; not current status.
-
-Neither archival document overrides the current engineering contract or supplies
-new implementation authorization.
+  This archival document does not override the current engineering contract or supply
+  new implementation authorization.

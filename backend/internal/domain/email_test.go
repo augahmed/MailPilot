@@ -80,28 +80,3 @@ func TestEmailStructuralValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestThreadRejectsCrossAccountWrongThreadAndDuplicateMessages(t *testing.T) {
-	for _, kind := range []string{"valid", "account", "thread", "duplicate", "invalid email", "missing thread id"} {
-		t.Run(kind, func(t *testing.T) {
-			email := message()
-			thread := domain.EmailThread{AccountID: email.AccountID, ProviderID: email.ProviderThreadID, Emails: []domain.Email{email}, NextPageToken: "opaque-next"}
-			switch kind {
-			case "account":
-				thread.Emails[0].AccountID = "other"
-			case "thread":
-				thread.Emails[0].ProviderThreadID = "other"
-			case "duplicate":
-				thread.Emails = append(thread.Emails, email)
-			case "invalid email":
-				thread.Emails[0].ReceivedAt = time.Time{}
-			case "missing thread id":
-				thread.ProviderID = ""
-			}
-			err := thread.Validate()
-			if (err == nil) != (kind == "valid") {
-				t.Fatalf("unexpected validation result: %v", err)
-			}
-		})
-	}
-}

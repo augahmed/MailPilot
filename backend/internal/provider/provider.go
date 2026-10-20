@@ -30,25 +30,8 @@ var (
 // Capabilities describes implemented semantics, not whether OAuth currently
 // grants permission. Unsupported operations must return ErrUnsupported.
 type Capabilities struct {
-	Threads      bool
 	CreateLabels bool
 	ModifyLabels bool
-	CreateDrafts bool
-}
-
-// Account contains identity only: passwords, access/refresh tokens, raw OAuth
-// responses, and credentials must never appear in provider-neutral results.
-type Account struct {
-	ID                domain.AccountID
-	Provider          string
-	ProviderAccountID string
-	Address           domain.EmailAddress
-}
-
-type Authenticator interface {
-	// Authenticate uses the adapter's configured OAuth flow/permissions and OS
-	// credential store. It takes no password. Every adapter is bound to one account.
-	Authenticate(context.Context) (Account, error)
 }
 
 // PageOptions bounds a request. Tokens must be reused only for the originating
@@ -108,7 +91,6 @@ type LabelPage struct {
 type Reader interface {
 	ListMessages(context.Context, ListMessagesOptions) (MessagePage, error)
 	FetchMessage(context.Context, domain.ProviderMessageID) (domain.Email, error)
-	FetchThread(context.Context, domain.ProviderThreadID, PageOptions) (domain.EmailThread, error)
 	ListLabels(context.Context, PageOptions) (LabelPage, error)
 }
 
@@ -121,10 +103,9 @@ type LabelManager interface {
 	RemoveLabel(context.Context, domain.ProviderMessageID, domain.ProviderLabelID) error
 }
 
-// DraftInput is deliberately separate from a received Email: no forged receive
-// time, remote ID, or arbitrary raw headers. Sender is the authenticated account.
-// Empty recipients/body are allowed for incomplete drafts. No attachment upload
-// is exposed. Reply metadata is explicit and validated, never arbitrary headers.
+// DraftInput preserves the historical draft shape for journal validation and
+// read-only reconciliation. It grants no draft-creation capability. Keep its
+// fields and validation compatible with stored plan digests.
 type DraftInput struct {
 	ThreadID      domain.ProviderThreadID
 	MessageID     string // Application-generated RFC Message-ID for read-only reconciliation.
@@ -138,7 +119,7 @@ type DraftInput struct {
 	BodyHTML      *string
 }
 
-// Validate rejects header injection in outgoing draft metadata. Incoming Email
+// Validate rejects header injection in historical draft metadata. Incoming Email
 // validation remains permissive so malformed or hostile mail can be inspected.
 var messageIDPattern = regexp.MustCompile(`^<[A-Za-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[A-Za-z0-9.-]+>$`)
 
@@ -194,7 +175,6 @@ type DraftFinder interface {
 // normalized models and map errors without leaking SDK objects or raw responses.
 // There is intentionally no Send, Delete, Move, or arbitrary request method.
 type EmailProvider interface {
-	Authenticator
 	Reader
 	LabelManager
 	Capabilities() Capabilities

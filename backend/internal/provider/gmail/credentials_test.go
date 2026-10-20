@@ -24,7 +24,6 @@ func TestCredentialFailuresNeverDispatchMailboxRequests(t *testing.T) {
 		name string
 		call func(context.Context, *Provider) error
 	}{
-		{"authenticate", func(ctx context.Context, p *Provider) error { _, err := p.Authenticate(ctx); return err }},
 		{"read", func(ctx context.Context, p *Provider) error {
 			_, err := p.ListMessages(ctx, provider.ListMessagesOptions{Page: provider.PageOptions{Limit: 10}})
 			return err

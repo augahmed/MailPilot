@@ -100,9 +100,6 @@ func TestRetiredDraftCreationAndReadOnlyReconciliation(t *testing.T) {
 	p.baseURL = server.URL
 	p.client = server.Client()
 	ctx := context.Background()
-	if p.Capabilities().CreateDrafts {
-		t.Fatal("retired capability advertised")
-	}
 	if _, ok := any(p).(interface {
 		CreateDraft(context.Context, provider.DraftInput) (provider.DraftReference, error)
 	}); ok {
