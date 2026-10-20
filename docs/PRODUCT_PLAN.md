@@ -10,12 +10,12 @@ The [vector architecture plan](VECTOR_ARCHITECTURE_PLAN.md) supplies the concret
 reuse/removal map, logical schema, shared interfaces and compatibility gates for
 these same milestones. It is a technical supplement, not a second scope/prompt plan.
 
-Status: M1 deterministic source/chunking and the SQLite persistence portion of M2
-are implemented through migrations 015–016, `mail.Chunker`, the pinned offline
-WordPiece tokenizer and `app.CachedChunker` in manual sync. Inference, embedding
-coordination, search, classification and AI milestones are still planned. No model
-weights, new Go dependency or new public command were added. Further work requires
-a scoped implementation request; this document does not start it.
+Status: M1 source/chunking and M2 persistence plus a lazy packaged CPU MiniLM
+provider are implemented. The provider has real synthetic/native and fake-model
+checks; [qualification details](LOCAL_EMBEDDING.md) cover resource/signing/OS limits.
+Embedding scheduling, automatic vector publication, search, semantic classification
+and AI milestones remain planned. No new public inference command or external AI
+consent is added. Further product work requires a scoped implementation request.
 
 ## 1. Product purpose
 

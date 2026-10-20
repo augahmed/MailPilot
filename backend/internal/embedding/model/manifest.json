@@ -1,0 +1,21 @@
+{
+  "modelId": "sentence-transformers/all-MiniLM-L6-v2",
+  "modelRevision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+  "modelFile": "model.onnx",
+  "modelBytes": 90405214,
+  "modelSha256": "6fd5d72fe4589f189f8ebc006442dbb529bb7ce38f8082112682524616046452",
+  "modelUrl": "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/onnx/model.onnx",
+  "runtimeVersion": "1.23.2",
+  "runtimeArchiveBytes": 9999931,
+  "runtimeArchiveSha256": "b4d513ab2b26f088c66891dbbc1408166708773d7cc4163de7bdca0e9bbb7856",
+  "runtimeUrl": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-arm64-1.23.2.tgz",
+  "libraryFile": "libonnxruntime.dylib",
+  "libraryBytes": 35138784,
+  "librarySha256": "d306d2bc768540766c7ed8a1e0ff05d2870c77a934ebeee4a7bafa1b732ef299",
+  "libraryCodeSha256": "f0e8add7cc7354d10ce8fa81cb50ef464f42fe6d85e1791a8e219dd0b59bf1ae",
+  "minimumMacOS": "13.4",
+  "dimensions": 384,
+  "pooling": "attention-mask-mean",
+  "normalization": "l2",
+  "binding": "github.com/yalue/onnxruntime_go@v1.23.0"
+}

@@ -4,12 +4,12 @@ Updated 2026-10-19 for the shared local retrieval direction. This document is th
 technical authority; [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the sole scope/milestone
 plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. The later
 authorized persistence/chunking slices add migrations 015–016, typed storage and
-bounded cached source projection during manual sync. Inference, embedding scheduling,
-retrieval and new IPC remain planned. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
+bounded cached source projection during manual sync. A lazy CPU MiniLM provider
+is now implemented and packaged; embedding scheduling, retrieval and new IPC remain planned. Historical plans are under [archive](archive/LEGACY_FEATURES.md).
 
 [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) is the detailed technical
 supplement for the same scope: exact source reuse/disabled paths, logical shared
-schema, interfaces, revision lifecycle, proposed native model choice and migration/
+schema, interfaces, revision lifecycle, qualified local provider and migration/
 recovery incompatibilities. It adds no second product roadmap or implementation
 permission. Where this overview leaves alternatives open, use that plan's single
 proposed baseline and qualification gates.
@@ -22,7 +22,7 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 
 | Area | Implemented now | Planned or limited |
 | --- | --- | --- |
-| Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | A cached chunker runs within manual sync; no inference runtime/helper or retrieval service is composed. |
+| Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | A cached chunker runs within manual sync; a separate lazy native provider is packaged and tested, with no indexing scheduler/retrieval consumer or inference IPC. |
 | Gmail | System-browser OAuth/keyring; one account; manual bounded initial Inbox and incremental history sync; normalized local cache. | No complete mailbox/Sent/attachment coverage, background scheduling or second email provider. Thread retrieval returns unsupported. |
 | Reader | `mail.read` returns revision-checked paged escaped text; HTML-only bodies use HTML-to-text extraction; metadata and phishing explanations are shown. | No rich HTML sanitizer/renderer, remote content or attachment download. Cold-start restoration checks Gmail online. |
 | Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | No active semantic classifier, automatic full-cache assessment, confirmed-example workflow or user-facing primary-override system. |
@@ -62,6 +62,7 @@ a crashed sidecar disables actions rather than replaying uncertain writes.
 | `backend/internal/app` | Authorized reader/category/review/organization/AI use cases, bounded jobs and consent. Organization logic already lives here; do not invent a parallel package. |
 | `backend/internal/auth`, `credentials` | OAuth sessions, serialized refresh, keyring-only tokens/keys and redacted secret handling. |
 | `backend/internal/provider/gmail`, `sync` | Gmail translation, bounded network calls, import/history and checkpoint consistency. |
+| `backend/internal/embedding` | Lazy local CPU inference and shared model descriptor; no SQLite, mailbox, credentials or product policy. |
 | `backend/internal/mail` | Bounded MIME/charset/text utilities, shared source projections/sections/chunks and pinned offline MiniLM WordPiece tokenizer. No inference/network access. |
 | `backend/internal/repository`, `store/sqlite` | SQL-free consumer contracts, explicit SQL, embedded immutable migrations and transactional data lifecycle. |
 | `backend/internal/classification`, `risk` | Category decisions and independent deterministic risk analysis. |
@@ -140,25 +141,23 @@ Include prefixes within model token limits. Do not split UTF-8, silently truncat
 coverage, drop unique quoted content or treat overlapping chunks as corroboration.
 Missing/oversized/unsupported mail remains visibly partial or unavailable.
 
-## 5. Local model and exact retrieval (planned)
+## 5. Local model provider and planned retrieval
 
-Use one English-first retrieval-capable model and tokenizer bundled in the installer,
-with reviewed redistribution license and pinned artifact/runtime hashes. No user
-Python, arbitrary interpreter/model paths, remote code, inference endpoint or
-post-install download. Loading can be lazy after local semantic enablement. Choose
-one viable native runtime design. The [concrete vector plan](VECTOR_ARCHITECTURE_PLAN.md#6-embedding-modelruntime-decision-and-packaging)
-proposes all-MiniLM-L6-v2 ONNX with one in-process Go/CPU runtime and compatible
-tokenizer, gated on parity/quality/native packaging. It requires a future explicit
-CGO/native-library change because the current sidecar build forces CGO off. No
-helper, second runtime or model artifact is added here; a failed qualification gate
-requires revisiting that single design before implementation.
+The [local embedding contract](LOCAL_EMBEDDING.md) records the implemented single
+MiniLM FP32 ONNX provider, explicit model/artifact/encoding descriptor, 384-dimensional
+masked-mean/L2 outputs, reused tokenizer, lazy initialization, bounded batches,
+native cancellation and cleanup. It is separate from SQL and product services.
+`embedding/model` is the shared pure-Go identity consumed by `mail.ChunkModel`.
+There is no embedding scheduler, cloud inference, automatic external AI or new IPC.
 
-Fingerprint tokenizer, input prefixes, pooling, normalization, dimensions and model/
-runtime versions. Encode queries/passages/categories according to that model's
-compatible conventions. Reject invalid dimensions, non-finite values and zero norms.
-Do not compare new query vectors with an old generation or mix category spaces.
-Corrupt/missing model resources produce an unavailable/repair state while basic
-features continue; never silently switch to a cloud embedding service.
+Apple Silicon builds now enable CGO and bundle checksummed ONNX weights/runtime
+and notices in fixed resources. Runtime lookup is based only on the sidecar's
+location, with no environment/user-selected path or runtime downloads. Signed
+Mach-O verification permits signature-only changes while preserving code identity.
+The qualified dylib requires macOS 13.4+; the app retains ordinary features on its
+13.0 baseline. Other targets/CGO-disabled builds have an unavailable native provider.
+The detailed contract documents the non-preemptible initialization and ad-hoc-signing
+qualification limits. Native model bytes/libraries remain ignored by Git.
 
 Start with exact cosine similarity over account/model-filtered SQLite vectors.
 Stream bounded batches and retain bounded top-K results rather than loading the
@@ -391,9 +390,9 @@ Measure English search quality/category abstention, 10,000-message performance a
 installer resources; publish denominators and misses. Targets are in the product
 plan and remain unmeasured here.
 
-The source/chunk slice is implemented in `internal/mail` and `app.CachedChunker`.
-Next qualify one packaged local inference runtime against the pinned tokenizer and
-model recipe, then extend the existing coordinator/store only as required. Preserve
+The source/chunk slice is implemented in `internal/mail` and `app.CachedChunker`;
+the separate provider/runtime is qualified in `internal/embedding`. Next implement
+only explicitly authorized indexing coordination using that adapter/store. Preserve
 reading, risk and rules' existing cleanup. Do not revive old Ask, add an AI editor
 or replace the application architecture. The sole milestone authority is
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md); further services require explicit authorization.

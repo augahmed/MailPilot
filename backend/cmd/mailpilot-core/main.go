@@ -31,6 +31,9 @@ var version = "0.1.0-dev"
 func main() { os.Exit(run()) }
 
 func run() int {
+	if len(os.Args) == 2 && os.Args[1] == "--embedding-self-test" {
+		return embeddingSelfTest()
+	}
 	logger := logging.New(os.Stderr, slog.LevelInfo)
 	base, err := os.UserConfigDir()
 	if err != nil {

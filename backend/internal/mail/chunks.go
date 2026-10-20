@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"mailpilot.local/core/internal/embedding/model"
 	"mailpilot.local/core/internal/mail/wordpiece"
 	"mailpilot.local/core/internal/repository"
 )
@@ -28,7 +29,7 @@ func NewChunker() (*Chunker, error) {
 	return &Chunker{t}, nil
 }
 func ChunkModel() repository.EmbeddingModel {
-	return repository.EmbeddingModel{ID: wordpiece.ModelID, Version: "1110a243fdf4-wordpiece-v1-subject24-section-v1-" + wordpiece.NormalizationVersion, Dimension: 384}
+	return repository.EmbeddingModel{ID: wordpiece.ModelID, Version: model.Version, Dimension: model.Dimensions}
 }
 
 // ModelInput is the one canonical document recipe for future inference. Subject

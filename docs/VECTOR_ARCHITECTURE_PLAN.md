@@ -2,9 +2,10 @@
 
 Reviewed 2026-10-19 against the current working tree. **Persistence and chunking
 slices implemented:** migrations 015–016, `Store.Chunks()`, `mail.Chunker`, pinned
-local WordPiece tokenization and `app.CachedChunker` during manual sync. Model
-inference, embedding job coordination, retrieval, semantic classification and new
-IPC remain planned. Preserve unrelated work; this plan does not authorize more implementation.
+local WordPiece tokenization and `app.CachedChunker` during manual sync. A single
+lazy CPU MiniLM provider is now implemented and bundled; real inference is qualified
+separately from product workflows. Embedding job coordination, retrieval, semantic
+classification and new IPC remain planned. Preserve unrelated work; this plan does not authorize more implementation.
 
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) remains the sole product scope/milestone authority;
 [ARCHITECTURE.md](ARCHITECTURE.md) describes runtime/trust boundaries. This document
@@ -37,8 +38,8 @@ there is an FTS5 test probe but no product keyword index or search endpoint.
 
 Source composition in `backend/cmd/mailpilot-core/main.go` currently wires
 `RuleBasedClassifier`, `ClassificationReview`, `Organization`, `CachedReader`,
-`AIService` and GET-only `ReplyMaintenance`. It also wires `CachedChunker` into manual sync. It wires no embedding adapter,
-index coordinator or retriever. OpenAI is the only real installed AI adapter;
+`AIService` and GET-only `ReplyMaintenance`. It also wires `CachedChunker` into manual sync. The separate local provider is packaged/tested but not used by a product indexing
+coordinator or retriever. OpenAI is the only real installed AI adapter;
 multiple-provider substitution is supported by the shared boundary and synthetic
 adapters, not evidence of additional shipped providers. Summary still exists.
 
@@ -88,7 +89,7 @@ existing application source, migration, journal, database or model data is delet
 | `frontend/src/features/categories/*`, `classification/*`, `organization/*`, `mailbox/*`, `accounts/*`, `ai/*`, `replies/AIMaintenance*`; `frontend/src/app/App.tsx`, `App.test.tsx`                                                                                                                 | Reuse existing views/settings/recovery. Add bounded search/index/coverage/category/evidence presentation; preserve focus, cancellation and late-response/session clearing. No draft editor or generic chat.                                                           |
 | `frontend/src/lib/ipc/{client,classification,organization,reader,reply,ai}.ts`, associated tests and `retired.test.ts`                                                                                                                                                                              | Extend typed schemas with coordinated contracts; keep archival request rejection and provider secrets out of returned DTOs. No frontend vectors, SQL, raw source injection or model paths.                                                                            |
 | `src-tauri/src/{main,bridge,ai,replies}.rs`, `build.rs`, `capabilities/main.json`                                                                                                                                                                                                                   | Keep host thin, fixed Go sidecar and strict DTO/permission validation. Later permit trusted resource lookup and typed bounded new commands; no index/database/business logic in Rust.                                                                                 |
-| `scripts/build-sidecar.mjs`, `scripts/tauri.mjs`, `scripts/rust-environment.mjs`, `scripts/smoke-desktop.mjs`; `src-tauri/tauri.conf.json`                                                                                                                                                          | Reuse packaging/launch/native smoke. Proposed in-process ONNX requires an explicit future CGO/native-library/resource change; current script forces `CGO_ENABLED=0` and bundles no model resources.                                                                   |
+| `scripts/build-sidecar.mjs`, `scripts/tauri.mjs`, `scripts/rust-environment.mjs`, `scripts/smoke-desktop.mjs`; `src-tauri/tauri.conf.json`                                                                                                                                                          | Reuse packaging/launch/native smoke. Apple Silicon builds now enable CGO and package pinned model/runtime resources. Native inference/offline/signing checks are in `LOCAL_EMBEDDING.md`; other builds keep an unavailable native adapter.                            |
 | `contracts/ai-settings-v1.json`, `email-summary-v1.json`, `draft-recovery-v1.json`, `mail-reader-v1.json`, `classification-v1.json`, `organization-v1.json`, `organization-phishing-v1.json`, `sync-incremental-v1.json`                                                                            | Preserve actual fixtures. Add coordinated versioned retrieval/index/new classification/evidence QA fixtures later; do not silently alter v1 semantic meaning.                                                                                                         |
 | `contracts/ask-v1.json`, `search-semantic-v1.json`, `classification-semantic-v1.json`, `reply-drafting-v1.json`                                                                                                                                                                                     | Keep historical/negative-test fixtures disabled, not active specifications. Preserve historical score/candidate decoding where required.                                                                                                                              |
 | `backend/internal/embedding`, `backend/internal/search`, `backend/internal/ask`, old MiniLM/Python worker/downloader and semantic UI/editor implementations (absent)                                                                                                                                | Do not resurrect historical implementations. Introduce only the minimal new adapter/retriever required below, without copying duplicate workers/caches or a one-vector-per-email search path.                                                                         |
@@ -103,16 +104,16 @@ plan does not request that cleanup. Historical/inert rows are not converted or p
 Use existing packages for normalization, policy and storage. Proposed new paths
 below are reserved design names, not directories/stubs to create in this task:
 
-| Owner                               | Responsibility and exclusion                                                                                                                                                   |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `internal/mail`                     | Source sections, stable mapping and the single shared chunker. Accept a tokenizer supplied by the selected local model adapter; no DB/network/model download.                  |
-| `internal/embedding` (new)          | Small provider-independent batch/tokenizer contract and one concrete local ONNX adapter. No mailbox enumeration, classification, credentials, database or external generation. |
-| `internal/store/sqlite`             | One concrete shared chunk/vector/prototype store plus work/publication and keyword SQL; all business consumers use account-scoped repository methods.                          |
-| `internal/retrieval` (new)          | Bounded exact cosine kernel, shared semantic/hybrid ranking, chunk/message deduplication and source hits. No independent index or embedding worker.                            |
-| `internal/classification`           | Rules plus bounded aggregation of an email's existing chunk vectors against compatible category/example vectors. No mailbox re-embedding or second retriever/store.            |
-| `internal/app`                      | Session/account authorization, one bounded index coordinator, search/review/evidence use cases, consent, progress/cancellation and shutdown.                                   |
-| `internal/ai` and concrete adapters | Approved evidence-question request and normalized answer/citations only; no retrieval tools or mailbox authority.                                                              |
-| React/TypeScript and Tauri/Rust     | Presentation/strict transport and packaged lifecycle. No database/inference ownership or untrusted generic bridge.                                                             |
+| Owner                               | Responsibility and exclusion                                                                                                                                                  |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/mail`                     | Source sections, stable mapping and the single shared chunker. Accept a tokenizer supplied by the selected local model adapter; no DB/network/model download.                 |
+| `internal/embedding` (implemented)  | Bounded lazy CPU ONNX provider, shared model descriptor and reused WordPiece tokenizer. No mailbox enumeration, classification, credentials, database or external generation. |
+| `internal/store/sqlite`             | One concrete shared chunk/vector/prototype store plus work/publication and keyword SQL; all business consumers use account-scoped repository methods.                         |
+| `internal/retrieval` (new)          | Bounded exact cosine kernel, shared semantic/hybrid ranking, chunk/message deduplication and source hits. No independent index or embedding worker.                           |
+| `internal/classification`           | Rules plus bounded aggregation of an email's existing chunk vectors against compatible category/example vectors. No mailbox re-embedding or second retriever/store.           |
+| `internal/app`                      | Session/account authorization, one bounded index coordinator, search/review/evidence use cases, consent, progress/cancellation and shutdown.                                  |
+| `internal/ai` and concrete adapters | Approved evidence-question request and normalized answer/citations only; no retrieval tools or mailbox authority.                                                             |
+| React/TypeScript and Tauri/Rust     | Presentation/strict transport and packaged lifecycle. No database/inference ownership or untrusted generic bridge.                                                            |
 
 One coordinator processes durable local work, with small bounded inference batches
 and low fixed native thread count initially. After chunk publication it marks/runs
@@ -271,8 +272,10 @@ lists are never repeated as model input. A changed context invalidates vector re
 
 `ContentStatus` distinguishes complete/partial/unavailable projected body coverage
 from the cached `BodyState`. Subject-only evidence never claims a complete body.
-No vectors are computed; fresh embedding rows remain pending with NULL data.
-Model recipe: `1110a243fdf4-wordpiece-v1-subject24-section-v1-u17.0.0-nfd17.0.0`, dimension 384;
+The chunking workflow computes no vectors; fresh embedding rows remain pending with
+NULL data. The separate native provider is not yet scheduled to populate them.
+Model recipe: shared `embedding/model.Version`
+(`minilm-1110a243-6fd5d72f-f32-mean-l2-s24-v1-u17.0.0-nfd17.0.0`), dimension 384;
 preprocessing: `email-sections-v1-wp-07eced375cec-256-32-u17.0.0-nfd17.0.0`. Both include the
 Go Unicode and NFD table versions so toolchain upgrades cannot silently reuse
 incompatible vectors. Any algorithm/tokenizer/input
@@ -291,8 +294,9 @@ limit of missing/stale recipes; current recipes skip body reads/tokenization. No
 background scheduler or wider Gmail fetch is added. Source/checkpoints commit first;
 chunking failures leave cached mail readable, report `chunking_failed`, and are
 retried in later manual cache passes. New source/model/preprocessing revisions
-invalidate old work through the existing shared store. Native packaging remains CGO
-free for this slice. Full inference/runtime packaging is still a separate gate.
+invalidate old work through the existing shared store. The separately authorized
+provider now enables CGO on Apple Silicon and packages a verified native runtime.
+No embedding scheduling or automatic vector publication is added to manual sync.
 
 ### Category records using the same pipeline
 
@@ -370,67 +374,51 @@ source/profile change, disconnect, cancel or purge → revoke old work epoch
 
 ## 6. Embedding model/runtime decision and packaging
 
-### Proposed first choice; qualification still required
+### Implemented single provider
 
-Use **`sentence-transformers/all-MiniLM-L6-v2`**, exported ONNX, with one **CPU ONNX
-Runtime session inside the Go core**, behind the narrow embedding adapter. The model
-card documents 384-dimensional vectors, an Apache-2.0 license and a default 256-
-WordPiece truncation limit. This is a compact English-first baseline, not a measured
-MailPilot winner or a promise of retrieval/category accuracy. [Model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2).
+The previously selected **`sentence-transformers/all-MiniLM-L6-v2`** remains the
+model. Its pinned FP32 ONNX export matches the existing tokenizer and passes real
+synthetic relevance, batch/single parity, maximum-batch, normalization and native
+cancellation/reuse tests. No replacement model or second tokenizer was needed.
 
-Use a maintained Go C-API binding, initially evaluating
-[`yalue/onnxruntime_go`](https://github.com/yalue/onnxruntime_go). Reuse the implemented
-`internal/mail/wordpiece` tokenizer rather than introducing a second tokenizer.
-The binding requires CGO and a matching native runtime library. Tokenizer support
-must be proven against the selected artifact's normalization, special tokens,
-input IDs, masks and truncation; a library name is not evidence of parity.
-The ONNX binding/runtime are proposed dependencies, **not installed, pinned or approved by benchmarks**
-in this task. Pin one compatible released binding/runtime/tokenizer combination,
-immutable model revision and SHA-256 manifest before the implementation lands.
+The [local embedding contract](LOCAL_EMBEDDING.md) is the authoritative implementation
+and qualification record for this slice. `internal/embedding` exposes lazy
+`EmbedDocument`, `EmbedQuery`, descriptor and context-aware `Close`; CPU ONNX Runtime
+1.23.2 and `onnxruntime_go v1.23.0` are pinned. Masked-mean pooling/L2 normalization
+produce validated 384-dimensional vectors. Queries use the same symmetric encoder;
+no query instructions from another model are invented. The provider imports neither
+SQLite nor product services. `embedding/model` owns the pure-Go artifact/encoding
+identity used by chunk metadata.
 
-The ONNX transformer output may be token embeddings. Apply the model's attention-
-mask-aware mean pooling and L2 normalization exactly once in the Go adapter unless
-those operations are verified to be part of the bundled graph. Test against frozen
-reference vectors. [Sentence Transformers ONNX guidance](https://www.sbert.net/docs/sentence_transformer/usage/efficiency.html).
+### Native packaging and remaining limits
 
-Reserve room within the model's total token bound for special tokens and any
-subject/section prefix. Start evaluating roughly 224 content tokens with 32-token
-overlap, reducing content capacity when prefix/special tokens require it. Queries,
-category text and passages use the same documented encoding, with input roles
-recorded in policy; do not borrow E5/query-prefix conventions from another model.
-Long category descriptions use the same chunker/aggregation instead of truncation.
+`scripts/prepare-embedding.mjs` acquires checksummed fixed public artifacts only at
+build time. `build-sidecar` now enables CGO for Apple Silicon and Tauri bundles the
+90,405,214-byte model, 35,138,784-byte native library and required notices in fixed
+resources. Tokenizer/configuration/notices remain embedded in the Go core. Installed
+first use performs no download and requires no Python. Weights/runtime binaries are
+ignored by Git; the manifest and module sums are committed source inputs.
 
-### Concrete packaging consequences
+Runtime resource lookup derives only from the fixed sidecar location. Model SHA-256
+and signature-independent Mach-O code fingerprints reject altered artifacts; OS
+signature verification and native re-signing/offline package checks are described
+in the implementation contract. No arbitrary path, executable, plugin provider,
+network endpoint or cloud fallback is exposed. Telemetry is explicitly disabled.
 
-Current `scripts/build-sidecar.mjs` hardcodes `CGO_ENABLED=0`. The proposed binding
-therefore **cannot be added as a drop-in import**. A later native packaging slice
-must explicitly enable CGO for this adapter/core, provide a compatible compiler,
-bundle the matching Apple Silicon runtime library, and test code signing/library
-loading on the named macOS baseline. SQLite can retain its existing driver; do
-not replace the database layer merely to enable inference. [Binding requirements](https://github.com/yalue/onnxruntime_go#requirements),
-[ONNX Runtime C interface](https://onnxruntime.ai/docs/get-started/with-c.html).
+The official arm64 dylib requires **macOS 13.4+**. Ordinary app features retain the
+13.0 baseline, with the provider unavailable before 13.4 or on unsupported targets.
+CPU-only use avoids another GPU/runtime dependency, though the upstream library
+links system Apple frameworks. Batches are capped at four 256-token inputs with
+bounded contexts and native ORT run termination. Session construction itself cannot
+be preempted; callers can cancel waiting and cleanup joins it after it returns.
+There is no hard process-memory cap.
 
-Bundle reviewed ONNX graph/required weights, tokenizer/config/vocabulary, pooling
-policy, immutable artifact manifest, notices and runtime library in fixed app
-resources. Extend Tauri packaging and trusted Go resource resolution; do not pass
-model paths through the WebView or use arbitrary environment library lookup. Build
-preparation may fetch fixed checksummed artifacts from reviewed origins; installed
-first use never downloads them. Keep generated model/library binaries outside Git.
-The trusted packaged origin, dimensions and checksums are verified before loading.
-
-Keep Rust thin and do not add a Python worker, model server or second database.
-Load one local session lazily after enablement with bounded batch/thread limits.
-A missing/corrupt resource leaves ordinary sync, reader, keyword/rule/risk behavior
-available and reports repair/reinstall guidance. External AI settings/keys are
-irrelevant to local inference; no cloud embedding fallback.
-
-The in-process choice reduces process/protocol complexity but shares the native
-runtime's crash/memory boundary with Go. Native cancellation, memory caps, package
-size, tokenizer parity, offline startup and held-out quality are mandatory gates.
-If they fail, revisit the single runtime design explicitly before implementation;
-do not quietly ship two adapters, a dynamic downloader or an unrelated model worker.
-No model/license security or distribution review is claimed complete by choosing a
-candidate. Exact versions, hashes and measured budgets remain an implementation gate.
+Local ad-hoc packaging/offline qualification does not claim Developer ID notarization,
+Gatekeeper distribution approval, other-platform inference, a mailbox quality
+benchmark or 10,000-message throughput. Measured memory/latency, test commands and
+remaining packaging limits are recorded in [LOCAL_EMBEDDING.md](LOCAL_EMBEDDING.md).
+Future embedding scheduling/retrieval/classification must reuse this one adapter,
+model identity, tokenizer and shared chunk store, and still requires authorization.
 
 ## 7. Shared retrieval/classification contracts (planned sketches)
 
@@ -599,7 +587,6 @@ not claim model parity, benchmarks, native ONNX packaging or runtime tests passe
 The important incompatibilities are: historical vectors cannot become the new
 chunk store by renaming; old rule hash/score DTOs cannot carry shared semantic
 freshness without versioned extensions; old plan digests must remain exact; multiple
-legacy assignments cannot be collapsed automatically; current CGO-disabled build
-cannot import the proposed native binding unchanged; current Summary consent cannot
+legacy assignments cannot be collapsed automatically; Apple Silicon packaging now requires CGO and macOS 13.4+ for inference; current Summary consent cannot
 authorize retrieved multi-message evidence. All are handled additively/gated above,
 without deleting data, historical migrations or recovery evidence.

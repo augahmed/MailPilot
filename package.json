@@ -21,7 +21,10 @@
     "lint": "npm run lint --workspace frontend",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "build:icons": "tauri icon src-tauri/icons/source.svg --output src-tauri/icons"
+    "build:icons": "tauri icon src-tauri/icons/source.svg --output src-tauri/icons",
+    "prepare:embedding": "node scripts/prepare-embedding.mjs",
+    "test:embedding:package": "node scripts/smoke-embedding.mjs",
+    "test:embedding:assets": "node --test scripts/embedding-artifacts.test.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.1",

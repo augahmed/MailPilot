@@ -38,3 +38,7 @@ client_secret*.json
 # Downloaded Google desktop OAuth client configuration
 *oauth-client*.json
 *oauth_client*.json
+
+# Pinned embedding weights/runtime prepared at build time; never committed
+src-tauri/resources/embedding/*
+!src-tauri/resources/embedding/README.md

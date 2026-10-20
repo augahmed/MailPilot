@@ -13,7 +13,12 @@ and `index_state`; do not add parallel stores. `internal/mail` owns deterministi
 sections/chunks and the pinned offline `wordpiece` tokenizer; future inference must
 reuse that tokenizer and `mail.ModelInput` recipe or version/rebuild explicitly.
 Manual sync performs bounded local cache preparation; it does no inference.
-Embedding scheduling, retrieval and new IPC remain unimplemented. Preserve unrelated
+One native CPU provider is now implemented in `internal/embedding`; its shared
+`model` identity is used by chunks. Reuse it and the pinned WordPiece tokenizer.
+Model inference is not yet scheduled or exposed through IPC. See
+[local embedding contract](docs/LOCAL_EMBEDDING.md) for bounds, fixed resources,
+cancellation, signing and macOS 13.4+ qualification. Embedding scheduling, retrieval
+and new IPC remain unimplemented. Preserve unrelated
 uncommitted work.
 
 ## Product and scope
@@ -141,10 +146,11 @@ retries; cancellation after remote dispatch may remain uncertain.
 
 For implementation, run relevant Go tests/vet/race, frontend typecheck/lint/tests/build
 and Rust fmt/clippy/tests; use native smoke checks for lifecycle/packaging/rendering.
-The vector plan's proposed in-process ONNX/Go binding requires a later explicit
-CGO/native resource change; current sidecar builds force CGO off. Qualify one bundled
-model/tokenizer/runtime and freeze versions/hashes before adding dependencies. No
-post-install download, cloud fallback or second runtime is implicitly authorized.
+The native MiniLM/ONNX slice enables CGO on Apple Silicon builds and packages
+verified fixed resources; other builds retain an unavailable native adapter. Keep
+model/runtime/binding hashes pinned, never commit weights or native libraries, and
+run real native plus signed/offline package tests for inference/packaging changes.
+No post-install download, cloud fallback or second runtime is authorized.
 Pin and justify dependency changes, preserving lockfiles/checksums. Report failed,
 blocked and unrun checks; never claim completion with required checks failing.
 Preserve keyboard/focus access, readable errors, cancellation and offline/partial states.

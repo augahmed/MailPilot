@@ -13,6 +13,13 @@ if (!host || target !== host)
   throw new Error(
     "Cross-compilation is not configured; build on the target OS/architecture.",
   );
+if (process.platform === "darwin" && process.arch === "arm64") {
+  execFileSync(
+    process.execPath,
+    [join(root, "scripts/prepare-embedding.mjs")],
+    { env, stdio: "inherit" },
+  );
+}
 const version = JSON.parse(
   readFileSync(join(root, "package.json"), "utf8"),
 ).version;
@@ -36,7 +43,12 @@ execFileSync(
   {
     cwd: join(root, "backend"),
     stdio: "inherit",
-    env: { ...env, CGO_ENABLED: "0" },
+    env: {
+      ...env,
+      CGO_ENABLED:
+        process.platform === "darwin" && process.arch === "arm64" ? "1" : "0",
+      MACOSX_DEPLOYMENT_TARGET: "13.0",
+    },
   },
 );
 console.log(`Built Go sidecar for ${target}`);
