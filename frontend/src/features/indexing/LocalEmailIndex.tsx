@@ -109,10 +109,10 @@ export function LocalEmailIndex() {
     >
       <h2 id="local-index-heading">Local Email Index</h2>
       <p>
-        Index all eligible cached messages and enabled category definitions on
-        this device using the bundled CPU model (90 MB on disk; several hundred
-        MB of memory once loaded). No email is sent to an AI provider, and no
-        Gmail fetch is performed.
+        Index all eligible cached messages, enabled category definitions and
+        local assessments on this device using the bundled CPU model (90 MB on
+        disk; several hundred MB of memory once loaded). No email is sent to an
+        AI provider, and no Gmail fetch is performed.
       </p>
       <p role="status" aria-live="polite">
         {error
@@ -155,6 +155,11 @@ export function LocalEmailIndex() {
             Category representations: {status.readyCategories} ready ·{" "}
             {status.partialCategories} partial · {status.pendingCategories}{" "}
             pending of {status.eligibleCategories} enabled.
+          </p>
+          <p>
+            Classification: {status.assessedMessages} assessed ·{" "}
+            {status.pendingAssessments} pending. Suggestions stay local until
+            separately reviewed.
           </p>
           {status.code && <p className="help">{messages[status.code]}</p>}
         </>

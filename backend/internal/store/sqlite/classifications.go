@@ -38,7 +38,14 @@ func classificationInputs(ctx context.Context, tx *sql.Tx, account domain.Accoun
 	return stored.Email, categories, rows.Err()
 }
 func validClassificationRun(run domain.ClassificationRun) bool {
-	if run.AccountID == "" || run.EmailID == "" || len(run.InputHash) != 64 || strings.TrimSpace(run.ClassifierName) == "" || len(run.ClassifierName) > 100 || strings.TrimSpace(run.ClassifierVersion) == "" || len(run.ClassifierVersion) > 100 || run.Timestamp.IsZero() || len(run.Results) > 1 || len(run.Candidates) > 5 || len(run.Reason) > 160 || !utf8.ValidString(run.Reason) || len(run.UsedClassifier) > 100 {
+	if !validSemanticEvidence(run) {
+		return false
+	}
+	maxResults := 1
+	if run.Semantic != nil {
+		maxResults = repository.MaxSemanticCategories
+	}
+	if run.AccountID == "" || run.EmailID == "" || len(run.InputHash) != 64 || strings.TrimSpace(run.ClassifierName) == "" || len(run.ClassifierVersion) > 100 || strings.TrimSpace(run.ClassifierVersion) == "" || len(run.ClassifierName) > 100 || run.Timestamp.IsZero() || len(run.Results) > maxResults || len(run.Candidates) > 5 || len(run.Reason) > 160 || !utf8.ValidString(run.Reason) || len(run.UsedClassifier) > 100 {
 		return false
 	}
 	if run.Reason != "" && (strings.TrimSpace(run.Reason) == "" || strings.TrimSpace(run.UsedClassifier) == "" || !utf8.ValidString(run.UsedClassifier)) {
@@ -62,10 +69,10 @@ func validClassificationRun(run domain.ClassificationRun) bool {
 		if result.AccountID != run.AccountID || result.EmailID != run.EmailID || result.CategoryID == "" || seen[result.CategoryID] || result.ClassifierName != run.ClassifierName || result.ClassifierVersion != run.ClassifierVersion || result.InputHash != run.InputHash || result.Timestamp.UnixMilli() != run.Timestamp.UnixMilli() || math.IsNaN(result.Confidence) || result.Confidence <= 0 || result.Confidence > 1 || len(result.Reasons) == 0 || len(result.Reasons) > 6 {
 			return false
 		}
-		if result.ScoreKind != "" && result.ScoreKind != "rule_confidence" && result.ScoreKind != "cosine_similarity" {
+		if result.ScoreKind != "" && result.ScoreKind != "rule_confidence" && result.ScoreKind != "cosine_similarity" && result.ScoreKind != "user_assignment" {
 			return false
 		}
-		if result.ScoreKind == "cosine_similarity" && (len(run.Candidates) == 0 || run.Candidates[0].CategoryID != result.CategoryID || run.Candidates[0].Similarity != result.Confidence) {
+		if result.ScoreKind == "cosine_similarity" && run.Semantic == nil && (len(run.Candidates) == 0 || run.Candidates[0].CategoryID != result.CategoryID || run.Candidates[0].Similarity != result.Confidence) {
 			return false
 		}
 		seen[result.CategoryID] = true
@@ -81,61 +88,84 @@ func (r *classificationRepository) Replace(ctx context.Context, run domain.Class
 	if !validClassificationRun(run) {
 		return repository.ErrInvalid
 	}
-	return r.store.transaction(ctx, func(tx *sql.Tx) error {
-		email, categories, err := classificationInputs(ctx, tx, run.AccountID, run.EmailID)
+	return r.store.transaction(ctx, func(tx *sql.Tx) error { return replaceClassification(ctx, tx, run) })
+}
+func replaceClassification(ctx context.Context, tx *sql.Tx, run domain.ClassificationRun) error {
+	if !validClassificationRun(run) {
+		return repository.ErrInvalid
+	}
+	email, categories, err := classificationInputs(ctx, tx, run.AccountID, run.EmailID)
+	if err != nil {
+		return err
+	}
+	if !classification.FreshInput(run, email, categories) {
+		return repository.ErrConflict
+	}
+	semantic := ""
+	if run.Semantic != nil {
+		current, err := semanticSnapshot(ctx, tx, run.AccountID, run.EmailID, repository.IndexProfileFromSemantic(run.Semantic.Profile))
 		if err != nil {
 			return err
 		}
-		if run.InputHash != classification.InputHash(email, categories) {
+		if !semanticMatches(current, run) {
 			return repository.ErrConflict
 		}
-		enabled := map[domain.CategoryID]bool{}
-		for _, c := range categories {
-			enabled[c.ID] = c.Enabled
+		data, err := json.Marshal(run.Semantic)
+		if err != nil || len(data) > 1024*1024 {
+			return repository.ErrInvalid
 		}
-		for _, candidate := range run.Candidates {
-			if !enabled[candidate.CategoryID] {
-				return repository.ErrConflict
-			}
-		}
-		for _, result := range run.Results {
-			if !enabled[result.CategoryID] {
-				return repository.ErrConflict
-			}
-		}
-		var previous int64
-		err = tx.QueryRowContext(ctx, "SELECT timestamp FROM classification_runs WHERE account_id=? AND email_id=?", run.AccountID, run.EmailID).Scan(&previous)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if err == nil && previous > run.Timestamp.UnixMilli() {
+		semantic = string(data)
+	}
+	enabled := map[domain.CategoryID]bool{}
+	for _, c := range categories {
+		enabled[c.ID] = c.Enabled
+	}
+	for _, candidate := range run.Candidates {
+		if !enabled[candidate.CategoryID] {
 			return repository.ErrConflict
 		}
-		candidates, err := json.Marshal(append([]domain.ClassificationCandidate{}, run.Candidates...))
+	}
+	for _, result := range run.Results {
+		if !enabled[result.CategoryID] && result.ScoreKind != "user_assignment" {
+			return repository.ErrConflict
+		}
+	}
+	var previous int64
+	err = tx.QueryRowContext(ctx, "SELECT timestamp FROM classification_runs WHERE account_id=? AND email_id=?", run.AccountID, run.EmailID).Scan(&previous)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && previous > run.Timestamp.UnixMilli() {
+		return repository.ErrConflict
+	}
+	candidates, err := json.Marshal(append([]domain.ClassificationCandidate{}, run.Candidates...))
+	if err != nil {
+		return repository.ErrInvalid
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO classification_runs(account_id,email_id,classifier_name,classifier_version,input_hash,timestamp,used_classifier,reason,candidates_json,semantic_json) VALUES(?,?,?,?,?,?,?,?,?,?)
+   ON CONFLICT(email_id) DO UPDATE SET classifier_name=excluded.classifier_name,classifier_version=excluded.classifier_version,input_hash=excluded.input_hash,timestamp=excluded.timestamp,used_classifier=excluded.used_classifier,reason=excluded.reason,candidates_json=excluded.candidates_json,semantic_json=excluded.semantic_json`, run.AccountID, run.EmailID, run.ClassifierName, run.ClassifierVersion, run.InputHash, run.Timestamp.UnixMilli(), run.UsedClassifier, run.Reason, string(candidates), semantic)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM classification_results WHERE account_id=? AND email_id=?", run.AccountID, run.EmailID); err != nil {
+		return err
+	}
+	for _, result := range run.Results {
+		if result.ScoreKind == "user_assignment" {
+			continue
+		} // Assignments live in their existing/preference records, never the prediction table.
+		reasons, err := json.Marshal(result.Reasons)
 		if err != nil {
 			return repository.ErrInvalid
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO classification_runs(account_id,email_id,classifier_name,classifier_version,input_hash,timestamp,used_classifier,reason,candidates_json) VALUES(?,?,?,?,?,?,?,?,?)
-   ON CONFLICT(email_id) DO UPDATE SET classifier_name=excluded.classifier_name,classifier_version=excluded.classifier_version,input_hash=excluded.input_hash,timestamp=excluded.timestamp,used_classifier=excluded.used_classifier,reason=excluded.reason,candidates_json=excluded.candidates_json`, run.AccountID, run.EmailID, run.ClassifierName, run.ClassifierVersion, run.InputHash, run.Timestamp.UnixMilli(), run.UsedClassifier, run.Reason, string(candidates))
+		_, err = tx.ExecContext(ctx, `INSERT INTO classification_results(account_id,email_id,category_id,confidence,classifier_version,input_hash,explanation,assessed_at,classifier_name,reasons_json,score_kind) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, result.AccountID, result.EmailID, result.CategoryID, result.Confidence, result.ClassifierVersion, result.InputHash, strings.Join(result.Reasons, "\n"), result.Timestamp.UnixMilli(), result.ClassifierName, string(reasons), result.ScoreKind)
 		if err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, "DELETE FROM classification_results WHERE account_id=? AND email_id=?", run.AccountID, run.EmailID); err != nil {
-			return err
-		}
-		for _, result := range run.Results {
-			reasons, err := json.Marshal(result.Reasons)
-			if err != nil {
-				return repository.ErrInvalid
-			}
-			_, err = tx.ExecContext(ctx, `INSERT INTO classification_results(account_id,email_id,category_id,confidence,classifier_version,input_hash,explanation,assessed_at,classifier_name,reasons_json,score_kind) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, result.AccountID, result.EmailID, result.CategoryID, result.Confidence, result.ClassifierVersion, result.InputHash, strings.Join(result.Reasons, "\n"), result.Timestamp.UnixMilli(), result.ClassifierName, string(reasons), result.ScoreKind)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	}
+	return nil
 }
+
 func (r *classificationRepository) Get(ctx context.Context, account domain.AccountID, id domain.EmailID) (domain.ClassificationRun, error) {
 	run := domain.ClassificationRun{AccountID: account, EmailID: id, Results: []domain.ClassificationResult{}}
 	if account == "" || id == "" {
@@ -143,8 +173,8 @@ func (r *classificationRepository) Get(ctx context.Context, account domain.Accou
 	}
 	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
 		var timestamp int64
-		var candidates string
-		if err := tx.QueryRowContext(ctx, "SELECT classifier_name,classifier_version,input_hash,timestamp,used_classifier,reason,candidates_json FROM classification_runs WHERE account_id=? AND email_id=?", account, id).Scan(&run.ClassifierName, &run.ClassifierVersion, &run.InputHash, &timestamp, &run.UsedClassifier, &run.Reason, &candidates); err != nil {
+		var candidates, semantic string
+		if err := tx.QueryRowContext(ctx, "SELECT classifier_name,classifier_version,input_hash,timestamp,used_classifier,reason,candidates_json,semantic_json FROM classification_runs WHERE account_id=? AND email_id=?", account, id).Scan(&run.ClassifierName, &run.ClassifierVersion, &run.InputHash, &timestamp, &run.UsedClassifier, &run.Reason, &candidates, &semantic); err != nil {
 			return err
 		}
 		if json.Unmarshal([]byte(candidates), &run.Candidates) != nil {
@@ -158,7 +188,22 @@ func (r *classificationRepository) Get(ctx context.Context, account domain.Accou
 		if err != nil {
 			return err
 		}
-		if classification.InputHash(email, categories) != run.InputHash {
+		if semantic != "" {
+			if len(semantic) > 1024*1024 || json.Unmarshal([]byte(semantic), &run.Semantic) != nil || run.Semantic == nil {
+				return repository.ErrStorage
+			}
+			if run.Semantic.Version != classification.SemanticVersion {
+				return repository.ErrConflict
+			}
+			current, err := semanticSnapshot(ctx, tx, account, id, repository.IndexProfileFromSemantic(run.Semantic.Profile))
+			if err != nil {
+				return err
+			}
+			if !semanticMatches(current, run) {
+				return repository.ErrConflict
+			}
+		}
+		if !classification.FreshInput(run, email, categories) {
 			return repository.ErrConflict
 		}
 		rows, err := tx.QueryContext(ctx, "SELECT category_id,confidence,classifier_name,classifier_version,input_hash,reasons_json,assessed_at,score_kind FROM classification_results WHERE account_id=? AND email_id=? ORDER BY confidence DESC,category_id", account, id)
@@ -181,6 +226,9 @@ func (r *classificationRepository) Get(ctx context.Context, account domain.Accou
 		}
 		if err = rows.Err(); err != nil {
 			return err
+		}
+		if run.Semantic != nil && run.Semantic.State == "assigned" && len(run.Semantic.Assigned) == 1 && len(run.Results) == 0 {
+			run.Results = append(run.Results, domain.ClassificationResult{AccountID: account, EmailID: id, CategoryID: run.Semantic.Assigned[0], Confidence: 1, ScoreKind: "user_assignment", ClassifierName: run.ClassifierName, ClassifierVersion: run.ClassifierVersion, InputHash: run.InputHash, Timestamp: run.Timestamp, Reasons: []string{"Explicit user assignment; no semantic probability is claimed."}})
 		}
 		if !validClassificationRun(run) {
 			return repository.ErrStorage

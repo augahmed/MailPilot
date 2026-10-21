@@ -1,12 +1,12 @@
 # Shared email chunk-and-vector architecture plan
 
 Reviewed 2026-10-20 against the current working tree. **Persistence and chunking
-slices implemented:** migrations 015–018, `Store.Chunks()`, `mail.Chunker`, pinned
+slices implemented:** migrations 015–019, `Store.Chunks()`, `mail.Chunker`, pinned
 local WordPiece tokenization and `app.CachedChunker` during manual sync. A single
 lazy CPU MiniLM provider is now implemented and bundled; real inference is qualified
 in the explicit resumable local indexing workflow. `app.LocalIndex`, durable
 generation-fenced storage and the Local Email Index UI/`index.local` controls are
-implemented. Shared exact vector retrieval and its UI are now implemented ([contract/evaluation](VECTOR_SEARCH.md)); semantic classification and keyword/hybrid retrieval remain planned. Preserve unrelated work; this plan does not authorize more implementation.
+implemented. Shared exact vector retrieval and its UI are now implemented ([contract/evaluation](VECTOR_SEARCH.md)); shared semantic classification and primary preferences are now implemented ([evaluation](SEMANTIC_CLASSIFICATION.md)); keyword/hybrid retrieval remains planned. Preserve unrelated work; this plan does not authorize more implementation.
 
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) remains the sole product scope/milestone authority;
 [ARCHITECTURE.md](ARCHITECTURE.md) describes runtime/trust boundaries. This document
@@ -44,15 +44,16 @@ indexing and by the shared `retrieval.VectorSearch` for explicit local queries. 
 multiple-provider substitution is supported by the shared boundary and synthetic
 adapters, not evidence of additional shipped providers. Summary still exists.
 
-There are 18 migration files; 015 adds shared chunk persistence, 016 adds source
+There are 19 migration files; 015 adds shared chunk persistence, 016 adds source
 provenance/context plus independent projected body coverage, and 017 adds durable
 job/model identities, message failure metadata and cache-removal fences. Migration
-018 adds shared category prototypes and explicit confirmed-example references.
+018 adds shared category prototypes and explicit confirmed-example references;
+019 adds versioned semantic assessments, primary preferences and revision fences.
 Historical vector tables are inert. The current AI interface only summarizes one
 selected cached email. New retrieval/semantic classification/evidence QA cannot be
 enabled by changing settings or restoring archived UI handlers.
 
-Target English first, about 10,000 cached emails, one primary category suggestion
+Target English first, about 10,000 cached emails, one or several close category suggestions
 with uncertainty allowed, bundled model/tokenizer, no user Python or first-use
 model download. Cache size is not permission to widen bounded Inbox sync, fetch
 attachments or promise uncached history/Sent coverage. No composition, draft
@@ -328,7 +329,7 @@ Synthetic offline native performance is recorded in the indexing contract; targe
 `category_prototypes` and `category_examples` are implemented by migration 018,
 sharing `app.LocalIndex` and the local provider. [CATEGORY_VECTORS.md](CATEGORY_VECTORS.md)
 records the versioned aggregation, confirmation, invalidation and inspection contract.
-Primary preferences and semantic assessment extensions below remain planned.
+Primary preferences and semantic assessment extensions are now implemented by migration 019; see the classification contract.
 
 | Proposed extension            | Relationship to the shared store                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -513,8 +514,9 @@ unreviewed neighbors as category labels.
 Aggregate a bounded number of nonoverlapping section-weighted matches per category
 rather than the unbounded best score from every chunk. User primary corrections
 win, useful decisive rules constrain/fallback, explicit rule conflicts abstain, and
-semantic decisions require a measured positive score threshold and runner-up margin. At most
-one primary suggestion is returned, with supporting chunk IDs and category/example
+semantic decisions require a positive evidence score threshold. The user-selected
+0.03 lead includes every close category above the 0.20 floor; one or several
+suggestions are returned, with supporting chunk IDs and category/example
 provenance. Score kind and uncertainty are explicit; the 0.60 rule gate must never
 be reused as a cosine probability threshold.
 

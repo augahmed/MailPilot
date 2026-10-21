@@ -77,16 +77,37 @@ pub struct CategoryPage {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClassificationRequest {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub email_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub category_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub revision: String,
     pub operation: String,
     pub account_id: String,
     pub offset: u32,
 }
 impl ClassificationRequest {
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         self.account_id.len() <= 100
             && self.offset <= 1_000_000
-            && (self.operation == "list"
-                || (self.operation == "run" && !self.account_id.is_empty()))
+            && self.email_id.len() <= 100
+            && self.category_id.len() <= 100
+            && match self.operation.as_str() {
+                "list" | "run" => {
+                    (self.operation == "list" || !self.account_id.is_empty())
+                        && self.email_id.is_empty()
+                        && self.category_id.is_empty()
+                        && self.revision.is_empty()
+                }
+                "assigned" | "unclassified" | "auto" => {
+                    !self.account_id.is_empty()
+                        && !self.email_id.is_empty()
+                        && crate::semantic_review::hash(&self.revision)
+                        && ((self.operation == "assigned") != self.category_id.is_empty())
+                }
+                _ => false,
+            }
     }
 }
 #[derive(Deserialize, Serialize)]
@@ -114,6 +135,14 @@ pub struct ClassificationAssessment {
 #[serde(deny_unknown_fields)]
 pub struct ClassificationRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic: Option<crate::semantic_review::SemanticReview>,
+    #[serde(
+        default,
+        rename = "readerRevision",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub reader_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assessment: Option<ClassificationAssessment>,
     pub email_id: String,
     pub sender: String,
@@ -129,6 +158,8 @@ pub struct ClassificationRow {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClassificationPage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category_options: Option<Vec<crate::semantic_review::ReviewCategory>>,
     pub account_id: String,
     pub rows: Vec<ClassificationRow>,
     pub has_more: bool,
@@ -136,6 +167,113 @@ pub struct ClassificationPage {
     pub errors: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
+}
+
+impl ClassificationPage {
+    pub(crate) fn valid(&self) -> bool {
+        self.account_id.len() <= 100
+            && self.rows.len() <= 5
+            && self.processed <= 5
+            && self.errors <= 5
+            && self.category_options.as_ref().is_none_or(|c| {
+                c.len() <= 100
+                    && c.iter().all(|v| {
+                        !v.id.is_empty() && v.id.len() <= 100 && v.name.chars().count() <= 101
+                    })
+            })
+            && self.rows.iter().all(|row| {
+                let predicted = row.state == "classified"
+                    || row.state == "suggested"
+                    || (row.state == "assigned"
+                        && row.semantic.as_ref().is_some_and(|s| s.assigned.len() == 1));
+                let reviewed = ["classified", "suggested", "assigned", "unclassified"]
+                    .contains(&row.state.as_str());
+                !row.email_id.is_empty()
+                    && row.email_id.len() <= 100
+                    && row.predictions.len() <= 100
+                    && row.predictions.iter().enumerate().all(|(i, p)| {
+                        !row.predictions[..i]
+                            .iter()
+                            .any(|previous| previous.category_id == p.category_id)
+                    })
+                    && (row.predictions.len() <= 1
+                        || (row.state == "suggested"
+                            && row
+                                .assessment
+                                .as_ref()
+                                .is_some_and(|a| a.used_classifier == "semantic")
+                            && row
+                                .predictions
+                                .iter()
+                                .all(|p| p.score_kind.as_deref() == Some("cosine_similarity"))))
+                    && (row.state != "suggested"
+                        || !row
+                            .assessment
+                            .as_ref()
+                            .is_some_and(|a| a.used_classifier == "semantic")
+                        || row.semantic.as_ref().is_some_and(|sem| {
+                            let best = sem.scores.first().map_or(-1.0, |s| s.score);
+                            let expected: Vec<_> = sem
+                                .scores
+                                .iter()
+                                .filter(|s| {
+                                    s.score >= sem.minimum_score
+                                        && best - s.score <= sem.minimum_margin + 1e-12
+                                })
+                                .collect();
+                            expected.len() == row.predictions.len()
+                                && expected.iter().zip(&row.predictions).all(|(s, p)| {
+                                    s.category_id == p.category_id && s.score == p.confidence
+                                })
+                        }))
+                    && predicted == (!row.predictions.is_empty())
+                    && reviewed == row.timestamp.is_some()
+                    && [
+                        "not_reviewed",
+                        "classified",
+                        "suggested",
+                        "assigned",
+                        "unclassified",
+                        "stale",
+                        "error",
+                    ]
+                    .contains(&row.state.as_str())
+                    && row.semantic.as_ref().is_none_or(|s| {
+                        s.valid()
+                            && s.state == row.state
+                            && row
+                                .reader_revision
+                                .as_ref()
+                                .is_some_and(|r| crate::semantic_review::hash(r))
+                    })
+                    && (!["suggested", "assigned"].contains(&row.state.as_str())
+                        || row.semantic.is_some())
+                    && row.predictions.iter().all(|p| {
+                        row.semantic.as_ref().is_none_or(|sem| {
+                            p.classifier_version == sem.classifier_version
+                                && match p.score_kind.as_deref() {
+                                    Some("cosine_similarity") => sem.scores.iter().any(|s| {
+                                        s.category_id == p.category_id && s.score == p.confidence
+                                    }),
+                                    Some("user_assignment") => {
+                                        sem.assigned.len() == 1
+                                            && sem.assigned[0].id == p.category_id
+                                    }
+                                    _ => true,
+                                }
+                        }) && p.confidence.is_finite()
+                            && p.confidence > 0.0
+                            && p.confidence <= 1.0
+                            && p.email_id == row.email_id
+                            && Some(p.timestamp) == row.timestamp
+                            && p.score_kind.as_ref().is_none_or(|k| {
+                                k == "rule_confidence"
+                                    || ((k == "cosine_similarity" || k == "user_assignment")
+                                        && row.semantic.is_some())
+                            })
+                    })
+            })
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -210,6 +348,8 @@ pub struct OrganizationRisk {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrganizationRow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phishing: Option<OrganizationRisk>,
     pub email_id: String,
@@ -755,11 +895,20 @@ impl Bridge {
         if !request.valid() {
             return Err("Invalid classification request".into());
         }
-        serde_json::from_value(self.request(
+        let account = request.account_id.clone();
+        let result: ClassificationPage = serde_json::from_value(self.request(
             "classification.review",
             serde_json::to_value(request).map_err(|_| "Invalid classification request")?,
         )?)
-        .map_err(|_| "Invalid classification response".into())
+        .map_err(|_| "Invalid classification response")?;
+        if !result.valid()
+            || (!account.is_empty()
+                && !result.account_id.is_empty()
+                && account != result.account_id)
+        {
+            return Err("Invalid classification response".into());
+        }
+        Ok(result)
     }
     pub fn categories(&mut self, request: CategoryRequest) -> Result<CategoryPage, String> {
         if !request.valid() {

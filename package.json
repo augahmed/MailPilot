@@ -27,7 +27,8 @@
     "test:embedding:assets": "node --test scripts/embedding-artifacts.test.mjs",
     "test:indexing:native": "node scripts/smoke-indexing.mjs",
     "test:search:native": "node scripts/smoke-search.mjs",
-    "test:categories:native": "node scripts/smoke-categories.mjs"
+    "test:categories:native": "node scripts/smoke-categories.mjs",
+    "test:classification:native": "node scripts/smoke-classification.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.1",

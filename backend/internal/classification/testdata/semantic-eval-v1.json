@@ -1,0 +1,677 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "confirmed-jobs-01",
+      "split": "confirmed",
+      "category": "Jobs",
+      "subject": "Next stage with Alder Robotics",
+      "body": "Our recruiting team would like you to meet the engineering panel next Tuesday. Reply with your availability for the software developer interview."
+    },
+    {
+      "id": "confirmed-school-01",
+      "split": "confirmed",
+      "category": "School",
+      "subject": "Lab coursework due Wednesday",
+      "body": "Please submit your biology lab report through the course portal. Office hours with Professor Chen are on Monday afternoon."
+    },
+    {
+      "id": "confirmed-receipts-01",
+      "split": "confirmed",
+      "category": "Receipts",
+      "subject": "Payment received for your order",
+      "body": "Thank you for purchasing the desk lamp. Order LAMP-138 has been paid in full. Total paid $42.50. Your package will ship tomorrow."
+    },
+    {
+      "id": "confirmed-finance-01",
+      "split": "confirmed",
+      "category": "Finance",
+      "subject": "Your monthly account summary",
+      "body": "The bank statement for your checking account ending 6321 is now available. Review deposits, withdrawals, interest, and the current balance."
+    },
+    {
+      "id": "confirmed-newsletters-01",
+      "split": "confirmed",
+      "category": "Newsletters",
+      "subject": "The weekly developer digest",
+      "body": "This week in our subscriber edition: framework releases, community projects, and developer tools. You receive this recurring digest because you subscribed. Manage preferences or unsubscribe below."
+    },
+    {
+      "id": "confirmed-personal-01",
+      "split": "confirmed",
+      "category": "Personal",
+      "subject": "Dinner at our place on Saturday?",
+      "body": "Hi cousin! We are making pasta Saturday night and would love to catch up with you and the family. Can you bring the board game? Love, Nina."
+    },
+    {
+      "id": "tune-jobs-01",
+      "split": "tune",
+      "category": "Jobs",
+      "subject": "Let us schedule your technical conversation",
+      "body": "The hiring panel at Harbor Systems wants to discuss your experience for the backend engineer position. Choose a time for a video interview this week."
+    },
+    {
+      "id": "tune-jobs-02",
+      "split": "tune",
+      "category": "Jobs",
+      "subject": "Thank you for applying to Cedar Labs",
+      "body": "We received your application for the data analyst position. Our recruiting team will review your resume and contact you about the next hiring steps."
+    },
+    {
+      "id": "tune-jobs-03",
+      "split": "tune",
+      "category": "Jobs",
+      "subject": "Update on your candidacy",
+      "body": "After reviewing the assessment, we have decided to move forward with another candidate for this position. Thank you for your interest in joining our team."
+    },
+    {
+      "id": "tune-jobs-04",
+      "split": "tune",
+      "category": "Jobs",
+      "subject": "A quick call with our recruiter",
+      "body": "Your profile looks like a strong fit for the platform engineering opening. Can you share your resume and availability for an introductory screening call?"
+    },
+    {
+      "id": "tune-jobs-05",
+      "split": "tune",
+      "category": "Jobs",
+      "subject": "Offer of employment from Northstar",
+      "body": "We are pleased to offer you the operations associate role. The attached offer describes salary, benefits, and the proposed start date. Please sign by Friday."
+    },
+    {
+      "id": "tune-jobs-06",
+      "split": "tune",
+      "category": "Jobs",
+      "subject": "Onsite agenda for the design role",
+      "body": "You will meet the product hiring team at 10 am, present your portfolio, and complete a design exercise. Please confirm your attendance for this interview."
+    },
+    {
+      "id": "tune-school-01",
+      "split": "tune",
+      "category": "School",
+      "subject": "Enrollment opens for the spring term",
+      "body": "Students may register for classes starting Monday. Check degree requirements and meet your academic advisor before selecting courses."
+    },
+    {
+      "id": "tune-school-02",
+      "split": "tune",
+      "category": "School",
+      "subject": "Your calculus problem set",
+      "body": "The homework covering derivatives is due at midnight in the learning portal. Bring questions to the teaching assistant during office hours."
+    },
+    {
+      "id": "tune-school-03",
+      "split": "tune",
+      "category": "School",
+      "subject": "History seminar room change",
+      "body": "Tomorrow our class meets in room 314 instead of the library. Read chapters seven and eight before the seminar discussion."
+    },
+    {
+      "id": "tune-school-04",
+      "split": "tune",
+      "category": "School",
+      "subject": "Grade posted for your final exam",
+      "body": "Your chemistry exam grade and instructor feedback are available in the student portal. Contact the department about academic appeals."
+    },
+    {
+      "id": "tune-school-05",
+      "split": "tune",
+      "category": "School",
+      "subject": "Campus housing application deadline",
+      "body": "Returning students must complete their residence hall preferences by April 8. The university housing office will email room assignments next month."
+    },
+    {
+      "id": "tune-school-06",
+      "split": "tune",
+      "category": "School",
+      "subject": "Submit your capstone draft",
+      "body": "Please upload the thesis introduction and bibliography for my feedback before our supervisor meeting. Graduation requirements include completion of this capstone project."
+    },
+    {
+      "id": "tune-receipts-01",
+      "split": "tune",
+      "category": "Receipts",
+      "subject": "Order #PN-8302 confirmed",
+      "body": "Thanks for buying running shoes from Pine Store. Total charged $89.00 to your card. Here is your itemized receipt and estimated delivery date."
+    },
+    {
+      "id": "tune-receipts-02",
+      "split": "tune",
+      "category": "Receipts",
+      "subject": "Invoice paid: Harbor Hosting",
+      "body": "Your payment of $12.00 for this month of web hosting was successful. Invoice HH-104 is settled. Keep this payment receipt for your records."
+    },
+    {
+      "id": "tune-receipts-03",
+      "split": "tune",
+      "category": "Receipts",
+      "subject": "Your package has shipped",
+      "body": "The coffee grinder you purchased has left our warehouse. Track order CG-79 with the carrier. This shipment contains one grinder and a cleaning brush."
+    },
+    {
+      "id": "tune-receipts-04",
+      "split": "tune",
+      "category": "Receipts",
+      "subject": "Refund processed for your return",
+      "body": "We received the returned jacket and refunded $64.99 to the original payment method. Order JKT-810 is now closed. Allow three business days for the credit."
+    },
+    {
+      "id": "tune-receipts-05",
+      "split": "tune",
+      "category": "Receipts",
+      "subject": "Thanks for your ride",
+      "body": "You traveled from Oak Street to Central Station on Monday at 8:30 am. Fare $15.20, tip $2.00, total paid $17.20. This is your ride receipt."
+    },
+    {
+      "id": "tune-receipts-06",
+      "split": "tune",
+      "category": "Receipts",
+      "subject": "Your grocery delivery summary",
+      "body": "Delivered apples, milk, and bread for order GR-191. Subtotal $23.10, delivery $3.00, total charged $26.10. Download your itemized purchase receipt."
+    },
+    {
+      "id": "tune-finance-01",
+      "split": "tune",
+      "category": "Finance",
+      "subject": "Checking statement for August",
+      "body": "Your monthly bank statement is available. Ending balance $4,215.40, with deposits of $3,200 and withdrawals of $1,975. Review activity in online banking."
+    },
+    {
+      "id": "tune-finance-02",
+      "split": "tune",
+      "category": "Finance",
+      "subject": "Credit card payment due",
+      "body": "The minimum payment on your credit card account is $42 and is due September 17. Review the balance, interest charges, and payment options on your statement."
+    },
+    {
+      "id": "tune-finance-03",
+      "split": "tune",
+      "category": "Finance",
+      "subject": "Tax documents ready for download",
+      "body": "Your annual 1099 interest and dividend tax forms are now available from the brokerage. Use these forms when filing your income tax return."
+    },
+    {
+      "id": "tune-finance-04",
+      "split": "tune",
+      "category": "Finance",
+      "subject": "Mortgage rate adjustment notice",
+      "body": "Your home loan interest rate will change next quarter. Review the revised monthly payment and amortization schedule in your lending account."
+    },
+    {
+      "id": "tune-finance-05",
+      "split": "tune",
+      "category": "Finance",
+      "subject": "Retirement portfolio allocation",
+      "body": "The quarterly investment report details your retirement account holdings, fund performance, and asset allocation. Schedule a review with your financial advisor."
+    },
+    {
+      "id": "tune-finance-06",
+      "split": "tune",
+      "category": "Finance",
+      "subject": "Unusual withdrawal on account 2031",
+      "body": "Our bank detected an ATM withdrawal of $300 from your checking account. Review this transaction in the secure banking app and contact fraud support if it was not yours."
+    },
+    {
+      "id": "tune-newsletters-01",
+      "split": "tune",
+      "category": "Newsletters",
+      "subject": "What happened in developer tools this week",
+      "body": "Welcome to edition 42 of our weekly developer roundup. Read our latest articles on databases, open source releases, and community events. Manage your subscription or unsubscribe."
+    },
+    {
+      "id": "tune-newsletters-02",
+      "split": "tune",
+      "category": "Newsletters",
+      "subject": "October product announcements",
+      "body": "Our monthly subscriber bulletin includes new features, tutorials, and upcoming webinars. You are receiving this update because you joined our mailing list. Unsubscribe here."
+    },
+    {
+      "id": "tune-newsletters-03",
+      "split": "tune",
+      "category": "Newsletters",
+      "subject": "The morning science brief",
+      "body": "Today in our daily editorial digest: new telescope findings, climate research, and a robotics interview. Read the full stories and update your email preferences."
+    },
+    {
+      "id": "tune-newsletters-04",
+      "split": "tune",
+      "category": "Newsletters",
+      "subject": "Weekend deals for subscribers",
+      "body": "Our weekly promotional mail brings offers on electronics, furniture, and outdoor gear. Browse this week\u2019s collection. You may unsubscribe from these marketing updates."
+    },
+    {
+      "id": "tune-newsletters-05",
+      "split": "tune",
+      "category": "Newsletters",
+      "subject": "Five reads for your Friday",
+      "body": "This recurring issue collects essays on city design and public transport. Share this newsletter with a friend or manage your subscriber preferences."
+    },
+    {
+      "id": "tune-newsletters-06",
+      "split": "tune",
+      "category": "Newsletters",
+      "subject": "The recruiting industry roundup",
+      "body": "In this edition of our weekly newsletter, read about interview techniques, hiring trends, and application tips. This is a subscriber digest, not a response to an application. Unsubscribe anytime."
+    },
+    {
+      "id": "tune-personal-01",
+      "split": "tune",
+      "category": "Personal",
+      "subject": "See you at the lake?",
+      "body": "Hey Sam, want to join us for a picnic on Sunday? I will bring sandwiches and the kids can play by the water. Let me know what time works. Love, your sister."
+    },
+    {
+      "id": "tune-personal-02",
+      "split": "tune",
+      "category": "Personal",
+      "subject": "Happy birthday, little brother",
+      "body": "Hope you have a wonderful birthday! Mum and I picked out a gift for you. Come over for cake tonight if you are free."
+    },
+    {
+      "id": "tune-personal-03",
+      "split": "tune",
+      "category": "Personal",
+      "subject": "Photos from our camping trip",
+      "body": "I finally sorted the pictures from our weekend in the mountains. That sunset was amazing. We should plan another trip with the family next summer."
+    },
+    {
+      "id": "tune-personal-04",
+      "split": "tune",
+      "category": "Personal",
+      "subject": "Can you feed Milo this weekend?",
+      "body": "Hi neighbor, we are visiting my parents from Friday to Sunday. Could you stop by and feed the cat? We will leave the spare key with you. Thanks!"
+    },
+    {
+      "id": "tune-personal-05",
+      "split": "tune",
+      "category": "Personal",
+      "subject": "Movie night at my apartment",
+      "body": "A few friends are coming over Thursday to watch a comedy and order pizza. Bring a blanket and whichever snacks you like. Hope you can make it!"
+    },
+    {
+      "id": "tune-personal-06",
+      "split": "tune",
+      "category": "Personal",
+      "subject": "Catching up after all these years",
+      "body": "It was lovely running into you at the market. How are the children doing? Let us get coffee soon and catch up properly. Warm wishes, Leila."
+    },
+    {
+      "id": "heldout-jobs-01",
+      "split": "heldout",
+      "category": "Jobs",
+      "subject": "Meet the infrastructure team",
+      "body": "Congratulations on passing the coding exercise for our site reliability vacancy. The next hiring stage is a panel conversation. Send us two times when you are available."
+    },
+    {
+      "id": "heldout-jobs-02",
+      "split": "heldout",
+      "category": "Jobs",
+      "subject": "Submission acknowledged by Moss Digital",
+      "body": "Your resume and cover letter for the junior developer opening reached our talent team. We will notify shortlisted candidates next week."
+    },
+    {
+      "id": "heldout-jobs-03",
+      "split": "heldout",
+      "category": "Jobs",
+      "subject": "Decision regarding the support specialist opening",
+      "body": "We appreciate the time you spent meeting with our managers. We cannot offer you this position, but will retain your resume for future roles."
+    },
+    {
+      "id": "heldout-jobs-04",
+      "split": "heldout",
+      "category": "Jobs",
+      "subject": "Invitation from the talent acquisition team",
+      "body": "We found your experience interesting for our machine learning vacancy. Are you available for a recruiter phone screen next Wednesday?"
+    },
+    {
+      "id": "heldout-jobs-05",
+      "split": "heldout",
+      "category": "Jobs",
+      "subject": "Welcome aboard at Fern Logistics",
+      "body": "Please review and sign the employment agreement. It includes your annual compensation, benefits eligibility, and first day of work in the finance analyst role."
+    },
+    {
+      "id": "heldout-jobs-06",
+      "split": "heldout",
+      "category": "Jobs",
+      "subject": "Prepare for the final hiring conversation",
+      "body": "For your last interview, prepare a presentation describing an architecture project. The department director will ask questions about the engineering position."
+    },
+    {
+      "id": "heldout-school-01",
+      "split": "heldout",
+      "category": "School",
+      "subject": "Module selection for next semester",
+      "body": "The registrar has opened the class selection portal. Please choose courses toward your degree and request approval from your faculty advisor."
+    },
+    {
+      "id": "heldout-school-02",
+      "split": "heldout",
+      "category": "School",
+      "subject": "Reminder from your physics instructor",
+      "body": "Your assignment on momentum and energy must be uploaded by Thursday. The teaching assistant will hold a help session before the homework deadline."
+    },
+    {
+      "id": "heldout-school-03",
+      "split": "heldout",
+      "category": "School",
+      "subject": "Room for tomorrow\u2019s lecture",
+      "body": "Our literature lecture is moving to the arts building. Complete the assigned reading and bring notes for the class discussion."
+    },
+    {
+      "id": "heldout-school-04",
+      "split": "heldout",
+      "category": "School",
+      "subject": "Feedback on your statistics assessment",
+      "body": "Your marked exam can now be viewed on the academic portal. Consult your professor during office hours if you wish to discuss your grade."
+    },
+    {
+      "id": "heldout-school-05",
+      "split": "heldout",
+      "category": "School",
+      "subject": "University residence renewal",
+      "body": "Students planning to return to campus accommodation need to submit their room preferences before the residence office closes applications."
+    },
+    {
+      "id": "heldout-school-06",
+      "split": "heldout",
+      "category": "School",
+      "subject": "Research dissertation progress meeting",
+      "body": "Send me the revised methodology chapter before our thesis supervision appointment. We need to finalize your dissertation timeline for graduation."
+    },
+    {
+      "id": "heldout-receipts-01",
+      "split": "heldout",
+      "category": "Receipts",
+      "subject": "Confirmation for purchase HB-291",
+      "body": "Your headphones order is confirmed. One pair of wireless headphones, subtotal $72, tax $5.40, total paid $77.40. The store will send tracking details soon."
+    },
+    {
+      "id": "heldout-receipts-02",
+      "split": "heldout",
+      "category": "Receipts",
+      "subject": "Cloud service charge completed",
+      "body": "We successfully billed $8.50 for your storage subscription. Invoice ST-440 is paid. This payment confirmation is your receipt for the completed transaction."
+    },
+    {
+      "id": "heldout-receipts-03",
+      "split": "heldout",
+      "category": "Receipts",
+      "subject": "Delivery is on its way",
+      "body": "The book you ordered has been dispatched from our fulfillment center. Order BK-112 contains one paperback. View the tracking link for estimated arrival."
+    },
+    {
+      "id": "heldout-receipts-04",
+      "split": "heldout",
+      "category": "Receipts",
+      "subject": "Your returned shoes have been refunded",
+      "body": "We approved your return and credited $58 to the card used for order SH-019. This refund confirmation closes the purchase."
+    },
+    {
+      "id": "heldout-receipts-05",
+      "split": "heldout",
+      "category": "Receipts",
+      "subject": "Taxi trip payment record",
+      "body": "Pickup: Maple Avenue. Dropoff: West Terminal. Fare $24, gratuity $3, total paid $27. Thank you for riding with us; retain this receipt for expenses."
+    },
+    {
+      "id": "heldout-receipts-06",
+      "split": "heldout",
+      "category": "Receipts",
+      "subject": "Your meal order is complete",
+      "body": "Order FD-421 included two salads and soup. Food $31, service $4, total charged $35. The restaurant has completed your order. Here is your itemized receipt."
+    },
+    {
+      "id": "heldout-finance-01",
+      "split": "heldout",
+      "category": "Finance",
+      "subject": "September savings account activity",
+      "body": "Your savings statement lists deposits, account withdrawals, interest earned, and the closing balance. Access this monthly statement through the banking portal."
+    },
+    {
+      "id": "heldout-finance-02",
+      "split": "heldout",
+      "category": "Finance",
+      "subject": "Statement balance on your card",
+      "body": "Your revolving credit account payment must arrive by October 12. The statement includes the minimum due, annual percentage rate, and outstanding balance."
+    },
+    {
+      "id": "heldout-finance-03",
+      "split": "heldout",
+      "category": "Finance",
+      "subject": "Brokerage tax reporting notice",
+      "body": "Your securities account tax statement for the past year is ready. It lists dividends, gains, and tax withholding for filing your return."
+    },
+    {
+      "id": "heldout-finance-04",
+      "split": "heldout",
+      "category": "Finance",
+      "subject": "Student loan repayment schedule",
+      "body": "Your lender has revised the loan amortization table. Check the principal balance, accrued interest, and upcoming installment amounts in your loan account."
+    },
+    {
+      "id": "heldout-finance-05",
+      "split": "heldout",
+      "category": "Finance",
+      "subject": "Quarterly pension fund review",
+      "body": "Your retirement portfolio statement summarizes holdings, market returns, and the balance across investment funds. Speak to your advisor about allocation changes."
+    },
+    {
+      "id": "heldout-finance-06",
+      "split": "heldout",
+      "category": "Finance",
+      "subject": "Debit account security alert",
+      "body": "We noticed a cash withdrawal from your bank account ending 7452. Verify the transaction using online banking and call the bank if you did not authorize it."
+    },
+    {
+      "id": "heldout-newsletters-01",
+      "split": "heldout",
+      "category": "Newsletters",
+      "subject": "This week\u2019s open source dispatch",
+      "body": "Issue 103 of our recurring community mailing features databases, release notes, and developer tutorials. Read more and manage your newsletter subscription below."
+    },
+    {
+      "id": "heldout-newsletters-02",
+      "split": "heldout",
+      "category": "Newsletters",
+      "subject": "Your monthly platform bulletin",
+      "body": "Here are new tools, customer stories, and upcoming live sessions from our product team. You subscribed to these monthly announcements. Unsubscribe or update preferences."
+    },
+    {
+      "id": "heldout-newsletters-03",
+      "split": "heldout",
+      "category": "Newsletters",
+      "subject": "The daily astronomy digest",
+      "body": "Our editorial team selected today\u2019s space discoveries, observatory stories, and research interviews. Read this subscriber edition online or change your email preferences."
+    },
+    {
+      "id": "heldout-newsletters-04",
+      "split": "heldout",
+      "category": "Newsletters",
+      "subject": "Subscriber savings this week",
+      "body": "Our weekly marketing bulletin features discounted shoes, kitchenware, and outdoor essentials. Browse the current offers or unsubscribe from promotional email."
+    },
+    {
+      "id": "heldout-newsletters-05",
+      "split": "heldout",
+      "category": "Newsletters",
+      "subject": "Sunday reading list, edition 19",
+      "body": "Welcome back to our weekly digest of urban planning essays. This newsletter collects the best stories our editors read. Forward to friends or manage subscription."
+    },
+    {
+      "id": "heldout-newsletters-06",
+      "split": "heldout",
+      "category": "Newsletters",
+      "subject": "Career insights delivered every Tuesday",
+      "body": "This week\u2019s editorial newsletter discusses job applications, preparing for interviews, and changes in hiring. You are subscribed to this digest. Unsubscribe at the bottom."
+    },
+    {
+      "id": "heldout-personal-01",
+      "split": "heldout",
+      "category": "Personal",
+      "subject": "Lunch in the park this weekend",
+      "body": "Hi Alex, shall we meet by the duck pond with the family? I can pack a picnic and bring a ball for the children. Miss you, Aunt Rose."
+    },
+    {
+      "id": "heldout-personal-02",
+      "split": "heldout",
+      "category": "Personal",
+      "subject": "Celebrating your big day",
+      "body": "Happy birthday, cousin! We would love to see you for dinner and homemade cake. Let us know if you can come by our house this evening."
+    },
+    {
+      "id": "heldout-personal-03",
+      "split": "heldout",
+      "category": "Personal",
+      "subject": "Our beach holiday pictures",
+      "body": "The photos from our seaside vacation are ready. I still laugh at the sandcastle contest! Let us organize another getaway with our friends soon."
+    },
+    {
+      "id": "heldout-personal-04",
+      "split": "heldout",
+      "category": "Personal",
+      "subject": "A favor while we are away",
+      "body": "Hello friend, could you water our plants and check on the dog while we visit Grandma? We will drop off a key before leaving. Thank you so much."
+    },
+    {
+      "id": "heldout-personal-05",
+      "split": "heldout",
+      "category": "Personal",
+      "subject": "Games and snacks on Friday",
+      "body": "Want to come over for board games with a few friends? We will make tacos and catch up. Bring whoever you like and your favorite snacks."
+    },
+    {
+      "id": "heldout-personal-06",
+      "split": "heldout",
+      "category": "Personal",
+      "subject": "Lovely to hear from you again",
+      "body": "I was so glad to read your message. How is your family settling into the new house? We should meet for tea next month. Lots of love, Farah."
+    },
+    {
+      "id": "tune-abstain-01",
+      "split": "tune",
+      "category": "",
+      "subject": "A small technical detail",
+      "body": "The checksum is b825ff9d and the package has a green stripe. Keep it on shelf C until the next test."
+    },
+    {
+      "id": "tune-abstain-02",
+      "split": "tune",
+      "category": "",
+      "subject": "No specific topic",
+      "body": "Noted. Thanks for letting me know."
+    },
+    {
+      "id": "tune-abstain-03",
+      "split": "tune",
+      "category": "",
+      "subject": "Account purchase and lending statement",
+      "body": "This message describes both a paid purchase receipt and a bank loan account statement. Review the itemized purchase and the loan interest balance equally."
+    },
+    {
+      "id": "tune-abstain-04",
+      "split": "tune",
+      "category": "",
+      "subject": "Study and hiring plans",
+      "body": "We need to discuss coursework deadlines and applying for a job, with equal attention to the university semester and recruiter interviews."
+    },
+    {
+      "id": "tune-abstain-05",
+      "split": "tune",
+      "category": "",
+      "subject": "Re: Thanks",
+      "body": "Thanks, got it.\n\n> Your checking account statement is available. Deposits and withdrawals are listed below.\n> View your banking balance in the app."
+    },
+    {
+      "id": "tune-abstain-06",
+      "split": "tune",
+      "category": "",
+      "subject": "Re: A quick note",
+      "body": "Okay.\n\n> Thank you for purchasing headphones. Your receipt totals $90.\n> Order confirmed, package will ship tomorrow."
+    },
+    {
+      "id": "tune-abstain-07",
+      "split": "tune",
+      "category": "",
+      "subject": "Urgent account action",
+      "body": "Your bank claims your payment failed. Follow an unknown link to reveal a password. This suspicious instruction alone does not provide evidence of an account statement or purchase."
+    },
+    {
+      "id": "tune-abstain-08",
+      "split": "tune",
+      "category": "",
+      "subject": "Campus alumni recruitment digest",
+      "body": "A combined digest promotes student course enrollment, employment applications, and loans. It mixes several unrelated services with no clear primary purpose."
+    },
+    {
+      "id": "heldout-abstain-01",
+      "split": "heldout",
+      "category": "",
+      "subject": "The object on the desk",
+      "body": "The sample has a violet lid and serial number VX-802-114. Place it beside the spare component for the calibration test."
+    },
+    {
+      "id": "heldout-abstain-02",
+      "split": "heldout",
+      "category": "",
+      "subject": "Follow-up",
+      "body": "Acknowledged. Nothing else to add."
+    },
+    {
+      "id": "heldout-abstain-03",
+      "split": "heldout",
+      "category": "",
+      "subject": "Payment and account overview",
+      "body": "Here is an equal combination of a paid shopping receipt with item totals and a bank loan statement with principal, interest, and repayment balance."
+    },
+    {
+      "id": "heldout-abstain-04",
+      "split": "heldout",
+      "category": "",
+      "subject": "University work and employment opportunities",
+      "body": "This email equally discusses academic coursework and the job application interview process. There is no single primary reason for the message."
+    },
+    {
+      "id": "heldout-abstain-05",
+      "split": "heldout",
+      "category": "",
+      "subject": "Re: All done",
+      "body": "Sure.\n\n> Your quarterly brokerage statement details investments and retirement balances.\n> Contact your financial advisor about your bank account portfolio."
+    },
+    {
+      "id": "heldout-abstain-06",
+      "split": "heldout",
+      "category": "",
+      "subject": "Re: Yes",
+      "body": "Understood.\n\n> Thank you for your grocery purchase. Order confirmed with an itemized receipt.\n> Total paid $41. Your delivery is on its way."
+    },
+    {
+      "id": "heldout-abstain-07",
+      "split": "heldout",
+      "category": "",
+      "subject": "Password verification requested",
+      "body": "An unfamiliar sender demands your banking password through an unknown website. This isolated credential demand does not identify a substantive category."
+    },
+    {
+      "id": "heldout-abstain-08",
+      "split": "heldout",
+      "category": "",
+      "subject": "A blended campus and career announcement",
+      "body": "This bulletin mixes college registration instructions, internship interviews, and personal loan offers without focusing on one activity."
+    },
+    {
+      "id": "tune-personal-quoted-chain",
+      "split": "tune",
+      "category": "Personal",
+      "subject": "Family picnic plans",
+      "body": "Hi sister, can you join the family for a picnic and games at the lake on Sunday? We miss you and would love to catch up.\n\n> Old bank statement: balance, loan, interest, investments and payments. Record 0\n> Old bank statement: balance, loan, interest, investments and payments. Record 1\n> Old bank statement: balance, loan, interest, investments and payments. Record 2\n> Old bank statement: balance, loan, interest, investments and payments. Record 3\n> Old bank statement: balance, loan, interest, investments and payments. Record 4\n> Old bank statement: balance, loan, interest, investments and payments. Record 5\n> Old bank statement: balance, loan, interest, investments and payments. Record 6\n> Old bank statement: balance, loan, interest, investments and payments. Record 7\n> Old bank statement: balance, loan, interest, investments and payments. Record 8\n> Old bank statement: balance, loan, interest, investments and payments. Record 9\n> Old bank statement: balance, loan, interest, investments and payments. Record 10\n> Old bank statement: balance, loan, interest, investments and payments. Record 11\n> Old bank statement: balance, loan, interest, investments and payments. Record 12\n> Old bank statement: balance, loan, interest, investments and payments. Record 13\n> Old bank statement: balance, loan, interest, investments and payments. Record 14\n> Old bank statement: balance, loan, interest, investments and payments. Record 15\n> Old bank statement: balance, loan, interest, investments and payments. Record 16\n> Old bank statement: balance, loan, interest, investments and payments. Record 17\n> Old bank statement: balance, loan, interest, investments and payments. Record 18\n> Old bank statement: balance, loan, interest, investments and payments. Record 19\n> Old bank statement: balance, loan, interest, investments and payments. Record 20\n> Old bank statement: balance, loan, interest, investments and payments. Record 21\n> Old bank statement: balance, loan, interest, investments and payments. Record 22\n> Old bank statement: balance, loan, interest, investments and payments. Record 23\n> Old bank statement: balance, loan, interest, investments and payments. Record 24\n> Old bank statement: balance, loan, interest, investments and payments. Record 25\n> Old bank statement: balance, loan, interest, investments and payments. Record 26\n> Old bank statement: balance, loan, interest, investments and payments. Record 27\n> Old bank statement: balance, loan, interest, investments and payments. Record 28\n> Old bank statement: balance, loan, interest, investments and payments. Record 29\n> Old bank statement: balance, loan, interest, investments and payments. Record 30\n> Old bank statement: balance, loan, interest, investments and payments. Record 31\n> Old bank statement: balance, loan, interest, investments and payments. Record 32\n> Old bank statement: balance, loan, interest, investments and payments. Record 33\n> Old bank statement: balance, loan, interest, investments and payments. Record 34\n> Old bank statement: balance, loan, interest, investments and payments. Record 35\n> Old bank statement: balance, loan, interest, investments and payments. Record 36\n> Old bank statement: balance, loan, interest, investments and payments. Record 37\n> Old bank statement: balance, loan, interest, investments and payments. Record 38\n> Old bank statement: balance, loan, interest, investments and payments. Record 39\n> Old bank statement: balance, loan, interest, investments and payments. Record 40\n> Old bank statement: balance, loan, interest, investments and payments. Record 41\n> Old bank statement: balance, loan, interest, investments and payments. Record 42\n> Old bank statement: balance, loan, interest, investments and payments. Record 43\n> Old bank statement: balance, loan, interest, investments and payments. Record 44\n> Old bank statement: balance, loan, interest, investments and payments. Record 45\n> Old bank statement: balance, loan, interest, investments and payments. Record 46\n> Old bank statement: balance, loan, interest, investments and payments. Record 47\n> Old bank statement: balance, loan, interest, investments and payments. Record 48\n> Old bank statement: balance, loan, interest, investments and payments. Record 49\n> Old bank statement: balance, loan, interest, investments and payments. Record 50\n> Old bank statement: balance, loan, interest, investments and payments. Record 51\n> Old bank statement: balance, loan, interest, investments and payments. Record 52\n> Old bank statement: balance, loan, interest, investments and payments. Record 53\n> Old bank statement: balance, loan, interest, investments and payments. Record 54\n> Old bank statement: balance, loan, interest, investments and payments. Record 55\n> Old bank statement: balance, loan, interest, investments and payments. Record 56\n> Old bank statement: balance, loan, interest, investments and payments. Record 57\n> Old bank statement: balance, loan, interest, investments and payments. Record 58\n> Old bank statement: balance, loan, interest, investments and payments. Record 59\n\n-- \nRecruiter | School office | Finance department"
+    },
+    {
+      "id": "heldout-personal-quoted-chain",
+      "split": "heldout",
+      "category": "Personal",
+      "subject": "A weekend with the cousins",
+      "body": "Hi cousin, let us spend Saturday together with the children at the park. I will bring lunch and the games. Love, your aunt.\n\n> Old bank statement: balance, loan, interest, investments and payments. Record 0\n> Old bank statement: balance, loan, interest, investments and payments. Record 1\n> Old bank statement: balance, loan, interest, investments and payments. Record 2\n> Old bank statement: balance, loan, interest, investments and payments. Record 3\n> Old bank statement: balance, loan, interest, investments and payments. Record 4\n> Old bank statement: balance, loan, interest, investments and payments. Record 5\n> Old bank statement: balance, loan, interest, investments and payments. Record 6\n> Old bank statement: balance, loan, interest, investments and payments. Record 7\n> Old bank statement: balance, loan, interest, investments and payments. Record 8\n> Old bank statement: balance, loan, interest, investments and payments. Record 9\n> Old bank statement: balance, loan, interest, investments and payments. Record 10\n> Old bank statement: balance, loan, interest, investments and payments. Record 11\n> Old bank statement: balance, loan, interest, investments and payments. Record 12\n> Old bank statement: balance, loan, interest, investments and payments. Record 13\n> Old bank statement: balance, loan, interest, investments and payments. Record 14\n> Old bank statement: balance, loan, interest, investments and payments. Record 15\n> Old bank statement: balance, loan, interest, investments and payments. Record 16\n> Old bank statement: balance, loan, interest, investments and payments. Record 17\n> Old bank statement: balance, loan, interest, investments and payments. Record 18\n> Old bank statement: balance, loan, interest, investments and payments. Record 19\n> Old bank statement: balance, loan, interest, investments and payments. Record 20\n> Old bank statement: balance, loan, interest, investments and payments. Record 21\n> Old bank statement: balance, loan, interest, investments and payments. Record 22\n> Old bank statement: balance, loan, interest, investments and payments. Record 23\n> Old bank statement: balance, loan, interest, investments and payments. Record 24\n> Old bank statement: balance, loan, interest, investments and payments. Record 25\n> Old bank statement: balance, loan, interest, investments and payments. Record 26\n> Old bank statement: balance, loan, interest, investments and payments. Record 27\n> Old bank statement: balance, loan, interest, investments and payments. Record 28\n> Old bank statement: balance, loan, interest, investments and payments. Record 29\n> Old bank statement: balance, loan, interest, investments and payments. Record 30\n> Old bank statement: balance, loan, interest, investments and payments. Record 31\n> Old bank statement: balance, loan, interest, investments and payments. Record 32\n> Old bank statement: balance, loan, interest, investments and payments. Record 33\n> Old bank statement: balance, loan, interest, investments and payments. Record 34\n> Old bank statement: balance, loan, interest, investments and payments. Record 35\n> Old bank statement: balance, loan, interest, investments and payments. Record 36\n> Old bank statement: balance, loan, interest, investments and payments. Record 37\n> Old bank statement: balance, loan, interest, investments and payments. Record 38\n> Old bank statement: balance, loan, interest, investments and payments. Record 39\n> Old bank statement: balance, loan, interest, investments and payments. Record 40\n> Old bank statement: balance, loan, interest, investments and payments. Record 41\n> Old bank statement: balance, loan, interest, investments and payments. Record 42\n> Old bank statement: balance, loan, interest, investments and payments. Record 43\n> Old bank statement: balance, loan, interest, investments and payments. Record 44\n> Old bank statement: balance, loan, interest, investments and payments. Record 45\n> Old bank statement: balance, loan, interest, investments and payments. Record 46\n> Old bank statement: balance, loan, interest, investments and payments. Record 47\n> Old bank statement: balance, loan, interest, investments and payments. Record 48\n> Old bank statement: balance, loan, interest, investments and payments. Record 49\n> Old bank statement: balance, loan, interest, investments and payments. Record 50\n> Old bank statement: balance, loan, interest, investments and payments. Record 51\n> Old bank statement: balance, loan, interest, investments and payments. Record 52\n> Old bank statement: balance, loan, interest, investments and payments. Record 53\n> Old bank statement: balance, loan, interest, investments and payments. Record 54\n> Old bank statement: balance, loan, interest, investments and payments. Record 55\n> Old bank statement: balance, loan, interest, investments and payments. Record 56\n> Old bank statement: balance, loan, interest, investments and payments. Record 57\n> Old bank statement: balance, loan, interest, investments and payments. Record 58\n> Old bank statement: balance, loan, interest, investments and payments. Record 59\n\n-- \nRecruiter | School office | Finance department"
+    }
+  ]
+}

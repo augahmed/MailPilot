@@ -3,7 +3,7 @@
 Updated 2026-10-20 for the shared local retrieval direction. This document is the
 technical authority; [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the sole scope/milestone
 plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. The later
-authorized persistence/chunking slices add migrations 015–018, typed storage and
+authorized persistence/chunking slices add migrations 015–019, typed storage and
 bounded cached source projection during manual sync. A lazy CPU MiniLM provider
 is implemented and packaged; explicit resumable indexing/UI now connects it to
 SQLite through `index.local`. Shared exact vector retrieval and a semantic-search UI are now implemented; see [VECTOR_SEARCH.md](VECTOR_SEARCH.md). Historical plans are under [archive](archive/LEGACY_FEATURES.md).
@@ -26,11 +26,11 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 | Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | One explicit resumable indexing job uses the cached chunker/store and lazy native provider. One bounded local search worker shares the provider; no raw inference IPC. |
 | Gmail | System-browser OAuth/keyring; one account; manual bounded initial Inbox and incremental history sync; normalized local cache. | No complete mailbox/Sent/attachment coverage, background scheduling, thread-fetch operation or second email provider. |
 | Reader | `mail.read` returns revision-checked paged escaped text from the same cleaned sections used by chunks, preserving useful image descriptions and omitting transport clutter; metadata and phishing explanations are shown. | No rich HTML sanitizer/renderer, remote content or attachment download. Cold-start restoration checks Gmail online. |
-| Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | Local category prototypes and explicit confirmed examples share the existing index coordinator/provider ([contract](CATEGORY_VECTORS.md)). No semantic classifier, automatic full-cache assessment or primary-override system. |
+| Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | Local category prototypes and explicit confirmed examples share the existing index coordinator/provider ([contract](CATEGORY_VECTORS.md)). Semantic multi-chunk classification and primary preferences now share the coordinator; see [contract/evaluation](SEMANTIC_CLASSIFICATION.md). The definition-only synthetic precision target remains unmet. |
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
 | AI | `ai.settings`, provider-scoped OS keys and one approved cached-email Summary through `SummarizeEmail`; OpenAI is the only installed functional adapter. | No evidence-question operation, retrieved context, tools, replies, new drafts or general chat. |
-| Search/storage | SQLite migrations 001–018, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Local vector indexing is active on explicit Start/Resume. Semantic search is implemented over complete compatible chunk generations; keyword search remains planned. Old vector schemas are inert. |
+| Search/storage | SQLite migrations 001–019, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Local vector indexing is active on explicit Start/Resume. Semantic search is implemented over complete compatible chunk generations; keyword search remains planned. Old vector schemas are inert. |
 | Historical recovery | GET-only Gmail draft matching and local status/reconcile/resolve/cancel for old journal actions. | No draft creation, resending, remote deletion or reactivation of historical previews. |
 
 Composition is in [main.go](../backend/cmd/mailpilot-core/main.go). Actual command
@@ -196,6 +196,7 @@ Current source-of-truth DDL is [the migrations directory](../backend/internal/st
 | 016 | Named source projections, section indices/spans, bounded context prefix and independent projected-content coverage; existing unknown mappings preserved. |
 | 017 | Durable local index job, model fingerprint/dimension registry, per-message attempt/failure metadata and cache-removal publication revocation. |
 | 018 | Account-scoped category prototypes and explicit confirmed examples, derived-data invalidation and compatible coordinator recipe. |
+| 019 | Versioned semantic assessment evidence, account/email invalidation fences, explicit primary preferences and classifier identity in the shared coordinator. |
 
 The historical `email_embeddings`, `category_embeddings`, `email_passage_vectors`
 and `email_retrieval_indexes` have no active inference/retrieval consumers.
@@ -250,7 +251,7 @@ verification and synthetic measurements.
 Extend the implemented chunk/vector/state records only as needed for FTS mapping, assessment/override provenance. Category examples/prototypes are implemented in migration 018 through the same coordinator.
 Reuse compatible existing category assignments; preserve conflicting legacy data
 until explicit resolution rather than deleting extra assignments to force a new rule.
-Semantic classification and keyword schemas remain planned. Category prototype generation is implemented; it creates no assessments.
+Semantic classification consumes current prototypes through the same coordinator and existing assessment store. Keyword schemas remain planned.
 
 `repository.EmailContentHash` already covers normalized mail evidence excluding IDs,
 labels and local categories. Current `classification.InputHash` covers rules' inputs
@@ -301,13 +302,14 @@ for aggregate claims. No generative API/key is needed for local retrieval.
 
 ### Intelligent classification and local review
 
-Category representations are implemented ([details](CATEGORY_VECTORS.md)) without classification. Planned classification consumes these vectors.
+Category representations and semantic classification are implemented ([category contract](CATEGORY_VECTORS.md), [classification/evaluation](SEMANTIC_CLASSIFICATION.md)). Classification reads current compatible vectors; it does no inference and grants no Gmail authority.
 
 Embed category names/descriptions and optional confirmed examples with the shared
-adapter. Aggregate bounded chunk-level evidence into one primary suggestion, with
+adapter. Aggregate bounded chunk-level evidence into one or several close category suggestions, with
 section/subject weighting so a long quoted chain or duplicate chunk cannot dominate.
-Use a category description when examples are absent. Tune minimum score and margin
-against the runner-up on synthetic tuning data; evaluate separately on held-out mail.
+Use a category description when examples are absent. The original gates were tuned
+on synthetic data; the current 0.03 lead and multiple close suggestions were
+explicitly requested by the user. Evaluate the changed policy on held-out mail.
 The existing 0.60 rule gate is not a cosine threshold or calibrated probability.
 
 Explicit local corrections take precedence; decisive useful rules/header evidence
@@ -426,8 +428,7 @@ plan and remain unmeasured here.
 
 The source/chunk slice is implemented in `internal/mail` and `app.CachedChunker`;
 the provider/runtime is qualified in `internal/embedding`, and explicit resumable
-indexing is implemented in `app.LocalIndex`. Shared exact retrieval and category prototypes reuse those components. Future
-semantic classification and evidence consumers must also reuse them. Preserve
+indexing is implemented in `app.LocalIndex`. Shared exact retrieval and category prototypes reuse those components. Semantic classification also reuses them. Future evidence consumers must do the same. Preserve
 reading, risk and rules' existing cleanup. Do not revive old Ask, add an AI editor
 or replace the application architecture. The sole milestone authority is
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md); further services require explicit authorization.

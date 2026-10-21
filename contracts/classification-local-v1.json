@@ -1,0 +1,402 @@
+{
+  "request": {
+    "operation": "run",
+    "accountId": "account-a",
+    "offset": 0
+  },
+  "overrideRequest": {
+    "operation": "assigned",
+    "accountId": "account-a",
+    "offset": 0,
+    "emailId": "email-a",
+    "categoryId": "personal",
+    "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "response": {
+    "accountId": "account-a",
+    "rows": [
+      {
+        "email_id": "email-a",
+        "sender": "Hiring team",
+        "subject": "Next hiring stage",
+        "bodyState": "complete",
+        "state": "suggested",
+        "predictions": [
+          {
+            "email_id": "email-a",
+            "category_id": "jobs",
+            "category_name": "Jobs",
+            "confidence": 0.72,
+            "score_kind": "cosine_similarity",
+            "classifier_name": "SharedSemanticClassifier",
+            "classifier_version": "semantic-v3-synthetic",
+            "reasons": [
+              "Multiple section-weighted passages support this category.",
+              "Cosine similarity is not a calibrated probability."
+            ],
+            "timestamp": 1792512000000
+          }
+        ],
+        "assessment": {
+          "used_classifier": "semantic",
+          "reason": "Multiple passages support one category.",
+          "candidates": []
+        },
+        "timestamp": 1792512000000,
+        "readerRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "semantic": {
+          "state": "suggested",
+          "modelVersion": "synthetic-model-v1",
+          "classifierVersion": "semantic-v3-synthetic",
+          "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "minimumScore": 0.2,
+          "minimumMargin": 0.03,
+          "assigned": [],
+          "scores": [
+            {
+              "categoryId": "jobs",
+              "categoryName": "Jobs",
+              "score": 0.72,
+              "prototypeHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "prototypeStatus": "ready",
+              "chunkCount": 2,
+              "evidence": [
+                {
+                  "chunkId": "chunk-subject",
+                  "section": "subject",
+                  "text": "An invitation to meet the hiring team",
+                  "similarity": 0.8,
+                  "weight": 0.375
+                },
+                {
+                  "chunkId": "chunk-body",
+                  "section": "authored",
+                  "text": "Please choose a time for your technical interview.",
+                  "similarity": 0.672,
+                  "weight": 0.625
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "email_id": "email-b",
+        "sender": "Hiring team",
+        "subject": "Plans for Friday",
+        "bodyState": "complete",
+        "state": "assigned",
+        "predictions": [
+          {
+            "email_id": "email-b",
+            "category_id": "personal",
+            "category_name": "Personal",
+            "confidence": 1,
+            "score_kind": "user_assignment",
+            "classifier_name": "SharedSemanticClassifier",
+            "classifier_version": "semantic-v3-synthetic",
+            "reasons": ["Explicit user assignment."],
+            "timestamp": 1792512000000
+          }
+        ],
+        "assessment": {
+          "used_classifier": "user",
+          "reason": "User assignment takes priority.",
+          "candidates": []
+        },
+        "timestamp": 1792512000000,
+        "readerRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "semantic": {
+          "state": "assigned",
+          "modelVersion": "synthetic-model-v1",
+          "classifierVersion": "semantic-v3-synthetic",
+          "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "minimumScore": 0.2,
+          "minimumMargin": 0.03,
+          "assigned": [
+            {
+              "id": "personal",
+              "name": "Personal"
+            }
+          ],
+          "scores": []
+        }
+      },
+      {
+        "email_id": "email-c",
+        "sender": "Hiring team",
+        "subject": "Mixed topics",
+        "bodyState": "complete",
+        "state": "unclassified",
+        "predictions": [],
+        "assessment": {
+          "used_classifier": "none",
+          "reason": "The leading categories are too similar.",
+          "candidates": []
+        },
+        "timestamp": 1792512000000,
+        "readerRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "semantic": {
+          "state": "unclassified",
+          "modelVersion": "synthetic-model-v1",
+          "classifierVersion": "semantic-v3-synthetic",
+          "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "minimumScore": 0.2,
+          "minimumMargin": 0.03,
+          "assigned": [],
+          "scores": []
+        }
+      },
+      {
+        "email_id": "email-multiple",
+        "sender": "Hiring team",
+        "subject": "Several close categories",
+        "bodyState": "complete",
+        "state": "suggested",
+        "predictions": [
+          {
+            "email_id": "email-multiple",
+            "category_id": "school",
+            "category_name": "School",
+            "confidence": 0.72,
+            "score_kind": "cosine_similarity",
+            "classifier_name": "SharedSemanticClassifier",
+            "classifier_version": "semantic-v3-synthetic",
+            "reasons": [
+              "Multiple section-weighted passages support this category.",
+              "Cosine similarity is not a calibrated probability."
+            ],
+            "timestamp": 1792512000000
+          },
+          {
+            "email_id": "email-multiple",
+            "category_id": "finance",
+            "category_name": "Finance",
+            "confidence": 0.71,
+            "score_kind": "cosine_similarity",
+            "classifier_name": "SharedSemanticClassifier",
+            "classifier_version": "semantic-v3-synthetic",
+            "reasons": [
+              "Multiple section-weighted passages support this category.",
+              "Cosine similarity is not a calibrated probability."
+            ],
+            "timestamp": 1792512000000
+          },
+          {
+            "email_id": "email-multiple",
+            "category_id": "receipts",
+            "category_name": "Receipts",
+            "confidence": 0.7,
+            "score_kind": "cosine_similarity",
+            "classifier_name": "SharedSemanticClassifier",
+            "classifier_version": "semantic-v3-synthetic",
+            "reasons": [
+              "Multiple section-weighted passages support this category.",
+              "Cosine similarity is not a calibrated probability."
+            ],
+            "timestamp": 1792512000000
+          },
+          {
+            "email_id": "email-multiple",
+            "category_id": "newsletters",
+            "category_name": "Newsletters",
+            "confidence": 0.695,
+            "score_kind": "cosine_similarity",
+            "classifier_name": "SharedSemanticClassifier",
+            "classifier_version": "semantic-v3-synthetic",
+            "reasons": [
+              "Multiple section-weighted passages support this category.",
+              "Cosine similarity is not a calibrated probability."
+            ],
+            "timestamp": 1792512000000
+          },
+          {
+            "email_id": "email-multiple",
+            "category_id": "other",
+            "category_name": "Other",
+            "confidence": 0.69,
+            "score_kind": "cosine_similarity",
+            "classifier_name": "SharedSemanticClassifier",
+            "classifier_version": "semantic-v3-synthetic",
+            "reasons": [
+              "Multiple section-weighted passages support this category.",
+              "Cosine similarity is not a calibrated probability."
+            ],
+            "timestamp": 1792512000000
+          }
+        ],
+        "assessment": {
+          "used_classifier": "semantic",
+          "reason": "Several categories are within the lead threshold of the best score; all are suggested for review.",
+          "candidates": []
+        },
+        "timestamp": 1792512000000,
+        "readerRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "semantic": {
+          "state": "suggested",
+          "modelVersion": "synthetic-model-v1",
+          "classifierVersion": "semantic-v3-synthetic",
+          "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "minimumScore": 0.2,
+          "minimumMargin": 0.03,
+          "assigned": [],
+          "scores": [
+            {
+              "categoryId": "school",
+              "categoryName": "School",
+              "score": 0.72,
+              "prototypeHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "prototypeStatus": "ready",
+              "chunkCount": 2,
+              "evidence": [
+                {
+                  "chunkId": "chunk-subject",
+                  "section": "subject",
+                  "text": "An invitation to meet the hiring team",
+                  "similarity": 0.8,
+                  "weight": 0.375
+                },
+                {
+                  "chunkId": "chunk-body",
+                  "section": "authored",
+                  "text": "Please choose a time for your technical interview.",
+                  "similarity": 0.672,
+                  "weight": 0.625
+                }
+              ]
+            },
+            {
+              "categoryId": "finance",
+              "categoryName": "Finance",
+              "score": 0.71,
+              "prototypeHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "prototypeStatus": "ready",
+              "chunkCount": 2,
+              "evidence": [
+                {
+                  "chunkId": "chunk-subject",
+                  "section": "subject",
+                  "text": "An invitation to meet the hiring team",
+                  "similarity": 0.8,
+                  "weight": 0.375
+                },
+                {
+                  "chunkId": "chunk-body",
+                  "section": "authored",
+                  "text": "Please choose a time for your technical interview.",
+                  "similarity": 0.672,
+                  "weight": 0.625
+                }
+              ]
+            },
+            {
+              "categoryId": "receipts",
+              "categoryName": "Receipts",
+              "score": 0.7,
+              "prototypeHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "prototypeStatus": "ready",
+              "chunkCount": 2,
+              "evidence": [
+                {
+                  "chunkId": "chunk-subject",
+                  "section": "subject",
+                  "text": "An invitation to meet the hiring team",
+                  "similarity": 0.8,
+                  "weight": 0.375
+                },
+                {
+                  "chunkId": "chunk-body",
+                  "section": "authored",
+                  "text": "Please choose a time for your technical interview.",
+                  "similarity": 0.672,
+                  "weight": 0.625
+                }
+              ]
+            },
+            {
+              "categoryId": "newsletters",
+              "categoryName": "Newsletters",
+              "score": 0.695,
+              "prototypeHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "prototypeStatus": "ready",
+              "chunkCount": 2,
+              "evidence": [
+                {
+                  "chunkId": "chunk-subject",
+                  "section": "subject",
+                  "text": "An invitation to meet the hiring team",
+                  "similarity": 0.8,
+                  "weight": 0.375
+                },
+                {
+                  "chunkId": "chunk-body",
+                  "section": "authored",
+                  "text": "Please choose a time for your technical interview.",
+                  "similarity": 0.672,
+                  "weight": 0.625
+                }
+              ]
+            },
+            {
+              "categoryId": "other",
+              "categoryName": "Other",
+              "score": 0.69,
+              "prototypeHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "prototypeStatus": "ready",
+              "chunkCount": 2,
+              "evidence": [
+                {
+                  "chunkId": "chunk-subject",
+                  "section": "subject",
+                  "text": "An invitation to meet the hiring team",
+                  "similarity": 0.8,
+                  "weight": 0.375
+                },
+                {
+                  "chunkId": "chunk-body",
+                  "section": "authored",
+                  "text": "Please choose a time for your technical interview.",
+                  "similarity": 0.672,
+                  "weight": 0.625
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "hasMore": false,
+    "processed": 3,
+    "errors": 0,
+    "categoryOptions": [
+      {
+        "id": "jobs",
+        "name": "Jobs"
+      },
+      {
+        "id": "personal",
+        "name": "Personal"
+      },
+      {
+        "id": "school",
+        "name": "School"
+      },
+      {
+        "id": "finance",
+        "name": "Finance"
+      },
+      {
+        "id": "receipts",
+        "name": "Receipts"
+      },
+      {
+        "id": "newsletters",
+        "name": "Newsletters"
+      },
+      {
+        "id": "other",
+        "name": "Other"
+      }
+    ]
+  }
+}

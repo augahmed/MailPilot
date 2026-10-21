@@ -20,8 +20,10 @@ import (
 	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/ipc"
 	"mailpilot.local/core/internal/logging"
+	mailtext "mailpilot.local/core/internal/mail"
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/provider/gmail"
+	"mailpilot.local/core/internal/repository"
 	"mailpilot.local/core/internal/retrieval"
 	"mailpilot.local/core/internal/risk"
 	"mailpilot.local/core/internal/store/sqlite"
@@ -149,12 +151,15 @@ func run() int {
 		application.Search = searching
 		application.Emails = store.Emails()
 		application.Categories = store.Categories()
-		rules, err := classification.NewRuleBasedClassifier(classification.StarterConfig())
+		rules, err := classification.SemanticRules()
 		if err != nil {
 			return nil, err
 		}
-		// The deterministic engine owns the conservative direct-rule gate.
-		engine := rules
+		engine, err := classification.NewSemanticClassifier(store.Semantic(), repository.IndexProfile{Model: mailtext.ChunkModel(), PreprocessingVersion: mailtext.PreprocessingVersion, IndexVersion: mailtext.ChunkIndexVersion, Fingerprint: localProvider.Descriptor().PreprocessingFingerprint, CategoryRecipe: repository.CategoryRecipe}, rules, classification.DefaultSemanticPolicy())
+		if err != nil {
+			return nil, err
+		}
+		indexing.EnableClassification(store.Semantic(), engine)
 		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {
 			return gmail.NewProvider(account, authentication)
 		}, store.Emails(), store.Categories(), store.Classifications(), store.Organization(), engine)
@@ -176,6 +181,7 @@ func run() int {
 		synchronization.SetCheckpoints(store.SyncCheckpoints())
 		application.Organization = organization
 		application.Classification = app.NewClassificationReview(authentication.Session, engine, store.Emails(), store.Categories(), store.Classifications())
+		application.Classification.EnableSemantic(store.Semantic(), store.Chunks())
 		application.Reader = app.NewCachedReader(authentication.Session, store.Emails(), application.Classification, riskEngine)
 		return application, nil
 	})

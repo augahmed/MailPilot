@@ -263,8 +263,23 @@ func (r *CachedReader) category(ctx context.Context, account domain.AccountID, e
 		m.CategoryState = "unavailable"
 		return
 	}
-	if run.ClassifierName != r.review.engine.Name() || run.ClassifierVersion != r.review.engine.Version() || run.InputHash != classification.InputHash(e, categories) {
+	if run.ClassifierName != r.review.engine.Name() || run.ClassifierVersion != r.review.engine.Version() || !classification.FreshInput(run, e, categories) {
 		m.CategoryState = "stale"
+		return
+	}
+	if run.Semantic != nil && run.UsedClassifier == "user" {
+		m.Categories = []ReaderCategory{}
+		for _, id := range run.Semantic.Assigned {
+			for _, c := range categories {
+				if c.ID == id {
+					m.Categories = append(m.Categories, ReaderCategory{c.Name, "assigned"})
+				}
+			}
+		}
+		m.CategoryState = "unclassified"
+		if len(m.Categories) > 0 {
+			m.CategoryState = "classified"
+		}
 		return
 	}
 	m.CategoryState = "unclassified"

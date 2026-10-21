@@ -6,6 +6,7 @@ mod category_vectors;
 mod indexing;
 mod replies;
 mod search;
+mod semantic_review;
 
 use ai::{AISettingsRequest, AISettingsResponse, SummaryRequest, SummaryResponse};
 use bridge::{

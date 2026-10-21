@@ -230,3 +230,14 @@ form textarea {
 .category-representation small {
   overflow-wrap: anywhere;
 }
+
+.semantic-evidence blockquote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-inline: 0;
+}
+.classification-review select {
+  display: block;
+  max-width: 100%;
+  font: inherit;
+}

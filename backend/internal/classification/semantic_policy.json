@@ -1,0 +1,15 @@
+{
+  "minimumAuthoredWords": 0,
+  "version": "semantic-v3-close-category-suggestions",
+  "datasetHash": "d139c720a832dec107e3a1c244c67507d953b36da74538ecd91f945ac6abc246",
+  "modelVersion": "minilm-1110a243-6fd5d72f-f32-mean-l2-s24-v1-u17.0.0-nfd17.0.0",
+  "fingerprint": "88e5536a0553cfcb5f83cec4cbd082ddd2c06fc538fc3d6fef30543615e357ee",
+  "preprocessingVersion": "email-sections-readable-v4-wp-07eced375cec-256-32-u17.0.0-nfd17.0.0",
+  "minimumScore": 0.2,
+  "minimumMargin": 0.03,
+  "subjectWeight": 0.6,
+  "authoredWeight": 1,
+  "forwardedWeight": 0.25,
+  "quotedWeight": 0.05,
+  "ruleThreshold": 0.6
+}

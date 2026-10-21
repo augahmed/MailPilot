@@ -32,9 +32,11 @@ type ClassificationResult struct {
 }
 
 // ClassificationRun persists abstention as well as predictions. Results are
-// suggestions; they never imply local category assignment or provider writes.
+// suggestions, except explicitly typed user assignments reconstructed from manual
+// preferences. Neither authorizes provider writes.
 type ClassificationRun struct {
-	UsedClassifier    string // Actual selected engine, or none on abstention.
+	Semantic          *SemanticEvidence `json:",omitempty"`
+	UsedClassifier    string            // Actual selected engine, or none on abstention.
 	Reason            string
 	Candidates        []ClassificationCandidate
 	AccountID         AccountID

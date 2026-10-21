@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/embedding/model"
@@ -34,6 +35,8 @@ func (r IndexRequest) Valid() bool {
 }
 
 type IndexResponse struct {
+	AssessedMessages    int    `json:"assessedMessages"`
+	PendingAssessments  int    `json:"pendingAssessments"`
 	EligibleCategories  int    `json:"eligibleCategories"`
 	ReadyCategories     int    `json:"readyCategories"`
 	PartialCategories   int    `json:"partialCategories"`
@@ -76,6 +79,8 @@ type LocalIndex struct {
 	chunks          repository.ChunkRepository
 	jobs            repository.IndexRepository
 	categoryVectors repository.CategoryVectorRepository
+	semantic        repository.SemanticRepository
+	classifier      *classification.SemanticClassifier
 	embedder        localEmbedder
 	chunker         *mailtext.Chunker
 	profile         repository.IndexProfile
@@ -162,6 +167,9 @@ func (s *LocalIndex) Manage(ctx context.Context, p IndexRequest) IndexResponse {
 			if ctx.Err() == nil {
 				var run repository.IndexRun
 				run, err = s.jobs.Begin(ctx, account, s.profile, p.Operation == "rebuild")
+				if err == nil && s.semantic != nil {
+					run, err = s.semantic.Prepare(ctx, run, s.classifier.Version())
+				}
 				if err == nil {
 					jobCtx, jobCancel := context.WithCancel(s.root)
 					sessionStop := context.AfterFunc(session, jobCancel)
@@ -236,9 +244,18 @@ func (s *LocalIndex) response(ctx context.Context, a domain.AccountID, code stri
 		result.PartialCategories = c.Partial
 		result.PendingCategories = c.Pending
 	}
+	if s.semantic != nil {
+		semantic, e := s.semantic.Progress(ctx, a, s.classifier.Version())
+		if e != nil {
+			result.Code = "storage_error"
+			return result
+		}
+		result.AssessedMessages = semantic.Assessed
+		result.PendingAssessments = semantic.Pending
+	}
 	if result.Status == "complete" || result.Status == "partial" {
 		switch {
-		case counts.Pending > 0 || counts.Embeddings < counts.Chunks || result.PendingCategories > 0:
+		case counts.Pending > 0 || counts.Embeddings < counts.Chunks || result.PendingCategories > 0 || result.PendingAssessments > 0:
 			result.Code = "pending_changes"
 			result.Status = "pending"
 		case counts.Partial > 0 || counts.Failed > 0 || counts.Unavailable > 0 || result.PartialCategories > 0:
@@ -290,6 +307,32 @@ func (s *LocalIndex) work(ctx context.Context, run repository.IndexRun) {
 						code = "storage_error"
 					}
 					s.finish(run, "failed", code)
+					return
+				}
+			}
+			if s.semantic != nil {
+				ids, e := s.semantic.Next(ctx, run, s.classifier.Version())
+				if e != nil {
+					if ctx.Err() == nil {
+						s.finish(run, "failed", "storage_error")
+					}
+					return
+				}
+				if len(ids) > 0 {
+					snapshot, e := s.semantic.Snapshot(ctx, run.AccountID, ids[0], run.Profile)
+					if e == nil {
+						var assessment domain.ClassificationRun
+						assessment, e = s.classifier.Assess(ctx, snapshot)
+						if e == nil {
+							e = s.semantic.SaveIndexed(ctx, run, assessment)
+						}
+					}
+					if e == nil || errors.Is(e, repository.ErrConflict) || errors.Is(e, repository.ErrNotFound) {
+						continue
+					}
+					if ctx.Err() == nil {
+						s.finish(run, "failed", "storage_error")
+					}
 					return
 				}
 			}
@@ -467,4 +510,11 @@ func (s *LocalIndex) Close(ctx context.Context) error {
 		}
 	}
 	return s.embedder.Close(ctx)
+}
+
+// EnableClassification configures dependent assessment work on the existing
+// coordinator before any operation. No classification-specific worker is created.
+func (s *LocalIndex) EnableClassification(repo repository.SemanticRepository, engine *classification.SemanticClassifier) {
+	s.semantic = repo
+	s.classifier = engine
 }

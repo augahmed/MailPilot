@@ -289,6 +289,11 @@ func (r *organizationRepository) Update(ctx context.Context, p domain.Organizati
 }
 
 func validOrganizationEvidence(row domain.OrganizationRow) bool {
+	if c := row.Classification; c != nil {
+		if row.Phishing != nil || c.Version != "semantic-organization-v1" || c.AssessmentHash != row.InputHash || !validHash(c.AssessmentHash) || !validHash(c.BaseHash) || !validHash(c.SourceRevision) || !validName(c.ModelVersion, 128) || !validName(c.ClassifierVersion, 100) || (c.ScoreKind != "cosine_similarity" && c.ScoreKind != "rule_confidence" && c.ScoreKind != "user_assignment") {
+			return false
+		}
+	}
 	if row.Phishing == nil {
 		return row.CategoryID != "" && strings.HasPrefix(row.ProposedLabel, "MailPilot/")
 	}

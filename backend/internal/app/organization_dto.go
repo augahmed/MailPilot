@@ -59,6 +59,7 @@ func organizationRiskDTO(p *domain.OrganizationRisk) *OrganizationRiskDTO {
 }
 
 type OrganizationRowDTO struct {
+	ScoreKind     string               `json:"scoreKind,omitempty"`
 	Phishing      *OrganizationRiskDTO `json:"phishing,omitempty"`
 	EmailID       string               `json:"emailId"`
 	Sender        string               `json:"sender"`
@@ -114,7 +115,10 @@ func organizationDTO(p domain.OrganizationPlan) OrganizationResponse {
 	r.Kind = string(p.Kind)
 	r.ExpiresAt = p.ExpiresAt
 	for _, row := range p.Rows {
-		r.Rows = append(r.Rows, OrganizationRowDTO{organizationRiskDTO(row.Phishing), string(row.EmailID), row.Sender, row.Subject, row.CurrentLabels, row.ProposedLabel, row.Confidence, row.Change})
+		r.Rows = append(r.Rows, OrganizationRowDTO{Phishing: organizationRiskDTO(row.Phishing), EmailID: string(row.EmailID), Sender: row.Sender, Subject: row.Subject, CurrentLabels: row.CurrentLabels, ProposedLabel: row.ProposedLabel, Confidence: row.Confidence, Change: row.Change})
+		if row.Classification != nil {
+			r.Rows[len(r.Rows)-1].ScoreKind = row.Classification.ScoreKind
+		}
 	}
 	for _, step := range p.Steps {
 		r.Steps = append(r.Steps, OrganizationStepDTO{step.Kind, step.Name, string(step.EmailID), string(step.State), step.Code})

@@ -12,6 +12,7 @@ type IndexProfile struct {
 	PreprocessingVersion, IndexVersion, Fingerprint string
 }
 type IndexRun struct {
+	ClassifierVersion        string
 	AccountID                domain.AccountID
 	Profile                  IndexProfile
 	Generation, Status, Code string

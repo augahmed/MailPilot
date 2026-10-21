@@ -4,6 +4,9 @@ import {
   type ClassificationPage,
 } from "../../lib/ipc/client";
 
+import { SemanticEvidence } from "./SemanticEvidence";
+import { MailReader } from "../reader/MailReader";
+
 const errors = {
   validation: "The review request is invalid. Refresh and try again.",
   unauthorized: "Connect Gmail to review this account’s cached mail.",
@@ -18,10 +21,20 @@ const states = {
   not_reviewed: "Not reviewed yet",
   unclassified: "Unclassified — no clear category match",
   classified: "Predicted category",
+  suggested: "Suggested categories",
+  assigned: "Assigned category",
   stale: "Review needed — inputs or classifier changed",
   error: "Could not review",
 };
 export function ClassificationReview() {
+  const [opened, setOpened] = useState<{
+    emailId: string;
+    revision: string;
+    text: string;
+    accountId: string;
+  } | null>(null);
+  const [choices, setChoices] = useState<Record<string, string>>({});
+  const heading = useRef<HTMLHeadingElement>(null);
   const [page, setPage] = useState<ClassificationPage | null>(null);
   const [offset, setOffset] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -72,7 +85,10 @@ export function ClassificationReview() {
       clearTimeout(timer);
     };
   }, [offset]);
-  async function act(operation: "list" | "run") {
+  async function act(
+    operation: "list" | "run" | "assigned" | "unclassified" | "auto",
+    row?: ClassificationPage["rows"][number],
+  ) {
     if (pending.current) return;
     pending.current = true;
     revision.current++;
@@ -84,6 +100,14 @@ export function ClassificationReview() {
         operation,
         accountId: page?.accountId ?? "",
         offset,
+        ...(row
+          ? {
+              emailId: row.email_id,
+              revision: row.readerRevision ?? "",
+              categoryId:
+                operation === "assigned" ? (choices[row.email_id] ?? "") : "",
+            }
+          : {}),
       });
       if (!mounted.current) return;
       if (result.code) {
@@ -108,20 +132,97 @@ export function ClassificationReview() {
       if (mounted.current) setBusy(false);
     }
   }
+  function controls(row: ClassificationPage["rows"][number]) {
+    if (!page?.categoryOptions || !row.readerRevision) return null;
+    return (
+      <div
+        role="group"
+        aria-label={`Local category override for ${row.subject || row.email_id}`}
+      >
+        <label>
+          Primary category for {row.subject || row.email_id}
+          <select
+            disabled={busy}
+            value={choices[row.email_id] ?? ""}
+            onChange={(e) =>
+              setChoices({ ...choices, [row.email_id]: e.target.value })
+            }
+          >
+            <option value="">Choose a category</option>
+            {page.categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          disabled={busy || !choices[row.email_id]}
+          onClick={() => void act("assigned", row)}
+        >
+          Assign primary category
+        </button>
+        <button disabled={busy} onClick={() => void act("unclassified", row)}>
+          Leave unclassified
+        </button>
+        <button disabled={busy} onClick={() => void act("auto", row)}>
+          Use automatic suggestions
+        </button>
+        <small>
+          Local only. This does not confirm a training example or change Gmail.
+          Legacy assignments are retained.
+        </small>
+      </div>
+    );
+  }
+  function semanticEvidence(row: ClassificationPage["rows"][number]) {
+    return (
+      row.semantic && (
+        <SemanticEvidence
+          evidence={row.semantic}
+          onOpen={(text) => {
+            if (row.readerRevision && page?.accountId)
+              setOpened({
+                emailId: row.email_id,
+                revision: row.readerRevision,
+                text,
+                accountId: page.accountId,
+              });
+          }}
+        />
+      )
+    );
+  }
+  if (opened)
+    return (
+      <MailReader
+        accountId={opened.accountId}
+        emailId={opened.emailId}
+        source="Classification evidence"
+        evidence={{ text: opened.text, revision: opened.revision }}
+        onBack={() => {
+          setOpened(null);
+          setTimeout(() => heading.current?.focus(), 0);
+        }}
+      />
+    );
   return (
     <section
       className="status-card classification-review"
       aria-labelledby="classification-heading"
     >
-      <h2 id="classification-heading">Classification review</h2>
+      <h2 ref={heading} tabIndex={-1} id="classification-heading">
+        Classification review
+      </h2>
       <p>
-        Review deterministic rule suggestions for downloaded mail, five emails
-        at a time. Emails with weak or ambiguous evidence remain unclassified.
+        Review local semantic and optional decisive-rule suggestions for cached
+        mail, five emails at a time. Emails with insufficient evidence remain
+        unclassified; closely scoring categories are suggested together.
       </p>
       <p className="help">
-        Rule strength is a heuristic score, not measured probabilities.
-        Reviewing saves suggestions locally and does not assign categories or
-        change Gmail.
+        Cosine similarity and rule strength are evidence scores, not calibrated
+        probabilities. Reviewing saves suggestions locally and does not assign
+        categories or change Gmail.
       </p>
       <div role="status" aria-live="polite">
         {busy ? "Reviewing cached mail…" : message}
@@ -158,13 +259,18 @@ export function ClassificationReview() {
               {page.rows.map((row) => (
                 <Fragment key={row.email_id}>
                   {row.predictions.length > 0 ? (
-                    row.predictions.map((prediction) => (
+                    row.predictions.map((prediction, predictionIndex) => (
                       <tr key={prediction.category_id}>
                         <td>
                           <strong>{row.subject || "(No subject)"}</strong>
                           <small>{row.sender || "Unknown sender"}</small>
                         </td>
                         <td>
+                          {row.state === "assigned"
+                            ? "Assigned: "
+                            : row.state === "suggested"
+                              ? "Suggested: "
+                              : ""}
                           {prediction.category_name}
                           <small>
                             {row.assessment?.used_classifier ||
@@ -173,7 +279,9 @@ export function ClassificationReview() {
                           </small>
                         </td>
                         <td>
-                          {`Rule strength ${prediction.confidence.toFixed(2)}`}
+                          {prediction.score_kind === "user_assignment"
+                            ? "User assigned"
+                            : `${prediction.score_kind === "cosine_similarity" ? "Cosine score" : "Rule strength"} ${prediction.confidence.toFixed(2)}`}
                         </td>
                         <td>
                           <ul>
@@ -181,6 +289,19 @@ export function ClassificationReview() {
                               <li key={index}>{reason}</li>
                             ))}
                           </ul>
+                          {row.semantic && predictionIndex === 0 && (
+                            <p>{row.assessment?.reason}</p>
+                          )}
+                          {row.predictions.length > 1 &&
+                            predictionIndex === 0 && (
+                              <p>
+                                Several categories are suggested. Choose a
+                                primary category below to prepare a Gmail label
+                                preview.
+                              </p>
+                            )}
+                          {predictionIndex === 0 && semanticEvidence(row)}
+                          {predictionIndex === 0 && controls(row)}
                           <small>
                             Reviewed{" "}
                             <time
@@ -207,7 +328,13 @@ export function ClassificationReview() {
                           </small>
                         )}
                       </td>
-                      <td>{states[row.state]}</td>
+                      <td>
+                        {states[row.state]}
+                        {row.state === "assigned" &&
+                          row.semantic?.assigned.map((c) => (
+                            <small key={c.id}>{c.name}</small>
+                          ))}
+                      </td>
                       <td>—</td>
                       <td>
                         {row.code
@@ -215,7 +342,10 @@ export function ClassificationReview() {
                           : row.state === "unclassified"
                             ? row.assessment?.reason ||
                               "No supported category has enough evidence."
-                            : "Use Classify this page to run the local classifier."}
+                            : row.assessment?.reason ||
+                              "Use Classify this page to run the local classifier."}
+                        {semanticEvidence(row)}
+                        {controls(row)}
                       </td>
                     </tr>
                   )}

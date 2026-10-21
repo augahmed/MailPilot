@@ -45,6 +45,8 @@ export const indexResponseSchema = z
     unavailableMessages: count,
     chunksCreated: count,
     embeddingsGenerated: count,
+    assessedMessages: count,
+    pendingAssessments: count,
     eligibleCategories: count,
     readyCategories: count,
     partialCategories: count,
@@ -76,6 +78,8 @@ export const indexResponseSchema = z
         r.eligibleMessages &&
       r.indexedMessages <= r.completeMessages + r.partialMessages &&
       r.embeddingsGenerated <= r.chunksCreated &&
+      ((r.assessedMessages === 0 && r.pendingAssessments === 0) ||
+        r.assessedMessages + r.pendingAssessments === r.eligibleMessages) &&
       r.readyCategories + r.partialCategories + r.pendingCategories ===
         r.eligibleCategories &&
       (r.accountId === "" ||

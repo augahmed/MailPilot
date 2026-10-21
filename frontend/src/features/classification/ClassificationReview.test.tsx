@@ -179,3 +179,66 @@ it("ignores an old in-flight result after disconnect/remount", async () => {
     expect(screen.queryByText("Your receipt")).not.toBeInTheDocument(),
   );
 });
+
+it("shows semantic evidence and requires explicit local override actions", async () => {
+  const semantic =
+    await import("../../../../contracts/classification-local-v1.json");
+  vi.mocked(reviewClassifications).mockResolvedValue({
+    ...semantic.default.response,
+    rows: semantic.default.response.rows.slice(0, 3),
+  } as ClassificationPage);
+  render(<ClassificationReview />);
+  await screen.findByText("Suggested: Jobs");
+  expect(screen.getByText("Assigned: Personal")).toBeInTheDocument();
+  expect(
+    screen.getByRole("cell", { name: "Cosine score 0.72" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/72%/)).not.toBeInTheDocument();
+  expect(
+    screen.getByText("Please choose a time for your technical interview."),
+  ).toBeInTheDocument();
+  fireEvent.change(
+    screen.getByLabelText("Primary category for Next hiring stage"),
+    { target: { value: "personal" } },
+  );
+  const group = screen.getByRole("group", {
+    name: "Local category override for Next hiring stage",
+  });
+  fireEvent.click(group.querySelector("button")!);
+  await waitFor(() =>
+    expect(reviewClassifications).toHaveBeenLastCalledWith({
+      operation: "assigned",
+      accountId: "account-a",
+      offset: 0,
+      emailId: "email-a",
+      categoryId: "personal",
+      revision: "b".repeat(64),
+    }),
+  );
+});
+
+it("displays multiple close categories with one shared evidence and primary-choice control", async () => {
+  const fixture =
+    await import("../../../../contracts/classification-local-v1.json");
+  const multi = fixture.default.response.rows[3]!;
+  vi.mocked(reviewClassifications).mockResolvedValue({
+    ...fixture.default.response,
+    rows: [multi],
+  } as ClassificationPage);
+  render(<ClassificationReview />);
+  await screen.findByText("Suggested: School");
+  expect(screen.getByText("Suggested: Finance")).toBeInTheDocument();
+  expect(screen.getByText("Suggested: Other")).toBeInTheDocument();
+  expect(
+    screen.queryByText("Unclassified — no clear category match"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getAllByText("Category scores and matching passages"),
+  ).toHaveLength(1);
+  expect(
+    screen.getAllByRole("button", { name: "Assign primary category" }),
+  ).toHaveLength(1);
+  expect(
+    screen.getByText(/Several categories are suggested/),
+  ).toBeInTheDocument();
+});

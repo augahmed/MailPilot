@@ -352,7 +352,11 @@ export function Organization() {
                         </ol>
                       </>
                     ) : row.confidence ? (
-                      `Evidence score ${row.confidence.toFixed(3)}`
+                      row.scoreKind === "user_assignment" ? (
+                        "User assigned"
+                      ) : (
+                        `${row.scoreKind === "cosine_similarity" ? "Cosine score" : row.scoreKind === "rule_confidence" ? "Rule strength" : "Evidence score"} ${row.confidence.toFixed(3)}`
+                      )
                     ) : (
                       "—"
                     )}
@@ -360,11 +364,13 @@ export function Organization() {
                   <td>
                     {row.change === "none"
                       ? "No change"
-                      : row.change === "below_threshold"
-                        ? "Below HIGH threshold"
-                        : row.change === "risk_unavailable"
-                          ? "Risk analysis unavailable; refresh to retry"
-                          : row.change}
+                      : row.change === "multiple_suggestions"
+                        ? "Multiple suggestions — choose a primary category in category review"
+                        : row.change === "below_threshold"
+                          ? "Below HIGH threshold"
+                          : row.change === "risk_unavailable"
+                            ? "Risk analysis unavailable; refresh to retry"
+                            : row.change}
                   </td>
                 </tr>
               ))}

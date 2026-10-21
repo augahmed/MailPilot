@@ -24,6 +24,8 @@
     "eligibleCategories": 6,
     "readyCategories": 0,
     "partialCategories": 0,
-    "pendingCategories": 6
+    "pendingCategories": 6,
+    "assessedMessages": 0,
+    "pendingAssessments": 100
   }
 }

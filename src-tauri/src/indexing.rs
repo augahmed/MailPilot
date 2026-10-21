@@ -34,6 +34,8 @@ pub struct IndexResponse {
     pub unavailable_messages: u64,
     pub chunks_created: u64,
     pub embeddings_generated: u64,
+    pub assessed_messages: u64,
+    pub pending_assessments: u64,
     pub eligible_categories: u64,
     pub ready_categories: u64,
     pub partial_categories: u64,
@@ -100,6 +102,9 @@ impl IndexResponse {
             .iter()
             .try_fold(0u64, |sum, v| sum.checked_add(*v))
                 == Some(self.eligible_categories)
+            && ((self.assessed_messages == 0 && self.pending_assessments == 0)
+                || self.assessed_messages.checked_add(self.pending_assessments)
+                    == Some(self.eligible_messages))
             && total == Some(self.eligible_messages)
             && self.indexed_messages <= self.complete_messages.saturating_add(self.partial_messages)
             && self.embeddings_generated <= self.chunks_created

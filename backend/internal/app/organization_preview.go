@@ -63,8 +63,12 @@ func (s *Organization) list(ctx context.Context, account domain.AccountID, offse
 			if ok {
 				row.ProposedLabel = "MailPilot/" + name
 				row.Confidence = prediction.Confidence
+				row.ScoreKind = prediction.ScoreKind
 				row.Change = "candidate"
 			}
+		}
+		if err == nil && run.ClassifierName == s.engine.Name() && run.ClassifierVersion == s.engine.Version() && len(run.Results) > 1 {
+			row.Change = "multiple_suggestions"
 		}
 		r.Rows = append(r.Rows, row)
 	}

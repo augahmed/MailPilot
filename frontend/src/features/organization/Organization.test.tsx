@@ -31,6 +31,24 @@ beforeEach(() => {
     request.operation === "list" ? page : idle,
   );
 });
+it("explains multiple suggestions and requires a primary before label preview", async () => {
+  vi.mocked(organize).mockResolvedValue({
+    ...page,
+    rows: [
+      {
+        ...page.rows[0]!,
+        change: "multiple_suggestions",
+        proposedLabel: "",
+        confidence: 0,
+      },
+    ],
+  });
+  render(<Organization />);
+  await screen.findByText(/Multiple suggestions — choose a primary category/);
+  expect(
+    screen.queryByRole("checkbox", { name: "Select Your receipt" }),
+  ).not.toBeInTheDocument();
+});
 it("requires selection, defaults to dry run, and never applies a dry run", async () => {
   render(<Organization />);
   await screen.findByText("Your receipt");

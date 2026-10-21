@@ -213,8 +213,9 @@ Migration 7 retains old category plans; optional phishing evidence is stored in 
 [classification-semantic-v1.json](classification-semantic-v1.json) and
 [search-semantic-v1.json](search-semantic-v1.json) remain archival synthetic examples.
 Their query/index services, handlers, DTOs and UI are deleted. They do not define
-active commands. Active classification accepts deterministic `rule_confidence`
-scores and an empty `assessment.candidates` compatibility array. Historical SQLite
+active commands. The legacy rule branch accepts deterministic `rule_confidence` scores and an empty
+`assessment.candidates` compatibility array. Current semantic review uses the separately
+versioned extension below; the retired fixture is not revived. Historical SQLite
 candidate/score data remains decodable, but old engine versions are stale and
 are not exposed as current predictions. No `embedding_unavailable` error is emitted.
 
@@ -411,3 +412,46 @@ together. Existing email counts retain their meaning. Start/Resume builds pendin
 category prototypes after shared mail vectors; existing Pause/Cancel controls apply.
 No model, vectors, caller-provided text, paths, SQL, classification or external AI
 authority crosses this boundary.
+
+## Shared semantic classification (protocol-v1 extension)
+
+[classification-local-v1.json](classification-local-v1.json) is the new active shared
+fixture. `classification.review` / `classification_review` retains list/run, account
+authorization, five-email pages and existing deadlines. Optional `emailId`,
+`categoryId`, `revision` are forbidden on list/run. New assigned/unclassified/auto
+operations require the explicit current account, email and its 64-hex reader
+revision. Only assigned accepts/requires category ID. These mutate a local primary
+preference, not Gmail, examples or embedding configuration.
+
+Responses optionally add up to 100 enabled `categoryOptions` `{id,name}`. Semantic
+rows include `readerRevision` and `semantic` with state, modelVersion,
+classifierVersion, sourceRevision, minimumScore, minimumMargin, assigned and scores.
+New row states are suggested and assigned; unclassified remains an abstention.
+A single assignment has one typed user-assignment display result, multiple legacy
+assignments have none. Legacy classified rows remain decodable. Reviewed semantic
+rows require a timestamp; stale/errors hide evidence. Prediction score kinds are
+rule_confidence, cosine_similarity or user_assignment. Numeric confidence retains
+the existing storage/wire field name but is never a probability; assignment 1 is a
+typed explicit choice. Signed cosine candidate values remain in [-1,1].
+
+Semantic suggestions include every enabled category above the 0.20 score floor and
+within 0.03 (inclusive) of the best score, ordered by score then category ID. Up to
+100 predictions are allowed only for suggested semantic rows; rule and manual
+assignment display results remain single-category. Include the top three category
+scores plus every suggested category, up to 100, with four chunk evidence records per score,
+160 UTF-8 bytes per excerpt, 4096 contributing chunks and 48 KiB encoded page.
+Scores include category ID/name, score, prototype hash/status, contributing chunk
+count and evidence `{chunkId,section,text,similarity,weight}`. Full category scores
+are stored with the new semantic evidence version. The compatibility
+`assessment.candidates` field remains empty; old semantic fixtures still reject.
+
+Organization list rows with multiple current suggestions use `multiple_suggestions`;
+choose an explicit primary preference before previewing labels. No tied suggestion
+is silently selected for a label. Organization rows optionally add scoreKind for clear cosine/rule/user presentation.
+New immutable preview rows privately persist `semantic-organization-v1` evidence;
+that field is omitted from old journal rows and is never caller supplied. Existing
+apply confirmation/digest, cancellation, journaling, reconciliation and undo remain.
+`index.local` additionally requires assessedMessages and pendingAssessments.
+These count current assessments, including abstention, separately from vectors.
+No new native command, capability, external AI permission or classification queue
+is added. See [semantic classification](../docs/SEMANTIC_CLASSIFICATION.md).

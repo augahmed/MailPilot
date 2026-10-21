@@ -12,7 +12,7 @@ are implemented. Manual sync also prepares deterministic local text chunks with
 bundled MiniLM WordPiece tokenization, section provenance and pending embedding
 rows. The Local Email Index card explicitly starts/resumes a durable local MiniLM
 indexing run over all live cached mail, with pause/cancel/rebuild and coverage counts.
-Semantic search now uses the shared local vectors, with sender/date/assigned-category filters and revision-bound excerpts that open the original cached email. Keyword/hybrid search, semantic classification and evidence questions remain planned. Historical vector tables are inert; installed users need no model/runtime setup. OpenAI is the only installed functional generative adapter.
+Semantic search now uses the shared local vectors, with sender/date/assigned-category filters and revision-bound excerpts that open the original cached email. Shared semantic classification now consumes these vectors and category prototypes; keyword/hybrid search and evidence questions remain planned. Historical vector tables are inert; installed users need no model/runtime setup. OpenAI is the only installed functional generative adapter.
 
 Use **Start indexing** in Local Email Index, then submit a natural-language query in **Semantic search**. Search shows current complete coverage; stale and partial messages are excluded. See [search behavior, evaluation and latency](docs/VECTOR_SEARCH.md).
 
@@ -119,7 +119,7 @@ Default desktop locations:
 - Windows: `%APPDATA%\com.mailpilot.desktop\mailpilot.db`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/com.mailpilot.desktop/mailpilot.db`
 
-SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Current migrations 001–018 retain mail/cache, category/review, label/risk journals, incremental checkpoints, historical vector/draft structures and selected AI-provider settings. Migration 015 adds shared chunk/embedding storage and revision state; 016 adds chunk provenance/context and projected body coverage. Migration 017 adds durable local jobs and model identities without changing historical migrations. Manual sync prepares cached chunks; the explicit local index job generates/persists vectors. Shared exact retrieval is implemented. Migration 018 adds category prototypes and explicit examples through the same local coordinator. Historical vector tables are not an active index. See [schema responsibilities](docs/ARCHITECTURE.md#implemented-persistence-and-immutable-history) for the preserved migration groups. SQLite files are not encrypted.
+SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Current migrations 001–019 retain mail/cache, category/review, label/risk journals, incremental checkpoints, historical vector/draft structures and selected AI-provider settings. Migration 015 adds shared chunk/embedding storage and revision state; 016 adds chunk provenance/context and projected body coverage. Migration 017 adds durable local jobs and model identities without changing historical migrations. Manual sync prepares cached chunks; the explicit local index job generates/persists vectors. Shared exact retrieval is implemented. Migration 018 adds category prototypes and explicit examples through the same local coordinator; 019 adds versioned semantic assessments and manual primary preferences. Historical vector tables are not an active index. See [schema responsibilities](docs/ARCHITECTURE.md#implemented-persistence-and-immutable-history) for the preserved migration groups. SQLite files are not encrypted.
 
 Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to private IPC. Logs omit secrets, message content and filesystem paths. This phase has no persistent log files or telemetry.
 
@@ -295,3 +295,17 @@ verification: [local email indexing](docs/LOCAL_INDEXING.md).
 
 Reader/chunker artifact cleanup, image descriptions and preprocessing refresh:
 [shared readable email text](docs/CLEAN_TEXT.md).
+
+## Semantic classification
+
+Start or resume **Local Email Index** to assess cached email after shared vectors
+and category prototypes are ready. **Classification review** also offers explicit
+five-email review without inference. It shows Suggested, Assigned and Unclassified
+states, raw cosine/rule evidence, matching passages and local primary overrides.
+Confirming examples remains a separate deliberate action. Gmail label preview,
+confirmation, journaling, reconciliation and verified undo remain required.
+See [the classification contract and held-out evaluation](docs/SEMANTIC_CLASSIFICATION.md):
+the user-selected 0.03 lead returns multiple close suggestions above the 0.20 score
+floor. Held-out per-suggestion precision is 60.7% without examples and 66.0% with
+one confirmed example per category. Coverage is 100% on this small synthetic fixture,
+including its out-of-scope cases; this does not establish production accuracy.

@@ -49,6 +49,9 @@ export const organizationResponseSchema = z
             currentLabels: z.array(z.string()).max(50),
             proposedLabel: z.string().max(110),
             confidence: z.number().min(0).max(1),
+            scoreKind: z
+              .enum(["rule_confidence", "cosine_similarity", "user_assignment"])
+              .optional(),
             phishing: z
               .object({
                 score: z.number().int().min(31).max(100),
@@ -74,6 +77,7 @@ export const organizationResponseSchema = z
             change: z.enum([
               "candidate",
               "unclassified",
+              "multiple_suggestions",
               "below_threshold",
               "risk_unavailable",
               "add",

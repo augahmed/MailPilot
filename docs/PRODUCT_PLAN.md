@@ -14,7 +14,7 @@ Status: M1 source/chunking and M2 persistence plus a lazy packaged CPU MiniLM
 provider plus explicit resumable indexing/UI are implemented. The provider has real synthetic/native and fake-model
 checks; [qualification details](LOCAL_EMBEDDING.md) cover resource/signing/OS limits.
 The coordinator now publishes bounded vector batches through generation-fenced
-SQLite writes. Exact vector search and its UI are now implemented ([details and measurements](VECTOR_SEARCH.md)); Local category prototypes and explicit confirmed examples are implemented through the same coordinator ([contract](CATEGORY_VECTORS.md)), without classifying messages. Keyword/hybrid search, semantic classification and AI milestones remain planned.
+SQLite writes. Exact vector search and its UI are now implemented ([details and measurements](VECTOR_SEARCH.md)); Local category prototypes and explicit confirmed examples are implemented through the same coordinator ([contract](CATEGORY_VECTORS.md)). Shared semantic classification, explicit primary preferences and evidence review are now implemented ([evaluation and limitations](SEMANTIC_CLASSIFICATION.md)); the user-selected multi-category policy has 60.7% definition-only held-out per-suggestion precision, below the 90% target. Keyword/hybrid search and AI milestones remain planned.
 The additive `index.local` control returns metadata only; external AI consent is
 unchanged. See [local indexing](LOCAL_INDEXING.md) for scope and qualification. Further product work requires a scoped implementation request.
 
@@ -36,8 +36,8 @@ with incompatible preprocessing or model runtimes.
 ## 2. Release assumptions and scope
 
 Retain the compatible decisions confirmed earlier on 2026-10-19: English-first
-semantic evaluation, approximately 10,000 locally cached emails, one primary
-category with uncertainty allowed, and model/tokenizer artifacts bundled with the
+semantic evaluation, approximately 10,000 locally cached emails, one or several
+close category suggestions with explicit manual primary selection, and model/tokenizer artifacts bundled with the
 installer. No Python installation or model download after installation. Semantic
 processing remains optional. Apple Silicon macOS is the initial qualification target;
 no untested Windows/Linux or multilingual semantic-quality claims.
@@ -49,14 +49,14 @@ uncached bodies or attachment contents. Broader Gmail import needs its own reque
 
 ### Core capabilities
 
-| Capability                   | Intended behavior                                                                                                                                                                                                     |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Semantic search              | Embed a natural-language query locally; compare compatible chunk vectors using exact cosine similarity; group relevant excerpts under their original cached messages.                                                 |
-| Complementary keyword search | Local literal/full-text search, exact identifiers and useful sender/date/label/category filters; remains available without embeddings.                                                                                |
-| Intelligent classification   | Embed category names/descriptions and optional confirmed examples using the shared adapter; aggregate email chunk evidence with useful deterministic/header rules into one primary suggestion or an uncertain result. |
-| Review and correction        | Explain suggestions, let users review/correct local category state and deliberately manage examples. A correction is not a Gmail label write or automatic training permission.                                        |
-| Retrieval-augmented answers  | Retrieve candidates locally, approve the exact relevant evidence and question, then obtain an optional answer citing source emails. Report insufficient/conflicting evidence honestly.                                |
-| Provider support             | Preserve one shared bounded generative-provider abstraction and provider-scoped OS keys. OpenAI is currently the only functional installed adapter; additional adapters need their own implementation/evaluation.     |
+| Capability                   | Intended behavior                                                                                                                                                                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Semantic search              | Embed a natural-language query locally; compare compatible chunk vectors using exact cosine similarity; group relevant excerpts under their original cached messages.                                                                    |
+| Complementary keyword search | Local literal/full-text search, exact identifiers and useful sender/date/label/category filters; remains available without embeddings.                                                                                                   |
+| Intelligent classification   | Embed category names/descriptions and optional confirmed examples using the shared adapter; aggregate email chunk evidence with useful deterministic/header rules into one or several close category suggestions or an uncertain result. |
+| Review and correction        | Explain suggestions, let users review/correct local category state and deliberately manage examples. A correction is not a Gmail label write or automatic training permission.                                                           |
+| Retrieval-augmented answers  | Retrieve candidates locally, approve the exact relevant evidence and question, then obtain an optional answer citing source emails. Report insufficient/conflicting evidence honestly.                                                   |
+| Provider support             | Preserve one shared bounded generative-provider abstraction and provider-scoped OS keys. OpenAI is currently the only functional installed adapter; additional adapters need their own implementation/evaluation.                        |
 
 ### Existing features to preserve
 

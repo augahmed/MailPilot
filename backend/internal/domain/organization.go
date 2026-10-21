@@ -11,21 +11,31 @@ type OrganizationRisk struct {
 	Version   string            `json:"version"`
 	Findings  []PhishingFinding `json:"findings"`
 }
+type OrganizationClassification struct {
+	Version           string `json:"version"`
+	AssessmentHash    string `json:"assessmentHash"`
+	BaseHash          string `json:"baseHash"`
+	SourceRevision    string `json:"sourceRevision"`
+	ModelVersion      string `json:"modelVersion"`
+	ClassifierVersion string `json:"classifierVersion"`
+	ScoreKind         string `json:"scoreKind"`
+}
 type OrganizationRow struct {
-	Phishing            *OrganizationRisk `json:"phishing,omitempty"`
-	EmailID             EmailID           `json:"emailId"`
-	ProviderID          ProviderMessageID `json:"providerId"`
-	CategoryID          CategoryID        `json:"categoryId"`
-	InputHash           string            `json:"inputHash"`
-	PredictionTimestamp int64             `json:"predictionTimestamp"`
-	Sender              string            `json:"sender"`
-	Subject             string            `json:"subject"`
-	CurrentLabels       []string          `json:"currentLabels"`
-	BeforeLabels        []ProviderLabelID `json:"beforeLabels"`
-	ProposedLabel       string            `json:"proposedLabel"`
-	LabelID             ProviderLabelID   `json:"labelId"`
-	Confidence          float64           `json:"confidence"`
-	Change              string            `json:"change"`
+	Classification      *OrganizationClassification `json:"classification,omitempty"`
+	Phishing            *OrganizationRisk           `json:"phishing,omitempty"`
+	EmailID             EmailID                     `json:"emailId"`
+	ProviderID          ProviderMessageID           `json:"providerId"`
+	CategoryID          CategoryID                  `json:"categoryId"`
+	InputHash           string                      `json:"inputHash"`
+	PredictionTimestamp int64                       `json:"predictionTimestamp"`
+	Sender              string                      `json:"sender"`
+	Subject             string                      `json:"subject"`
+	CurrentLabels       []string                    `json:"currentLabels"`
+	BeforeLabels        []ProviderLabelID           `json:"beforeLabels"`
+	ProposedLabel       string                      `json:"proposedLabel"`
+	LabelID             ProviderLabelID             `json:"labelId"`
+	Confidence          float64                     `json:"confidence"`
+	Change              string                      `json:"change"`
 }
 type OrganizationStep struct {
 	Kind        string            `json:"kind"` // create_label, add, remove
