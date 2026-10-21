@@ -16,9 +16,11 @@ import (
 )
 
 type summaryFake struct {
-	mu       sync.Mutex
-	requests []ai.SummaryRequest
-	invoke   func(context.Context, ai.SummaryRequest) (ai.SummaryResult, error)
+	mu             sync.Mutex
+	requests       []ai.SummaryRequest
+	invoke         func(context.Context, ai.SummaryRequest) (ai.SummaryResult, error)
+	answerRequests []ai.AnswerRequest
+	answerInvoke   func(context.Context, ai.AnswerRequest) (ai.AnswerResult, error)
 }
 
 func (f *summaryFake) SummarizeEmail(ctx context.Context, r ai.SummaryRequest) (ai.SummaryResult, error) {
@@ -33,12 +35,15 @@ func (f *summaryFake) SummarizeEmail(ctx context.Context, r ai.SummaryRequest) (
 func (f *summaryFake) count() int { f.mu.Lock(); defer f.mu.Unlock(); return len(f.requests) }
 
 type summaryKeys struct {
+	mu    sync.Mutex
 	key   credentials.Secret
 	err   error
 	loads int
 }
 
 func (k *summaryKeys) Load(context.Context) (credentials.Secret, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	k.loads++
 	if k.err != nil {
 		return credentials.Secret{}, k.err
@@ -49,6 +54,8 @@ func (k *summaryKeys) Load(context.Context) (credentials.Secret, error) {
 	return k.key, nil
 }
 func (k *summaryKeys) Save(_ context.Context, key credentials.Secret) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	if k.err != nil {
 		return k.err
 	}
@@ -56,6 +63,8 @@ func (k *summaryKeys) Save(_ context.Context, key credentials.Secret) error {
 	return nil
 }
 func (k *summaryKeys) Delete(context.Context) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	if k.err != nil {
 		return k.err
 	}
@@ -333,4 +342,20 @@ func TestSummaryPreviewBoundsUnicodeAndEscapedResponses(t *testing.T) {
 	if r.Code != "response_too_large" || r.Result != nil {
 		t.Fatal("escaped output overflow crossed IPC")
 	}
+}
+
+func (f *summaryFake) AnswerWithEvidence(ctx context.Context, r ai.AnswerRequest) (ai.AnswerResult, error) {
+	f.mu.Lock()
+	f.answerRequests = append(f.answerRequests, r)
+	invoke := f.answerInvoke
+	f.mu.Unlock()
+	if invoke != nil {
+		return invoke(ctx, r)
+	}
+	return ai.AnswerResult{Outcome: "answered", Statements: []ai.AnswerStatement{{Text: "The selected source requests confirmation.", Citations: []ai.Citation{{SourceID: r.Sources[0].SourceID, Quote: clipSummary(r.Sources[0].Excerpt, 300)}}}}, Limitations: []string{}}, nil
+}
+func (f *summaryFake) answerCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.answerRequests)
 }

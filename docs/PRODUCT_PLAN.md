@@ -14,9 +14,9 @@ Status: M1 source/chunking and M2 persistence plus a lazy packaged CPU MiniLM
 provider plus explicit resumable indexing/UI are implemented. The provider has real synthetic/native and fake-model
 checks; [qualification details](LOCAL_EMBEDDING.md) cover resource/signing/OS limits.
 The coordinator now publishes bounded vector batches through generation-fenced
-SQLite writes. Exact vector search and its UI are now implemented ([details and measurements](VECTOR_SEARCH.md)); Local category prototypes and explicit confirmed examples are implemented through the same coordinator ([contract](CATEGORY_VECTORS.md)). Shared semantic classification, explicit primary preferences and evidence review are now implemented ([evaluation and limitations](SEMANTIC_CLASSIFICATION.md)); the user-selected multi-category policy has 60.7% definition-only held-out per-suggestion precision, below the 90% target. Keyword/hybrid search is now implemented ([held-out evaluation and latency](HYBRID_SEARCH.md)); evidence-answer AI milestones remain planned.
-The additive `index.local` control returns metadata only; external AI consent is
-unchanged. See [local indexing](LOCAL_INDEXING.md) for scope and qualification. Further product work requires a scoped implementation request.
+SQLite writes. Exact vector search and its UI are now implemented ([details and measurements](VECTOR_SEARCH.md)); Local category prototypes and explicit confirmed examples are implemented through the same coordinator ([contract](CATEGORY_VECTORS.md)). Shared semantic classification, explicit primary preferences and evidence review are now implemented ([evaluation and limitations](SEMANTIC_CLASSIFICATION.md)); the user-selected multi-category policy has 60.7% definition-only held-out per-suggestion precision, below the 90% target. Keyword/hybrid search is now implemented ([held-out evaluation and latency](HYBRID_SEARCH.md)); bounded evidence-answer questions are now implemented ([contract and validation](EMAIL_QUESTIONS.md)). Paid-model factual quality and full release qualification remain open.
+The additive `index.local` control returns metadata only. Evidence questions use
+a separately approved exact payload; existing Summary approvals do not transfer. See [local indexing](LOCAL_INDEXING.md) for scope and qualification. Further product work requires a scoped implementation request.
 
 ## 1. Product purpose
 

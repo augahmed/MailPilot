@@ -14,6 +14,8 @@ import (
 	"mailpilot.local/core/internal/repository"
 )
 
+const LexicalScoringVersion = "passage-local-tf-v1"
+
 const candidateLimit = 100
 const fusionConstant = 60.0
 
@@ -27,12 +29,14 @@ func LiteralQuery(q string) repository.KeywordQuery {
 	q = strings.TrimSpace(q)
 	words := strings.FieldsFunc(q, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 	terms := []string{}
+	wordsForRank := []string{}
 	seen := map[string]bool{}
 	for _, word := range words {
 		word = strings.ToLower(word)
 		if !seen[word] {
 			seen[word] = true
 			terms = append(terms, `"`+word+`"`)
+			wordsForRank = append(wordsForRank, word)
 		}
 	}
 	literals := []string{strings.Trim(q, `"`)}
@@ -56,7 +60,7 @@ func LiteralQuery(q string) repository.KeywordQuery {
 			literals = append(literals, parts[i])
 		}
 	}
-	return repository.KeywordQuery{Match: strings.Join(terms, " OR "), Literals: literals}
+	return repository.KeywordQuery{Match: strings.Join(terms, " OR "), Terms: wordsForRank, Literals: literals}
 }
 
 func literalMatch(text, literal string) bool {
@@ -113,8 +117,8 @@ func (s *VectorSearch) searchKeyword(ctx context.Context, a domain.AccountID, q 
 	}
 	query := LiteralQuery(q)
 	result, err := rank(ctx, a, k, func(visit func(hit) error) error {
-		return s.Keywords.ScanKeywords(ctx, a, s.Profile, f, query, func(v repository.VectorSource, score float64) error {
-			return visit(hit{source: v, score: score, exact: exactSource(v, query), excerpt: keywordExcerpt(v.Chunk.Text, q)})
+		return s.Keywords.ScanKeywords(ctx, a, s.Profile, f, query, func(v repository.VectorSource, _ float64) error {
+			return visit(hit{source: v, score: lexicalScore(v, query.Terms), exact: exactSource(v, query), excerpt: keywordExcerpt(v.Chunk.Text, q)})
 		})
 	})
 	if err != nil {
@@ -126,7 +130,7 @@ func (s *VectorSearch) searchKeyword(ctx context.Context, a domain.AccountID, q 
 	return result, s.CheckSources(ctx, a, f, result.Sources)
 }
 
-// SearchMode uses equal-weight reciprocal rank fusion at email level. BM25 and
+// SearchMode uses equal-weight reciprocal rank fusion at email level. Lexical and
 // cosine retain their meanings and are never added together. Exact literal hits
 // form a priority tier in keyword/hybrid modes; semantic-only preserves cosine.
 // Empty mode preserves the existing semantic API for older callers.
@@ -292,4 +296,28 @@ func keywordExcerpt(text, q string) string {
 		return clip(text[start:], 600)
 	}
 	return clip(text, 600)
+}
+
+// lexicalScore uses per-passage term coverage and saturated frequency with a
+// fixed length reference. It uses no corpus or cross-account statistics. FTS5
+// still supplies token candidates; exact literal matches remain a priority tier.
+func lexicalScore(v repository.VectorSource, terms []string) float64 {
+	score := 0.0
+	for i, text := range []string{v.Chunk.Text, v.Chunk.ContextText} {
+		words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+		counts := map[string]int{}
+		for _, word := range words {
+			counts[word]++
+		}
+		weight := 1.0
+		if i == 1 {
+			weight = .5
+		}
+		for _, term := range terms {
+			if n := counts[term]; n > 0 {
+				score += weight * float64(n) / (float64(n) + 1.2*(.25+.75*float64(len(words))/128))
+			}
+		}
+	}
+	return score
 }

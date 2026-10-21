@@ -748,6 +748,28 @@ impl Bridge {
         }
         Ok(response)
     }
+    pub fn answer_email(
+        &mut self,
+        request: crate::answers::AnswerRequest,
+    ) -> Result<crate::answers::AnswerResponse, String> {
+        if !request.valid() {
+            return Err("Invalid email answer request".into());
+        }
+        let account = request.account_id.clone();
+        let response: crate::answers::AnswerResponse = serde_json::from_value(self.request(
+            "email.answer",
+            serde_json::to_value(request).map_err(|_| "Invalid email answer request")?,
+        )?)
+        .map_err(|_| "Invalid email answer response")?;
+        if !response.valid()
+            || (!account.is_empty()
+                && !response.account_id.is_empty()
+                && account != response.account_id)
+        {
+            return Err("Invalid email answer response".into());
+        }
+        Ok(response)
+    }
     pub fn vector_search(
         &mut self,
         request: crate::search::SearchRequest,

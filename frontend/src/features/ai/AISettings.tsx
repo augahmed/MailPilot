@@ -108,8 +108,9 @@ export function AISettings() {
     <section className="status-card" aria-labelledby="ai-settings-heading">
       <h2 id="ai-settings-heading">Optional AI settings</h2>
       <p>
-        AI summarizes one selected cached email only after approval. Reading,
-        sync, organization and risk analysis work with AI disabled.
+        AI can summarize selected mail or answer from selected excerpts after
+        separate approval for each request. Reading, sync, organization and risk
+        analysis work with AI disabled.
       </p>
       {!view?.accountId ? (
         <p>Connect Gmail to manage AI settings.</p>

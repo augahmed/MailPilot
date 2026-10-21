@@ -8,6 +8,7 @@ import (
 	"mailpilot.local/core/internal/domain"
 	mailtext "mailpilot.local/core/internal/mail"
 	"mailpilot.local/core/internal/repository"
+	"mailpilot.local/core/internal/retrieval"
 	"sort"
 	"strings"
 	"sync"
@@ -26,19 +27,25 @@ type summaryEmailReader interface {
 	Get(context.Context, domain.AccountID, domain.EmailID) (repository.StoredEmail, error)
 }
 type AIService struct {
-	mu           sync.Mutex
-	root         context.Context
-	session      func() (domain.AccountID, context.Context, error)
-	emails       summaryEmailReader
-	settings     ai.SettingsStore
-	providers    map[string]ProviderAdapter
-	consent      *ai.Service
-	snapshot     ai.SummaryRequest
-	response     SummarizeEmailResponse
-	cancel       context.CancelFunc
-	busy, closed bool
-	generation   uint64
-	wg           sync.WaitGroup
+	mu            sync.Mutex
+	root          context.Context
+	session       func() (domain.AccountID, context.Context, error)
+	emails        summaryEmailReader
+	settings      ai.SettingsStore
+	providers     map[string]ProviderAdapter
+	consent       *ai.Service
+	snapshot      ai.SummaryRequest
+	response      SummarizeEmailResponse
+	cancel        context.CancelFunc
+	busy, closed  bool
+	generation    uint64
+	wg            sync.WaitGroup
+	answer        *questionState
+	retriever     answerRetriever
+	answerIndex   repository.IndexRepository
+	answerWords   repository.KeywordRepository
+	answerProfile repository.IndexProfile
+	now           func() time.Time
 }
 
 func NewAIService(root context.Context, session func() (domain.AccountID, context.Context, error), emails summaryEmailReader, settings ai.SettingsStore, providers map[string]ProviderAdapter) *AIService {
@@ -46,7 +53,16 @@ func NewAIService(root context.Context, session func() (domain.AccountID, contex
 	for id, adapter := range providers {
 		copy[id] = adapter
 	}
-	return &AIService{root: root, session: session, emails: emails, settings: settings, providers: copy, response: emptySummary()}
+	return &AIService{root: root, session: session, emails: emails, settings: settings, providers: copy, response: emptySummary(), now: time.Now}
+}
+
+// EnableAnswers reuses the exact same shared retriever/provider/store as search.
+// Composition calls it once before IPC starts; no new index/queue is created.
+func (s *AIService) EnableAnswers(search *retrieval.VectorSearch, index repository.IndexRepository) {
+	s.retriever = search
+	s.answerIndex = index
+	s.answerWords = search.Keywords
+	s.answerProfile = search.Profile
 }
 func (s *AIService) clearLocked() {
 	if s.cancel != nil {
@@ -58,6 +74,7 @@ func (s *AIService) clearLocked() {
 	s.consent = nil
 	s.snapshot = ai.SummaryRequest{}
 	s.response = emptySummary()
+	s.answer = nil
 	s.generation++
 }
 func (s *AIService) Clear() { s.mu.Lock(); defer s.mu.Unlock(); s.clearLocked() }

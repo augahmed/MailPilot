@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Mailbox } from "../mailbox/Mailbox";
 import { SemanticSearch } from "../search/SemanticSearch";
+import { EmailQuestion } from "../ai/EmailQuestion";
 import { MailReader } from "./MailReader";
 export function MailWorkspace({
   connectionRevision,
@@ -39,6 +40,12 @@ export function MailWorkspace({
           onEvidence={setEvidence}
           onOpen={(accountId, emailId, button) =>
             open("search", accountId, emailId, button)
+          }
+        />
+        <EmailQuestion
+          onEvidence={setEvidence}
+          onOpen={(accountId, emailId, button) =>
+            open("email questions", accountId, emailId, button)
           }
         />
         <Mailbox

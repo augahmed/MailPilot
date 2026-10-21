@@ -53,6 +53,9 @@ type AIService interface {
 	ManageAISettings(context.Context, app.AISettingsRequest) app.AISettingsResponse
 	SummarizeEmail(context.Context, app.SummarizeEmailRequest) app.SummarizeEmailResponse
 }
+type AnswerService interface {
+	AnswerEmail(context.Context, app.AnswerRequest) app.AnswerResponse
+}
 type ReplyService interface {
 	Reply(context.Context, app.ReplyRequest) app.ReplyResponse
 }
@@ -133,6 +136,16 @@ func Serve(ctx context.Context, input io.Reader, output io.Writer, factory Facto
 					} else {
 						reply.Result = map[string]int{"protocolVersion": domain.ProtocolVersion}
 					}
+				}
+			case "email.answer":
+				var params app.AnswerRequest
+				answering, ok := service.(AnswerService)
+				if strictDecode(req.Params, &params) != nil || !params.Valid() {
+					fail(-32602, "Invalid parameters")
+				} else if !ok {
+					fail(-32001, "Email answers unavailable")
+				} else {
+					reply.Result = answering.AnswerEmail(callCtx, params)
 				}
 			case "search.local":
 				var params app.SearchRequest

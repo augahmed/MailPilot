@@ -29,7 +29,7 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 | Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | Local category prototypes and explicit confirmed examples share the existing index coordinator/provider ([contract](CATEGORY_VECTORS.md)). Semantic multi-chunk classification and primary preferences now share the coordinator; see [contract/evaluation](SEMANTIC_CLASSIFICATION.md). The definition-only synthetic precision target remains unmet. |
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
-| AI | `ai.settings`, provider-scoped OS keys and one approved cached-email Summary through `SummarizeEmail`; OpenAI is the only installed functional adapter. | No evidence-question operation, retrieved context, tools, replies, new drafts or general chat. |
+| AI | `ai.settings`, provider-scoped OS keys and approved cached-email Summary and source-limited evidence questions through one AIProvider; OpenAI is the only installed functional adapter. | Evidence questions require exact per-request approval and validated citations ([contract](EMAIL_QUESTIONS.md)). No tools, replies, new drafts or general chat. |
 | Search/storage | SQLite migrations 001–020, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; migration 020 indexes shared passages with external-content FTS5. | Local vector indexing is active on explicit Start/Resume. Semantic search uses complete compatible chunk generations. Keyword search works without vectors; hybrid fuses email ranks and prioritizes exact literals. Old vector schemas are inert. |
 | Historical recovery | GET-only Gmail draft matching and local status/reconcile/resolve/cancel for old journal actions. | No draft creation, resending, remote deletion or reactivation of historical previews. |
 
@@ -77,9 +77,9 @@ generic CRUD framework, parallel processing framework, second SQLite owner or
 hypothetical multi-provider mailbox abstraction. A fixed inference-only helper is
 an option only if native feasibility requires it; it cannot own data or network.
 
-## 3. Intended shared local pipeline (planned)
+## 3. Shared local pipeline
 
-The diagram combines the implemented cache/chunk/embedding/storage flow with planned
+The diagram shows the implemented cache/chunk/embedding/storage flow and shared
 keyword/retrieval/classification/evidence consumers:
 
 ```mermaid
@@ -285,7 +285,8 @@ Never infer remote deletion from incomplete Gmail listings.
 `retrieval.VectorSearch.Search` / `SearchChunks` retain exact cosine retrieval.
 `SearchMode` adds keyword-only and hybrid retrieval through `Store.Vectors()` and
 the same `app.LocalSearch` / `search.local` / `vector_search` boundary. Keyword
-search uses FTS5 BM25 over current shared chunks without requiring vectors. Hybrid
+search uses FTS5 candidates and passage-local term scoring over current shared
+chunks without requiring vectors or global corpus statistics. Hybrid
 uses equal-weight reciprocal rank fusion after email deduplication, with exact
 literal identifiers/phrases prioritized. All modes share account/sender/date/assigned
 category filters, source revision checks and bounded escaped excerpts. Gmail label
@@ -322,41 +323,34 @@ Track source/category/example/model/algorithm and override revisions. Assess the
 eligible cache through bounded enabled local jobs, not external classification.
 Keep risk extraction/scoring independent of this pipeline.
 
-## 8. Optional retrieval-augmented answers (planned)
+## 8. Optional retrieval-augmented answers
 
-The immediate external-AI workflow answers questions about email information.
-Go retrieves through the shared local search and constructs a bounded evidence
-bundle; users inspect/select exact excerpts and approve the exact question,
-metadata/policy/provider/model/destination/expiry before disclosure. No unapproved
-mail, attachment content, hidden threads, prior conversation or automatic expansion.
+Implemented through `app.AIService.Answer`, the shared hybrid retriever and the narrow
+`email.answer` / `email_answer` start/selection/approval/status/cancel/clear boundary.
+See [EMAIL_QUESTIONS.md](EMAIL_QUESTIONS.md) for exact contracts and adversarial tests.
+Go selects bounded current SQLite chunk excerpts; users inspect/select and separately
+approve exact question/source IDs/revisions/metadata, payload, policy, provider/model
+and expiry. No unapproved context, attachment bodies or hidden thread expansion.
 
-Use a narrow provider-neutral evidence-answer contract; a name such as
-`AnswerWithEvidence` is a design sketch, not an implemented method. Isolate provider
-SDK/wire types inside adapters, preserve provider-scoped OS keys and list only
-functional adapters. Multiple AI providers do not mean multiple email providers.
-No provider has mailbox/search tools, Gmail credentials, generic prompts/agent
-execution, background access or action rights. No reply/composition operation is planned.
+`AIProvider` exposes only `SummarizeEmail` and normalized `AnswerWithEvidence`.
+Adapters receive approved bounded inputs and provider-scoped OS keys; no repositories,
+Gmail credentials/tools, SQL, external search, arbitrary endpoint or action authority.
+The existing AIService owns one transient worker shared with Summary. No durable QA
+queue/index/database was added. Shutdown joins AI work before closing indexing/provider.
 
-Approval is single-use and expiring, bound to account/profile/client session, exact
-question/evidence/order/bytes, selected source revisions, policy and provider/model/
-settings/key identity. Recheck before dispatch and display. Source/context/settings
-changes revoke relevant approvals; unrelated sync cannot mutate approved evidence.
-Cancellation suppresses late results but cannot recall already transmitted content.
-Use bounded deadlines/output, no automatic generation retry and fresh approval for
-retry. Preview/status/settings make no provider request.
+One-use consent binds account/session, exact payload/order, source generations,
+settings/provider/model/key and five-minute expiry. Go rechecks before dispatch and
+display; the installed adapter checks the actual dispatch key. Cancellation and
+relevant changes suppress late results. No automatic paid retry or background generation.
+Outputs/previews remain memory-only and escaped. Citations require approved aliases
+and exact source quotes; invalid IDs/quotes/unsupported output reject. Provenance is
+not factual entailment. Insufficient/conflicting evidence and limited coverage are
+explicit. Top-K is never exhaustive; common global aggregate/absence requests are
+blocked before paid generation and every answer is scoped to selected excerpts.
 
-Answers reference only Go-issued approved evidence IDs; validate IDs, bounds and
-verbatim quotes when supplied. This proves reference provenance, not entailment or
-truth. Preserve uncertainty, conflicting dates/claims and insufficient-evidence
-responses. Render escaped text/source links and keep output/consent memory-only
-initially. Source revisions and coverage remain visible to users.
-
-The current `AIProvider` exposes only `SummarizeEmail`; current approved input is
-6,000 UTF-8 bytes for one cached message. It cannot perform RAG today. Preserve its
-settings/keyring/redaction/transport foundations and independent historical draft
-recovery. Transition Summary only in a later tested implementation, with fresh
-feature acknowledgment/consent; neither existing enablement nor old tokens authorize
-multi-message disclosure. [GENERATIVE_AI.md](GENERATIVE_AI.md) documents both statuses.
+Summary remains independent with its existing bounds and approval. Its settings or
+old approvals do not authorize questions; historical draft recovery remains unchanged.
+No reply/composition/sending or autonomous action capability was introduced.
 
 ## 9. Preserve Gmail, risk and reading boundaries
 

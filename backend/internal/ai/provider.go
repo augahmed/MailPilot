@@ -1,4 +1,4 @@
-// Package ai defines optional, provider-neutral single-email summaries. It grants no
+// Package ai defines optional, provider-neutral email summaries and evidence answers. It grants no
 // mailbox, network-tool, or action capabilities to generated text.
 package ai
 
@@ -91,6 +91,7 @@ func (r SummaryResult) Validate(source SummaryRequest) error {
 // Provider-specific wire/SDK types stay in adapters. Output has no action rights.
 type AIProvider interface {
 	SummarizeEmail(context.Context, SummaryRequest) (SummaryResult, error)
+	AnswerWithEvidence(context.Context, AnswerRequest) (AnswerResult, error)
 }
 
 const MaxOutputTokens = 1800

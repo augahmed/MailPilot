@@ -1,42 +1,29 @@
 # Optional AI: approved email evidence and current Summary
 
-Updated 2026-10-19. [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the scope authority and
-[ARCHITECTURE.md](ARCHITECTURE.md#8-optional-retrieval-augmented-answers-planned)
-defines the intended application boundary. This feature specification distinguishes
-planned answers from the currently implemented selected-email Summary. The reset
-changes no command, provider method, key, credential, approval or runtime behavior.
+Updated 2026-10-20. [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the scope authority.
+Optional AI now supports selected-email Summary and separately approved evidence
+questions. Both preserve selected provider/model, OS-only key storage and bounded
+normalized provider contracts. Neither workflow grants mailbox/action tools.
 
-## Intended workflow: retrieval-augmented questions (planned)
+## Implemented retrieval-augmented questions
 
-The immediate AI use case is answering bounded questions about information in
-cached email. Go retrieves through the shared local semantic/hybrid pipeline;
-users inspect/select and separately approve the exact passages, question, metadata,
-policy and provider/model before disclosure. No hidden thread expansion, attachments,
-prior conversation, model-controlled search or action tools. Answers cite approved
-source emails and preserve insufficient/conflicting evidence and uncertainty.
+[EMAIL_QUESTIONS.md](EMAIL_QUESTIONS.md) defines the implemented `email.answer` /
+`email_answer` workflow: local shared hybrid retrieval, at most eight bounded source
+excerpts, source selection, exact payload/policy preview, expiring one-use approval,
+one selected-provider generation and validated source-linked citations. Questions,
+evidence and output remain memory-only. Missing/conflicting evidence, nonexhaustive
+retrieval, cancellation and stale source/session/settings/key invalidation are explicit.
+No hidden context, external/model-controlled search, Gmail tools, SQL or actions.
 
-Keep multiple providers behind one narrow evidence-answer abstraction, with
-provider-specific wire/SDK types in adapters and provider-scoped OS keys. Local
-embedding inference is independent and uploads no mail. No generative provider or
-key is needed for local search/classification. Composition/replies, sending, new
-Gmail drafts, unrestricted chat/agents and background external AI are outside scope.
-
-Approval must be expiring/single-use and bound to account/client, exact payload,
-source revisions, policy and provider/model/settings/key identity. Recheck before
-dispatch/display, revoke on relevant changes and suppress late results after
-cancellation. Validate source IDs/quotes, bounds and escaped output; citation
-provenance cannot prove semantic correctness. Keep previews/answers memory-only
-initially. Set exact RAG payload limits and typed contracts during implementation;
-the current Summary's limits below are not permission for broader disclosure.
-
-Plan a later tested Summary transition, reusing safe settings/keyring/redaction/
-transport foundations. Existing Summary enablement or approval never authorizes
-RAG. Historical draft recovery stays independent. No replacement is implemented
-by this documentation task.
+The normalized `AIProvider.AnswerWithEvidence` capability is separate from Summary;
+Summary enablement or tokens never authorize a question. The user must approve each
+exact question/evidence request. Empty retrieval and common mailbox-wide aggregate
+requests make no paid call. Citation provenance cannot establish factual correctness.
+See the question contract for exact limits, adversarial tests and native validation.
 
 ## Implemented baseline: selected-email summaries
 
-The current runtime supports one AI workflow: summarize one explicitly selected cached email,
+The retained Summary workflow summarizes one explicitly selected cached email,
 extract explicit requests, and extract stated deadlines. The reader provides an
 exact payload preview and a separate approval step. Ordinary mail reading, sync,
 categories, organization and phishing analysis work with AI disabled.
@@ -68,6 +55,7 @@ the selected provider's key; OS-store failures are reported with no plaintext fa
 ```go
 type AIProvider interface {
     SummarizeEmail(context.Context, SummaryRequest) (SummaryResult, error)
+    AnswerWithEvidence(context.Context, AnswerRequest) (AnswerResult, error)
 }
 
 type SummaryRequest struct {
@@ -128,11 +116,13 @@ Email/model output is untrusted and rendered as escaped text with inactive links
 
 `GenerateDraft`, `AnswerWithContext`, `SummarizeThread`, generic operation dispatch,
 reply payload construction, thread-context SQL, new draft-plan insertion/dispatch,
-Gmail `CreateDraft`, and the old reply editor are deleted. Ask, mailbox Q&A/RAG,
-reply generation, thread summaries, arbitrary chat/prompts and AI classification
-cannot be reached through the UI, IPC, provider interface or indirect recovery.
+Gmail `CreateDraft`, and the old reply editor are deleted. The retired Ask endpoint,
+reply generation, thread summaries, arbitrary chat/tools and AI classification
+remain unreachable through the UI, IPC, provider interface or indirect recovery.
+The new bounded evidence-answer endpoint is documented separately above.
 
-No generic AI methods remain for compatibility. Only historical draft plan
+The separately implemented typed evidence-question operation does not revive the
+old generic `AnswerWithContext` or Ask contract. No generic AI methods remain for compatibility. Only historical draft plan
 values/digests/validation, account-scoped journal reads, recovery transitions and
 Gmail `FindDraft` remain. Recovery has no AI/key/settings dependency and cannot
 resume previews or create/resend/delete drafts. Journal bodies/source references

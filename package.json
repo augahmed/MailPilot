@@ -28,6 +28,7 @@
     "test:indexing:native": "node scripts/smoke-indexing.mjs",
     "test:search:native": "node scripts/smoke-search.mjs",
     "test:search:hybrid": "node scripts/smoke-hybrid-search.mjs",
+    "test:answers:native": "node scripts/smoke-answers.mjs",
     "test:categories:native": "node scripts/smoke-categories.mjs",
     "test:classification:native": "node scripts/smoke-classification.mjs"
   },

@@ -27,10 +27,11 @@ func (r *vectorRepository) ScanKeywords(ctx context.Context, a domain.AccountID,
 		return repository.ErrInvalid
 	}
 	q, args := keywordQuery(a, p, f)
-	// MATERIALIZED keeps SQLite's bm25 auxiliary function inside its FTS cursor.
-	cte := `WITH matches AS MATERIALIZED (SELECT rowid,bm25(chunk_fts,1.0,0.5) AS rank FROM chunk_fts WHERE chunk_fts MATCH ?)`
+	// FTS supplies matches only. Global BM25 statistics would leak other accounts'
+	// retained text through scores/ranks; retrieval scores each passage locally.
+	cte := `WITH matches AS MATERIALIZED (SELECT chunk_fts.rowid FROM chunk_fts JOIN email_chunks indexed_chunk ON indexed_chunk.rowid=chunk_fts.rowid WHERE chunk_fts MATCH ? AND indexed_chunk.account_id=?)`
 	if query.Match == "" {
-		cte = `WITH matches AS MATERIALIZED (SELECT rowid,0.0 AS rank FROM chunk_fts WHERE 0 AND ?='')`
+		cte = `WITH matches AS MATERIALIZED (SELECT rowid FROM chunk_fts WHERE 0 AND ?='' AND ?='')`
 	}
 	q = strings.Replace(q, " WHERE e.account_id", " LEFT JOIN matches ON matches.rowid=c.rowid WHERE e.account_id", 1)
 	q += ` AND (matches.rowid IS NOT NULL`
@@ -39,9 +40,9 @@ func (r *vectorRepository) ScanKeywords(ctx context.Context, a domain.AccountID,
 		args = append(args, literal, literal)
 	}
 	q += `)`
-	args = append([]any{query.Match}, args...)
+	args = append([]any{query.Match, a}, args...)
 	return r.store.transaction(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, cte+` SELECT c.id,c.email_id,c.chunk_index,c.section_type,c.text,c.token_count,c.source_revision,c.start_offset,c.end_offset,c.content_hash,c.preprocessing_version,c.source_kind,c.section_index,c.section_start_offset,c.section_end_offset,c.context_text,s.generation,e.subject,a.name,a.address,e.received_at,(s.body_state<>'complete' OR s.content_status<>'complete'),COALESCE(-matches.rank,0)`+q+` ORDER BY c.email_id,c.chunk_index,c.id`, args...)
+		rows, err := tx.QueryContext(ctx, cte+` SELECT c.id,c.email_id,c.chunk_index,c.section_type,c.text,c.token_count,c.source_revision,c.start_offset,c.end_offset,c.content_hash,c.preprocessing_version,c.source_kind,c.section_index,c.section_start_offset,c.section_end_offset,c.context_text,s.generation,e.subject,a.name,a.address,e.received_at,(s.body_state<>'complete' OR s.content_status<>'complete'),0.0`+q+` ORDER BY c.email_id,c.chunk_index,c.id`, args...)
 		if err != nil {
 			return err
 		}

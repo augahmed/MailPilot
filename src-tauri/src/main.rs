@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ai;
+mod answers;
 mod bridge;
 mod category_vectors;
 mod indexing;
@@ -39,6 +40,7 @@ mod capability_tests {
             "allow-reply-manage",
             "allow-ai-settings",
             "allow-email-summarize",
+            "allow-email-answer",
             "allow-local-index",
             "allow-vector-search",
             "allow-category-vectors",
@@ -62,6 +64,7 @@ struct SmokeTest {
     summary_completed: AtomicBool,
     index_completed: AtomicBool,
     search_completed: AtomicBool,
+    answer_completed: AtomicBool,
 }
 
 impl SmokeTest {
@@ -78,6 +81,7 @@ impl SmokeTest {
             && self.summary_completed.load(Ordering::SeqCst)
             && self.index_completed.load(Ordering::SeqCst)
             && self.search_completed.load(Ordering::SeqCst)
+            && self.answer_completed.load(Ordering::SeqCst)
     }
 }
 
@@ -96,6 +100,39 @@ async fn category_vectors(
     })
     .await
     .map_err(|_| "Backend task failed".to_string())?
+}
+
+#[tauri::command]
+async fn email_answer(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+    request: answers::AnswerRequest,
+) -> Result<answers::AnswerResponse, String> {
+    let backend = backend.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = backend.lock().map_err(|_| "Backend unavailable")?;
+        match guard.as_mut() {
+            Ok(bridge) => bridge.answer_email(request),
+            Err(message) => Err(message.clone()),
+        }
+    })
+    .await
+    .map_err(|_| "Backend task failed".to_string())??;
+    let smoke = app.state::<SmokeTest>();
+    if smoke.enabled
+        && result.code == "unauthorized"
+        && result.evidence.is_empty()
+        && result.result.is_none()
+        && !smoke.answer_completed.swap(true, Ordering::SeqCst)
+    {
+        eprintln!(
+            "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_answer_ok\"}}"
+        );
+        if smoke.complete() {
+            app.exit(0);
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -540,7 +577,7 @@ fn main() {
         }))
         .setup(|app| {
             let smoke_test = std::env::args().any(|arg| arg == "--smoke-test");
-            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), reader_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false), ai_settings_completed:AtomicBool::new(false),summary_completed:AtomicBool::new(false),index_completed:AtomicBool::new(false),search_completed:AtomicBool::new(false) });
+            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), reader_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false), ai_settings_completed:AtomicBool::new(false),summary_completed:AtomicBool::new(false),index_completed:AtomicBool::new(false),search_completed:AtomicBool::new(false),answer_completed:AtomicBool::new(false) });
             if smoke_test {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
@@ -560,7 +597,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            category_vectors,vector_search,local_index,health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, sync_cancel, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, reply_manage, ai_settings, email_summarize])
+            email_answer,category_vectors,vector_search,local_index,health, gmail_status, gmail_connect, gmail_check, gmail_disconnect, sync_start, sync_status, sync_cancel, mailbox_list, mailbox_read, categories_manage, classification_review, organization_manage, reply_manage, ai_settings, email_summarize])
         .build(tauri::generate_context!())
         .expect("failed to build MailPilot desktop application");
 

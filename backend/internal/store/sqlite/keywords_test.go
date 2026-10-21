@@ -151,3 +151,24 @@ func TestKeywordUpgradeNineteenRebuildsSharedPassages(t *testing.T) {
 		t.Fatal("upgrade FTS backfill", got, err)
 	}
 }
+
+func TestKeywordRankingNeverUsesOtherAccountStatistics(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	a, b := account(t, s, "scope-a"), account(t, s, "scope-b")
+	search, _ := keywordFixture(t, s, a, "visible", "Current message contains zephyrmarker.")
+	keywordFixture(t, s, b, "hidden-one", "Private unrelated vocabulary.")
+	keywordFixture(t, s, b, "hidden-two", "Another private unrelated message.")
+	before, err := search.SearchMode(ctx, a, "zephyrmarker", 10, repository.SearchFilter{}, "keyword")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keywordFixture(t, s, b, "hidden-one", "Private message contains zephyrmarker.")
+	after, err := search.SearchMode(ctx, a, "zephyrmarker", 10, repository.SearchFilter{}, "keyword")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before.Emails) != 1 || len(after.Emails) != 1 || before.Emails[0].RankScore != after.Emails[0].RankScore {
+		t.Fatal("cross-account lexical statistics leaked")
+	}
+}

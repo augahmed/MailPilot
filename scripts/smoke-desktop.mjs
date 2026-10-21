@@ -47,6 +47,7 @@ try {
       !diagnostics.includes('"event":"frontend_summary_ok"') ||
       !diagnostics.includes('"event":"frontend_index_ok"') ||
       !diagnostics.includes('"event":"frontend_search_ok"') ||
+      !diagnostics.includes('"event":"frontend_answer_ok"') ||
       !diagnostics.includes('"msg":"core stopped"')
     ) {
       throw new Error(

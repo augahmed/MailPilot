@@ -27,6 +27,7 @@ type VectorSource struct {
 // No caller-supplied MATCH syntax or SQL crosses IPC.
 type KeywordQuery struct {
 	Match    string
+	Terms    []string
 	Literals []string
 }
 type KeywordRepository interface {

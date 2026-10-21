@@ -139,7 +139,7 @@ func TestNativeHybridSearchEvaluation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	report := map[string]any{"indexedChunks": coverage.Chunks, "fixtureVersion": fixture.Version, "split": "held-out", "messages": len(fixture.Messages), "accountMessages": len(fixture.Messages) - 1, "queries": len(fixture.Queries), "rrfConstant": 60, "candidateEmailsPerBranch": 100, "modes": reports}
+	report := map[string]any{"lexicalScoringVersion": retrieval.LexicalScoringVersion, "indexedChunks": coverage.Chunks, "fixtureVersion": fixture.Version, "split": "held-out", "messages": len(fixture.Messages), "accountMessages": len(fixture.Messages) - 1, "queries": len(fixture.Queries), "rrfConstant": 60, "candidateEmailsPerBranch": 100, "modes": reports}
 	data, err := json.Marshal(report)
 	if err != nil {
 		t.Fatal(err)

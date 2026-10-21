@@ -178,9 +178,13 @@ func TestTextDoesNotLeakThroughDiagnostics(t *testing.T) {
 	}
 }
 
-func TestProviderInterfaceHasOnlyTheSummaryCapability(t *testing.T) {
+func TestProviderInterfaceHasOnlyBoundedEmailCapabilities(t *testing.T) {
 	contract := reflect.TypeFor[AIProvider]()
-	if contract.NumMethod() != 1 || contract.Method(0).Name != "SummarizeEmail" {
+	if contract.NumMethod() != 2 || contract.Method(0).Name != "AnswerWithEvidence" || contract.Method(1).Name != "SummarizeEmail" {
 		t.Fatal("generic AI operation exposed")
 	}
+}
+
+func (f *fakeProvider) AnswerWithEvidence(context.Context, AnswerRequest) (AnswerResult, error) {
+	return AnswerResult{}, ErrDisabled
 }

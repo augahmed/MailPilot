@@ -25,6 +25,8 @@ func aiWorkflowCode(e error) string {
 		return "validation"
 	case errors.Is(e, credentials.ErrUnavailable), errors.Is(e, credentials.ErrNotFound), errors.Is(e, ai.ErrCredentials):
 		return "ai_credentials_unavailable"
+	case errors.Is(e, ai.ErrResponse):
+		return "ai_invalid_response"
 	case errors.Is(e, ai.ErrDisabled):
 		return "ai_disabled"
 	case errors.Is(e, context.Canceled), errors.Is(e, context.DeadlineExceeded):

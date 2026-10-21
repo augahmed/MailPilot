@@ -73,6 +73,9 @@ func run() int {
 	var indexing *app.LocalIndex
 	var searching *app.LocalSearch
 	defer func() {
+		if intelligence != nil {
+			intelligence.Close()
+		}
 		if searching != nil {
 			_ = searching.Close(context.Background())
 		}
@@ -84,9 +87,6 @@ func run() int {
 				_ = indexing.Close(context.Background())
 			}
 			cancel()
-		}
-		if intelligence != nil {
-			intelligence.Close()
 		}
 		if replies != nil {
 			replies.Close()
@@ -147,7 +147,8 @@ func run() int {
 		}
 		indexing.EnableCategoryVectors(store.CategoryVectors())
 		application.Index = indexing
-		searching = app.NewLocalSearch(ctxRoot, authentication.Session, retrieval.New(store.Vectors(), localProvider), store.Indexing())
+		retriever := retrieval.New(store.Vectors(), localProvider)
+		searching = app.NewLocalSearch(ctxRoot, authentication.Session, retriever, store.Indexing())
 		application.Search = searching
 		application.Emails = store.Emails()
 		application.Categories = store.Categories()
@@ -172,6 +173,7 @@ func run() int {
 				return openai.New(keys(account), model)
 			}},
 		})
+		intelligence.EnableAnswers(retriever, store.Indexing())
 		application.AI = intelligence
 		replies = app.NewReplyMaintenance(ctxRoot, authentication.Session, store.Replies(), func(account domain.AccountID) provider.DraftFinder { return gmail.NewProvider(account, authentication) })
 		application.Replies = replies

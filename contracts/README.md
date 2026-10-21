@@ -1,10 +1,11 @@
 # Local IPC, protocol version 1
 
 Status reviewed 2026-10-20. This file documents implemented IPC, not future feature
-authorization. [The architecture](../docs/ARCHITECTURE.md) describes the planned
+authorization. [The architecture](../docs/ARCHITECTURE.md) describes the implemented
 shared local chunk/vector pipeline; [the product plan](../docs/PRODUCT_PLAN.md)
-defines scope/milestones. The additive local index control is now implemented; local vector search is now implemented; evidence-answer
-commands remain unimplemented. Summary remains implemented. Historical fixtures are
+defines scope/milestones. Local index controls, vector/keyword/hybrid search and
+explicitly approved evidence questions are implemented through their narrow typed
+commands below. Summary remains implemented. Historical fixtures are
 compatibility/negative-test examples; see [legacy notes](../docs/archive/LEGACY_FEATURES.md).
 
 Retired operations: `ask.manage` / `ask_manage` and
@@ -247,6 +248,68 @@ Consent is single use, expires in five minutes and is invalidated by source,
 settings, account or reader-lifecycle changes. Provider calls are bounded background
 jobs; status never uploads mail and cancellation suppresses late output.
 
+## Approved email questions (additive protocol-v1 extension)
+
+Tauri `email_answer` forwards to Go `email.answer`. [email-answer-v1.json](email-answer-v1.json)
+contains shared retrieve/approve/preview/cited-result fixtures. [EMAIL_QUESTIONS.md](../docs/EMAIL_QUESTIONS.md)
+defines exact consent, evidence, cancellation and validation behavior. Ship strict
+Go/Rust/TypeScript components together. Retired `ask.manage` remains rejected.
+
+Requests have exactly `operation`, `accountId`, `question`, `filter` (the same sender,
+after, before, assigned-category fields as local search), `jobId`, `previewId`,
+`digest`, `sourceIds`, `approved`. Operations are retrieve/select/approve/status/cancel/clear.
+Retrieve requires current nonempty account, question (1–2,048 UTF-8 bytes), valid
+filter and empty controls/false approval. Status may use empty account to discover
+the authorized view, optional 32-character job ID, empty question/filter/controls.
+Clear requires account and empty controls. Cancel requires account/job. Select
+requires the current 64-character preview ID and 1–8 unique retrieved source aliases
+S1–S8; other controls are empty/false. Approve requires current account, preview ID,
+64-character exact digest and `approved:true`; it accepts no question, filter,
+sources, provider or model override. All unused scalar fields are empty/zero,
+arrays empty and booleans false. No source text, SQL, vectors, endpoint, tool list,
+thread expansion, account selection or action permission is accepted.
+
+Responses require accountId, state (idle/retrieving/preview/running/completed/error),
+jobId, previewId, digest, expiresAt, question, provider, model, external, policy,
+payload, evidence, selectedIds, coverage, mode, warning, exhaustive, aggregate,
+nullable result and code. `exhaustive` is always false. Coverage `{eligible,semantic,keyword}`
+is account cache coverage; mode is empty/keyword/hybrid and warning empty or
+semantic_unavailable. A preview includes fixed policy, complete canonical external
+user-message JSON, selected source aliases and five-minute expiry. Source selection
+issues a fresh preview/digest. Only explicit approve can dispatch a generative request.
+Running/completed results omit payload/policy/token/digest. Results remain memory-only.
+
+Evidence is at most eight records: sourceId, emailId, chunkId, sourceRevision,
+readerRevision, subject, sender, receivedAt, excerpt, partialContent. Source aliases
+are Go-issued S1–S8, revisions lowercase SHA-256, IDs at most 100/128 bytes,
+subject/sender 120, excerpt 600 UTF-8 bytes, date UTC epoch milliseconds. Selection
+and citations must reference actual returned evidence. Canonical user-message JSON
+is at most 12 KiB after escaping; all IPC responses at most 48 KiB. Go reconstructs
+it only from account-scoped current shared search results, never frontend text.
+
+Result is `{outcome,statements,limitations}`; outcome answered/insufficient/conflicting.
+At most six statements `{text,citations}` with text up to 800 bytes and 1–3 citations
+`{sourceId,quote}` with a nonempty exact substring of that approved excerpt, at most
+300 bytes. Unknown IDs/quotes, uncited/unsupported statements and output fields reject.
+Insufficient outcomes require a limitation. Conflicting outcomes require two distinct
+source/quote pairs. Providers return up to five 300-byte limitations; Go adds a sixth
+mandatory source-scope warning. Native/frontend validation rechecks known IDs and
+quote membership before escaped rendering/source navigation. Citation provenance
+is not factual entailment. Common mailbox-wide aggregate/completeness/absence
+questions cannot authorize paid generation (`non_exhaustive`).
+
+Safe codes include unauthorized, validation, cancelled, unsupported, busy, ai_disabled,
+ai_credentials_unavailable, stale_preview, not_found, ai_authentication_failed,
+ai_rate_limited, ai_refused, ai_incomplete, ai_invalid_response, operation_failed,
+non_exhaustive, response_too_large and local search's safe retrieval/storage codes.
+Errors expose no raw provider response/body/diagnostics. Failed calls consume consent;
+no automatic paid retry. Session/settings/key/source/filter changes revoke the
+relevant context; actual dispatch key identity is checked. Source/current generation
+is checked before dispatch/display. Status does not infer or generate. Existing
+5/7-second transport deadlines serve prompt control responses while one transient
+AIService worker performs bounded retrieval or generation. No new durable queue,
+Gmail/SQL/search tool, mailbox write or reply/sending authority is added.
+
 ## Historical draft recovery (restricted protocol v1)
 
 [draft-recovery-v1.json](draft-recovery-v1.json) defines the active `reply.manage` /
@@ -376,8 +439,8 @@ compatible semantic coverage; keyword includes current prepared partial text.
 
 Emails retain original source metadata, reader revision and 1–3 evidence records;
 additional required email fields are `rankScore` (finite), `keywordRank`, `semanticRank`
-(0–100; zero means absent), `exactMatch`, `partialContent`. Rank score is negated
-SQLite BM25 in keyword mode, cosine in semantic mode, RRF sum in hybrid mode;
+(0–100; zero means absent), `exactMatch`, `partialContent`. Rank score is passage-local term relevance
+in keyword mode (no cross-account corpus statistics), cosine in semantic mode, RRF sum in hybrid mode;
 exact literal hits receive priority in keyword/hybrid. Each branch votes once per
 email, with deterministic ties. Evidence retains `chunkId`, `score`, `excerpt`,
 `sourceRevision` and adds `scoreKind: cosine | keyword`. Score is raw cosine [-1,1]

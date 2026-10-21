@@ -1,13 +1,25 @@
 # Shared keyword, semantic and hybrid retrieval
 
-Implemented 2026-10-20. `retrieval.VectorSearch.SearchMode` extends the existing
+Implemented 2026-10-20. The evidence-question slice also fixes a security issue in
+the initial keyword implementation: global FTS BM25 scores changed when another
+account’s retained text changed. Lexical ranking now uses only the visible passage,
+with an explicit cross-account score-invariance regression test. Historical metrics
+below are superseded by the current scoring rerun recorded after them.
+
+`retrieval.VectorSearch.SearchMode` extends the existing
 shared exact cosine search. Everything stays in the existing Go-owned SQLite
 database. No model/tokenizer/runtime/dependency changes, cloud service, generative
 AI calls, Gmail writes or additional coordinator are involved.
 
 ## Ranking and evidence
 
-- `keyword`: literal tokens are quoted by Go and joined with OR for FTS5 BM25.
+- `keyword`: literal tokens are quoted by Go and joined with OR for FTS5 candidates.
+  Ranking uses account-independent per-passage term coverage and saturated term
+  frequency, weighted 1.0 for passage text and 0.5 for context. For a query term
+  with count `n` in a field of `L` words, add
+  `weight * n / (n + 1.2 * (0.25 + 0.75 * L / 128))`. This fixed length reference
+  avoids global document-frequency/average-length statistics. Version:
+  `passage-local-tf-v1`. FTS candidates are account-filtered before materialization.
   User input cannot select raw MATCH grammar. Unicode61 tokenization splits email
   addresses and hyphenated codes; a separate literal boundary check prioritizes
   full queries, embedded addresses/alphanumeric codes/numeric codes of four or more
@@ -20,7 +32,7 @@ AI calls, Gmail writes or additional coordinator are involved.
 - `hybrid`: each branch first groups chunks into distinct emails; retain at most
   100 candidate emails per branch, then sum `1 / (60 + rank)` for each available
   branch. Missing branches contribute zero. Equal weights and the conventional
-  smoothing constant avoid adding incomparable BM25 and cosine scores. Exact
+  smoothing constant avoid adding incomparable lexical and cosine scores. Exact
   literal matches form a priority tier before fusion score, then email ID breaks
   ties. Long emails and duplicate chunks receive no extra fusion votes. The fixed
   defaults were selected before measuring the held-out fixture; no held-out tuning.
@@ -32,7 +44,7 @@ Keyword excerpts center on a literal/token occurrence when the passage exceeds
 600 UTF-8 bytes; source text remains unchanged. Substrings are copied from source,
 never generated. Sender-only matches also show the original sender metadata.
 
-`rankScore` is negated SQLite BM25 in keyword mode, best cosine in semantic mode,
+`rankScore` is passage-local term relevance in keyword mode, best cosine in semantic mode,
 and reciprocal-rank sum in hybrid mode. It is not a probability. Email metadata
 also carries `keywordRank`, `semanticRank` (zero means absent), `exactMatch` and
 `partialContent`. Evidence `scoreKind` distinguishes `cosine` from `keyword`;
@@ -99,7 +111,7 @@ partial-index notices, per-email ranks/exact matches/partial content and typed
 excerpt scores. Existing filters, cancellation, escaped rendering, source navigation,
 keyboard focus restoration and reader revision validation remain intact.
 
-## Fixed held-out evaluation
+## Original held-out evaluation (global BM25; historical)
 
 [hybrid-heldout-v1.json](../backend/internal/retrieval/testdata/hybrid-heldout-v1.json)
 contains 73 synthetic English messages: 72 in the searched account, one private
@@ -153,7 +165,7 @@ hybrid both return candidates for both. There is no calibrated answerability
 threshold. These are ranked source candidates, not factual answers or exhaustive
 search results. All evaluated modes return zero cross-account messages.
 
-## 10,000-message / 50,000-chunk latency
+## Original 10,000-message / 50,000-chunk latency (historical)
 
 `BenchmarkSearchModes50K` uses the same fixed synthetic scale fixture for all three
 modes: 10,000 emails, five passages each, 50,000 finite 384-dimensional SQLite
@@ -178,7 +190,7 @@ and source rechecks before considering a different index; no ANN/hosted service
 was introduced. The current `.app` build is about 144.74 MiB; no new public installer
 or release signing/notarization qualification is claimed.
 
-## Verification record
+## Original verification record (historical)
 
 Passed on this implementation host:
 
@@ -204,3 +216,44 @@ external generative AI call or secret/database/model artifact was added to sourc
 Signed/offline embedding package requalification was not rerun: inference,
 resource hashes and packaging code are unchanged; the native evaluation itself
 uses the pinned packaged resources with networking denied.
+
+## Current passage-local scoring evaluation (2026-10-20)
+
+The account-statistics isolation fix uses `passage-local-tf-v1`, with no global
+BM25 statistics. The same fixed held-out fixture, judgments, modes and native
+measurement procedure above were rerun without tuning the fixture. Measurements
+were sequential on the same implementation host, with networking denied and
+strict CGO checks; 145 account chunks and 120 warm samples per mode.
+
+| Mode     | Recall@10 | nDCG@10 | MRR@10 | Exact top-1 misses / 8 | Warm p50 / p95     |
+| -------- | --------- | ------- | ------ | ---------------------- | ------------------ |
+| Keyword  | 0.8182    | 0.7631  | 0.7470 | 0 / 8                  | 2.113 / 2.791 ms   |
+| Semantic | 0.9091    | 0.8755  | 0.8636 | 4 / 8                  | 5.844 / 6.669 ms   |
+| Hybrid   | 0.9545    | 0.8872  | 0.8652 | 0 / 8                  | 22.524 / 27.127 ms |
+
+First-query timings were 0.947 ms keyword, 175.660 ms semantic (fresh provider)
+and 21.201 ms hybrid (warm provider). Fixture setup warms storage caches.
+Hybrid recall improves by 13.64 percentage points over keyword and 4.55 points over
+semantic, with higher latency. The scoring change lowers keyword recall and hybrid
+nDCG/MRR relative to the historical BM25 run; it trades global corpus statistics
+for account isolation. The university-fee query still misses the relevant email in
+the fused top ten. Keyword misses four paraphrase queries, and semantic misses two
+exact-identifier queries in the top ten. All modes return zero cross-account mail.
+For two unrelated queries, only keyword returns an empty result for one; no
+answerability threshold or production-mailbox quality guarantee is claimed.
+
+The same 10,000-message / 50,000-chunk dense-match benchmark was also rerun with
+ten timed scans per mode, excluding query inference, IPC, coverage and rendering:
+
+| Mode     | Retrieval p50 | Retrieval p95 | Mean        | Total allocations / scan |
+| -------- | ------------- | ------------- | ----------- | ------------------------ |
+| Keyword  | 453.4 ms      | 1,162 ms      | 533.27 ms   | 188,145,552 bytes        |
+| Semantic | 643.9 ms      | 694.1 ms      | 634.29 ms   | 332,234,879 bytes        |
+| Hybrid   | 1,088 ms      | 1,204 ms      | 1,098.81 ms | 523,080,881 bytes        |
+
+Database pages remain 134,332,416 bytes. The proposed 500 ms p95 scale target is
+still unmet. Allocations are cumulative, not retained memory or peak RSS. The
+current development `.app` is approximately 144.91 MiB. The email-question change
+also reran signed/offline embedding package and native lifecycle checks; see the
+[current verification record](EMAIL_QUESTIONS.md). There is no new release signing
+or notarization claim.

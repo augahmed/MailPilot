@@ -12,7 +12,9 @@ are implemented. Manual sync also prepares deterministic local text chunks with
 bundled MiniLM WordPiece tokenization, section provenance and pending embedding
 rows. The Local Email Index card explicitly starts/resumes a durable local MiniLM
 indexing run over all live cached mail, with pause/cancel/rebuild and coverage counts.
-Semantic search now uses the shared local vectors, with sender/date/assigned-category filters and revision-bound excerpts that open the original cached email. Shared semantic classification now consumes these vectors and category prototypes; keyword and hybrid search now share the same passages; evidence questions remain planned. Historical vector tables are inert; installed users need no model/runtime setup. OpenAI is the only installed functional generative adapter.
+Semantic search now uses the shared local vectors, with sender/date/assigned-category filters and revision-bound excerpts that open the original cached email. Shared semantic classification now consumes these vectors and category prototypes; keyword and hybrid search now share the same passages; bounded evidence questions now use separately approved selected excerpts and validated citations ([contract](docs/EMAIL_QUESTIONS.md)). Historical vector tables are inert; installed users need no model/runtime setup. OpenAI is the only installed functional generative adapter.
+
+Use **Ask about email** to retrieve local excerpts, inspect/select the exact evidence and approve one cited answer through your selected AI provider. Ordinary features work with external AI disabled.
 
 Use **Email search** to choose keyword, semantic or hybrid retrieval. Manual sync prepares keyword passages without inference; **Start indexing** in Local Email Index supplies semantic vectors. Hybrid falls back to keywords if query embeddings are unavailable. Coverage and partial content are explicit. See [hybrid behavior, held-out evaluation and latency](docs/HYBRID_SEARCH.md).
 
@@ -242,7 +244,7 @@ Set `MAILPILOT_RISK_HIGH_THRESHOLD=75` before starting the desktop app to change
 
 **Preview undo last batch** and its separate confirmation remove only verified additions, preserving pre-existing and unrelated labels. Created labels remain in Gmail. Interrupted or uncertain writes require reconciliation first. Schema migration 7 preserves existing plans and makes category references optional for risk proposals.
 
-## Optional AI summaries and historical draft recovery
+## Optional AI questions, summaries and historical draft recovery
 
 In **Optional AI settings**, choose an installed provider and an explicit model,
 then save its API key. OpenAI is the only currently installed adapter. Keys use
@@ -259,8 +261,8 @@ limits](docs/GENERATIVE_AI.md).
 
 **Historical draft recovery** can reconcile existing uncertain/conflicting actions
 using Gmail reads and record explicit local acknowledgment. It needs no AI key and
-cannot create, resume, resend or delete drafts. The only active AI workflow is the
-selected-email summary; no reply generation, thread summaries or mailbox chat remain.
+cannot create, resume, resend or delete drafts. The active AI workflows are the
+selected-email summary and separately approved cited evidence questions; no reply generation, thread summaries or unrestricted mailbox chat.
 
 Cached message subjects in the mailbox open a reader with
 sender, To/CC, timestamp, body, attachment metadata, cached Gmail labels,

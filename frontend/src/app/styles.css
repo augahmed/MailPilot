@@ -241,3 +241,9 @@ form textarea {
   max-width: 100%;
   font: inherit;
 }
+
+.email-question pre,
+.email-question blockquote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -120,7 +120,7 @@ possible with embeddings or external AI disabled.
 
 ## AI boundary
 
-- The planned external workflow answers bounded email-information questions from
+- The implemented external workflow ([contract](docs/EMAIL_QUESTIONS.md)) answers bounded email-information questions from
   retrieved evidence. Go retrieves and constructs the payload; disclose exact selected
   excerpts, question, policy and provider/model before separate approval.
 - Bind one-use expiring approval to account/session, source revisions, exact payload,

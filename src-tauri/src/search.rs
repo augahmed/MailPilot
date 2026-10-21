@@ -9,7 +9,7 @@ pub struct SearchFilter {
     pub category_id: String,
 }
 impl SearchFilter {
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         self.sender.len() <= 200
             && !self.sender.contains('\0')
             && self.category_id.len() <= 100

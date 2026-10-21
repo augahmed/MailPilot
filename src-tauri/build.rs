@@ -20,6 +20,7 @@ fn main() {
             "reply_manage",
             "ai_settings",
             "email_summarize",
+            "email_answer",
         ]),
     ))
     .expect("failed to build Tauri application manifest");
