@@ -48,7 +48,7 @@ func (s *VectorSearch) SearchChunks(ctx context.Context, account domain.AccountI
 			return err
 		}
 		v.Vector = nil
-		h := hit{v, score}
+		h := hit{source: v, score: score}
 		if top.Len() < k {
 			heap.Push(top, h)
 		} else if better(h, (*top)[0]) {

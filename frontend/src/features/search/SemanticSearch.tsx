@@ -30,6 +30,7 @@ export function SemanticSearch({
   onEvidence: (evidence: { text: string; revision: string }) => void;
 }) {
   const [result, setResult] = useState<SearchResponse | null>(null);
+  const [mode, setMode] = useState<"keyword" | "semantic" | "hybrid">("hybrid");
   const [query, setQuery] = useState("");
   const [sender, setSender] = useState("");
   const [after, setAfter] = useState("");
@@ -128,6 +129,7 @@ export function SemanticSearch({
               accountId: result.accountId,
               jobId: "",
               query,
+              mode,
               limit,
               filter: {
                 ...emptyFilter,
@@ -163,9 +165,9 @@ export function SemanticSearch({
       aria-labelledby="semantic-search-heading"
       aria-busy={busy || running}
     >
-      <h2 id="semantic-search-heading">Semantic search</h2>
+      <h2 id="semantic-search-heading">Email search</h2>
       <p>
-        Search cached mail by meaning using the local model. Search runs only
+        Search cached mail with keywords, meaning, or both. Search runs only
         when you submit; no email or query is sent to an AI provider.
       </p>
       <form
@@ -174,6 +176,17 @@ export function SemanticSearch({
           void act();
         }}
       >
+        <label>
+          Search mode
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as typeof mode)}
+          >
+            <option value="hybrid">Hybrid</option>
+            <option value="keyword">Keyword only</option>
+            <option value="semantic">Semantic only</option>
+          </select>
+        </label>
         <label>
           Search query
           <input
@@ -277,15 +290,29 @@ export function SemanticSearch({
       </p>
       {result?.accountId && (
         <p>
-          {result.searchableMessages} of {result.eligibleMessages} cached emails
-          searchable. Stale, partial and unfinished messages are excluded. Use
-          Local Email Index to update coverage.
+          Keyword coverage: {result.keywordMessages} of{" "}
+          {result.eligibleMessages} cached emails. Semantic coverage:{" "}
+          {result.searchableMessages} of {result.eligibleMessages}.
+          {result.searchableMessages < result.eligibleMessages &&
+            " Semantic index is partial; unfinished or incompatible vectors are excluded."}
+          {result.keywordMessages < result.eligibleMessages &&
+            " Sync to prepare missing or changed cached text."}{" "}
+          Keyword results may contain only the available part of a message. Use
+          Local Email Index to update semantic coverage.
+        </p>
+      )}
+      {result?.status === "complete" && (
+        <p>
+          Mode: {result.mode}.{" "}
+          {result.warning === "semantic_unavailable" &&
+            "Semantic retrieval unavailable; showing keyword-only results."}
         </p>
       )}
       <p className="help">
         Matches are relevance candidates, even for unrelated queries. Similarity
-        is not confidence. Exact names and identifiers can be missed. Separate
-        replies may disagree; read the original evidence.
+        is not confidence. Exact phrases and identifiers receive priority in
+        keyword and hybrid modes. Separate replies may disagree; read the
+        original evidence.
       </p>
       {result?.status === "complete" && (
         <ol>
@@ -305,9 +332,23 @@ export function SemanticSearch({
               <p>
                 {email.sender} · {new Date(email.receivedAt).toLocaleString()}
               </p>
+              <p>
+                {email.exactMatch && "Exact literal match · "}
+                {email.keywordRank > 0 &&
+                  `Keyword rank ${email.keywordRank} · `}
+                {email.semanticRank > 0 &&
+                  `Semantic rank ${email.semanticRank} · `}
+                {result.mode === "hybrid" &&
+                  `Fusion score ${email.rankScore.toFixed(4)} · `}
+                {email.partialContent && "Partial cached content"}
+              </p>
               {email.evidence.map((v) => (
                 <div key={v.chunkId}>
-                  <p>Cosine similarity {v.score.toFixed(3)}</p>
+                  <p>
+                    {v.scoreKind === "cosine"
+                      ? `Cosine similarity ${v.score.toFixed(3)}`
+                      : "Keyword evidence"}
+                  </p>
                   <blockquote>{v.excerpt}</blockquote>
                 </div>
               ))}

@@ -143,6 +143,41 @@ func TestLocalSearchBoundedValidation(t *testing.T) {
 	}
 }
 
+func TestKeywordSearchNeedsNoInferenceAndHybridDisclosesFallback(t *testing.T) {
+	_, db, f, emails, _ := indexFixture(t, 2)
+	ctx := context.Background()
+	chunker, err := NewCachedChunker(db.Emails(), db.Chunks())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, email := range emails {
+		if err = chunker.Prepare(ctx, "a", email.ProviderID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.invoke = func(context.Context, []string) ([][]float32, error) { return nil, embedding.ErrUnavailable }
+	s := NewLocalSearch(ctx, func() (domain.AccountID, context.Context, error) { return "a", ctx, nil }, retrieval.New(db.Vectors(), f), db.Indexing())
+	defer s.Close(ctx)
+	for _, mode := range []string{"keyword", "hybrid"} {
+		s.Manage(ctx, SearchRequest{Operation: "start", AccountID: "a", Query: "project review", Limit: 10, Mode: mode})
+		got := waitSearch(t, s)
+		if got.Status != "complete" || got.Mode != "keyword" || got.RequestedMode != mode || got.KeywordMessages != 2 || got.SearchableMessages != 0 || len(got.Emails) != 2 {
+			t.Fatal(got)
+		}
+		if mode == "keyword" && f.count() != 0 {
+			t.Fatal("keyword search invoked inference")
+		}
+		if mode == "hybrid" && got.Warning != "semantic_unavailable" {
+			t.Fatal("silent fallback", got)
+		}
+		count := f.count()
+		s.Manage(ctx, searchRequest("status"))
+		if f.count() != count {
+			t.Fatal("polling invoked inference")
+		}
+	}
+}
+
 func TestLocalSearchRevokedWorkerCannotPublishAndShutdownJoins(t *testing.T) {
 	_, db, f, _, _ := indexFixture(t, 1)
 	ctx := context.Background()

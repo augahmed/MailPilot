@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import hybridFixture from "../../../../contracts/hybrid-search-v1.json";
 import fixture from "../../../../contracts/vector-search-v1.json";
 import {
   searchRequestSchema,
@@ -15,7 +16,14 @@ it("validates shared search fixtures and bounded private capabilities", () => {
   expect(searchResponseSchema.parse(fixture.response)).toEqual(
     fixture.response,
   );
+  expect(searchRequestSchema.parse(hybridFixture.request)).toEqual(
+    hybridFixture.request,
+  );
+  expect(searchResponseSchema.parse(hybridFixture.response)).toEqual(
+    hybridFixture.response,
+  );
   for (const patch of [
+    { mode: "remote" },
     { modelPath: "/tmp/no" },
     { limit: 21 },
     { accountId: "" },

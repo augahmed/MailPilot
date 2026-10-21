@@ -28,6 +28,8 @@ pub struct SearchRequest {
     pub query: String,
     pub limit: u32,
     pub filter: SearchFilter,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mode: String,
 }
 impl SearchRequest {
     pub fn valid(&self) -> bool {
@@ -42,9 +44,11 @@ impl SearchRequest {
                         && !self.query.contains('\0')
                         && (1..=20).contains(&self.limit)
                         && self.filter.valid()
+                        && ["", "keyword", "semantic", "hybrid"].contains(&self.mode.as_str())
                 }
                 "status" | "cancel" => {
                     self.query.is_empty()
+                        && self.mode.is_empty()
                         && self.limit == 0
                         && self.filter == SearchFilter::default()
                         && (self.job_id.is_empty() || self.job_id.len() == 32)
@@ -62,6 +66,7 @@ pub struct Evidence {
     pub score: f64,
     pub excerpt: String,
     pub source_revision: String,
+    pub score_kind: String,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -72,6 +77,11 @@ pub struct EmailResult {
     pub sender: String,
     pub received_at: i64,
     pub evidence: Vec<Evidence>,
+    pub rank_score: f64,
+    pub keyword_rank: u32,
+    pub semantic_rank: u32,
+    pub exact_match: bool,
+    pub partial_content: bool,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -85,6 +95,10 @@ pub struct SearchResponse {
     pub elapsed_ms: f64,
     pub searchable_messages: u64,
     pub eligible_messages: u64,
+    pub keyword_messages: u64,
+    pub mode: String,
+    pub requested_mode: String,
+    pub warning: String,
 }
 impl SearchResponse {
     pub fn valid(&self) -> bool {
@@ -109,6 +123,10 @@ impl SearchResponse {
             && self.elapsed_ms.is_finite()
             && self.elapsed_ms >= 0.0
             && self.searchable_messages <= self.eligible_messages
+            && self.keyword_messages <= self.eligible_messages
+            && ["", "keyword", "semantic", "hybrid"].contains(&self.mode.as_str())
+            && ["", "keyword", "semantic", "hybrid"].contains(&self.requested_mode.as_str())
+            && ["", "semantic_unavailable"].contains(&self.warning.as_str())
             && self.emails.len() <= 20
             && (self.emails.is_empty()
                 || (self.status == "complete"
@@ -123,6 +141,9 @@ impl SearchResponse {
                     && e.email_id.len() <= 100
                     && e.subject.len() <= 240
                     && e.sender.len() <= 240
+                    && e.rank_score.is_finite()
+                    && e.keyword_rank <= 100
+                    && e.semantic_rank <= 100
                     && !e.evidence.is_empty()
                     && e.evidence.len() <= 3
                     && e.evidence.iter().all(|v| {
@@ -130,6 +151,7 @@ impl SearchResponse {
                             && v.chunk_id.len() <= 128
                             && v.score.is_finite()
                             && (-1.0..=1.0).contains(&v.score)
+                            && ["cosine", "keyword"].contains(&v.score_kind.as_str())
                             && !v.excerpt.is_empty()
                             && v.excerpt.len() <= 600
                             && v.source_revision.len() == 64
@@ -151,6 +173,23 @@ mod tests {
         let response: SearchResponse = serde_json::from_value(fixture["response"].clone()).unwrap();
         assert!(request.valid());
         assert!(response.valid());
+        let hybrid: serde_json::Value =
+            serde_json::from_str(include_str!("../../contracts/hybrid-search-v1.json")).unwrap();
+        assert!(
+            serde_json::from_value::<SearchRequest>(hybrid["request"].clone())
+                .unwrap()
+                .valid()
+        );
+        assert!(
+            serde_json::from_value::<SearchResponse>(hybrid["response"].clone())
+                .unwrap()
+                .valid()
+        );
+        let mut unknown = fixture["request"].clone();
+        unknown["mode"] = serde_json::json!("remote");
+        assert!(!serde_json::from_value::<SearchRequest>(unknown)
+            .unwrap()
+            .valid());
         let mut bad = fixture["request"].clone();
         bad["modelPath"] = serde_json::json!("/tmp/no");
         assert!(serde_json::from_value::<SearchRequest>(bad).is_err());

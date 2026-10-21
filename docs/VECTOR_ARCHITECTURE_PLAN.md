@@ -6,7 +6,7 @@ local WordPiece tokenization and `app.CachedChunker` during manual sync. A singl
 lazy CPU MiniLM provider is now implemented and bundled; real inference is qualified
 in the explicit resumable local indexing workflow. `app.LocalIndex`, durable
 generation-fenced storage and the Local Email Index UI/`index.local` controls are
-implemented. Shared exact vector retrieval and its UI are now implemented ([contract/evaluation](VECTOR_SEARCH.md)); shared semantic classification and primary preferences are now implemented ([evaluation](SEMANTIC_CLASSIFICATION.md)); keyword/hybrid retrieval remains planned. Preserve unrelated work; this plan does not authorize more implementation.
+implemented. Shared exact vector retrieval and its UI are now implemented ([contract/evaluation](VECTOR_SEARCH.md)); shared semantic classification and primary preferences are now implemented ([evaluation](SEMANTIC_CLASSIFICATION.md)); keyword/hybrid retrieval is now implemented ([contract/evaluation](HYBRID_SEARCH.md)). Preserve unrelated work; this plan does not authorize more implementation.
 
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) remains the sole product scope/milestone authority;
 [ARCHITECTURE.md](ARCHITECTURE.md) describes runtime/trust boundaries. This document
@@ -34,8 +34,8 @@ separate indexing/classification framework.
 Preserve current Go core, React/strict TypeScript, thin Tauri host, Gmail OAuth/
 sync, SQLite cache/reader, category management, rule fallback, deterministic risk,
 reviewed Gmail labels/journal/reconciliation/undo, provider settings and historical
-recovery. Keyword search is a retained target/fallback, **not currently implemented**:
-there is an FTS5 test probe but no product keyword index or search endpoint.
+recovery. Keyword search now uses the shared passage FTS index from migration 020, with
+hybrid rank fusion and vector-independent fallback ([contract](HYBRID_SEARCH.md)).
 
 Source composition in `backend/cmd/mailpilot-core/main.go` currently wires
 `RuleBasedClassifier`, `ClassificationReview`, `Organization`, `CachedReader`,
@@ -44,11 +44,12 @@ indexing and by the shared `retrieval.VectorSearch` for explicit local queries. 
 multiple-provider substitution is supported by the shared boundary and synthetic
 adapters, not evidence of additional shipped providers. Summary still exists.
 
-There are 19 migration files; 015 adds shared chunk persistence, 016 adds source
+There are 20 migration files; 015 adds shared chunk persistence, 016 adds source
 provenance/context plus independent projected body coverage, and 017 adds durable
 job/model identities, message failure metadata and cache-removal fences. Migration
 018 adds shared category prototypes and explicit confirmed-example references;
-019 adds versioned semantic assessments, primary preferences and revision fences.
+019 adds versioned semantic assessments, primary preferences and revision fences;
+020 adds the shared passage FTS index.
 Historical vector tables are inert. The current AI interface only summarizes one
 selected cached email. New retrieval/semantic classification/evidence QA cannot be
 enabled by changing settings or restoring archived UI handlers.
@@ -134,8 +135,9 @@ loading fails or local semantic processing is disabled.
 
 Migration [015_chunk_storage.sql](../backend/internal/store/sqlite/migrations/015_chunk_storage.sql)
 and [016_chunk_provenance.sql](../backend/internal/store/sqlite/migrations/016_chunk_provenance.sql)
-are the implemented storage contract below. Category/keyword extensions remain logical
-proposals. All additions stay in the existing database and use new checksummed
+are the shared passage storage contract below. Migration 018 implements category
+representations; migration 020 implements the complementary keyword index. Future extensions
+remain logical proposals. All additions stay in the existing database and use new checksummed
 migrations after the actual maximum.
 No rewrite, backfill guessing, drop or automatic purge of existing user records.
 
@@ -344,13 +346,14 @@ Prototype work uses the same adapter/coordinator; category edits do not re-embed
 
 ### Complementary keyword index
 
-Add an account-mapped FTS5 index over the versioned searchable subject/body text,
-with insert/update/deletion visibility transactional with cached source/checkpoints.
-Keep raw FTS grammar/SQL private. Link each result to account/email/current source
-revision; handle partial bodies and Unicode/tokenizer limitations honestly. This
-lexical index is complementary to the shared vector store, not a second vector
-pipeline. Decide table/trigger layout in its implementation migration; FTS5 virtual
-tables cannot substitute for composite ownership checks in ordinary mapping rows.
+Implemented by migration 020: external-content `chunk_fts` indexes the existing
+`email_chunks.text` / `context_text`, including subject chunks. Transactional chunk
+triggers maintain postings and migration backfills existing passages. Account,
+current source/index/preprocessing and filter visibility come from ordinary joined
+rows; stale state is excluded. Sender metadata is matched literally in the same
+account-scoped scan. Raw FTS grammar stays private. Partial projections remain
+searchable with explicit metadata, independently of vector readiness. See
+[HYBRID_SEARCH.md](HYBRID_SEARCH.md) for tokenizer limits, fusion and evaluation.
 
 ## 5. Chunk/source revisions and local work lifecycle
 
@@ -455,8 +458,7 @@ model identity, tokenizer and shared chunk store. Future consumers still require
 
 The implemented shared retrieval API is `retrieval.VectorSearch.SearchChunks` /
 `Search`, backed by `repository.VectorRepository` and `Store.Vectors()`; see
-[VECTOR_SEARCH.md](VECTOR_SEARCH.md). Classification and keyword/hybrid contracts
-remain future work. The following are consumer-owned design signatures, **not compiling code or a
+[VECTOR_SEARCH.md](VECTOR_SEARCH.md). Keyword/hybrid retrieval is now implemented in `SearchMode` with migration 020; see [HYBRID_SEARCH.md](HYBRID_SEARCH.md). Classification uses the shared semantic assessment contract. The following are consumer-owned design signatures, **not compiling code or a
 new arbitrary IPC surface**. Types are conceptual domain values, not SDK types.
 Implement the smallest concrete methods needed; do not build a repository framework.
 
@@ -617,7 +619,7 @@ Existing session-local reading/search is distinct from secure offline restart.
 The original reset was documentation-only. Subsequently authorized slices have
 implemented chunk storage/production, one native provider, and resumable local
 indexing with migration 017 and a narrow UI/IPC. Qualification is recorded in
-LOCAL_EMBEDDING.md and LOCAL_INDEXING.md. The separately authorized [shared exact retrieval slice](VECTOR_SEARCH.md) now implements local semantic search. Semantic categories, keyword/hybrid search, external QA, rich reading and Summary removal remain unimplemented. Historical
+LOCAL_EMBEDDING.md and LOCAL_INDEXING.md. The separately authorized [shared exact retrieval slice](VECTOR_SEARCH.md) now implements local semantic search. Semantic categories/classification and keyword/hybrid search are now implemented; see their current contracts. External QA, rich reading and Summary removal remain unimplemented. Historical
 migrations/journals and unrelated work remain preserved. No user mail is used in
 qualification and no commit/push is performed automatically.
 

@@ -32,6 +32,10 @@ func vectorQuery(a domain.AccountID, p repository.IndexProfile, f repository.Sea
  AND m.dimension=s.dimension AND m.fingerprint=?
  AND v.model_id=s.model_id AND v.model_version=s.model_version AND v.dimension=s.dimension AND v.status='ready'`
 	args := []any{a, p.PreprocessingVersion, p.IndexVersion, p.Model.ID, p.Model.Version, p.Model.Dimension, p.Fingerprint}
+	return searchFilters(q, args, f)
+}
+
+func searchFilters(q string, args []any, f repository.SearchFilter) (string, []any) {
 	if f.Sender != "" {
 		q += ` AND (instr(lower(a.address),lower(?))>0 OR instr(lower(a.name),lower(?))>0)`
 		args = append(args, f.Sender, f.Sender)
@@ -104,7 +108,7 @@ func (r *vectorRepository) ScanVectors(ctx context.Context, a domain.AccountID, 
 	})
 }
 func (r *vectorRepository) CheckVectorSources(ctx context.Context, a domain.AccountID, p repository.IndexProfile, f repository.SearchFilter, sources []repository.VectorSource) error {
-	if !validSearchProfile(a, p) || len(sources) > 60 {
+	if !validSearchProfile(a, p) || len(sources) > 300 {
 		return repository.ErrInvalid
 	}
 	q, args := vectorQuery(a, p, f)

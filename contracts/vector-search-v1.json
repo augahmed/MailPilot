@@ -10,7 +10,8 @@
       "after": 0,
       "before": 0,
       "categoryId": ""
-    }
+    },
+    "mode": "semantic"
   },
   "response": {
     "accountId": "fixture-account",
@@ -28,15 +29,25 @@
             "chunkId": "fixture-chunk",
             "score": 0.8,
             "excerpt": "The project meeting is Friday.",
-            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "scoreKind": "cosine"
           }
         ],
-        "readerRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        "readerRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rankScore": 0.8,
+        "keywordRank": 0,
+        "semanticRank": 1,
+        "exactMatch": false,
+        "partialContent": false
       }
     ],
     "scannedChunks": 12,
     "elapsedMs": 8.3,
     "searchableMessages": 5,
-    "eligibleMessages": 8
+    "eligibleMessages": 8,
+    "mode": "semantic",
+    "requestedMode": "semantic",
+    "warning": "",
+    "keywordMessages": 7
   }
 }

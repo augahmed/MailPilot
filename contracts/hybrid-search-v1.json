@@ -1,0 +1,53 @@
+{
+  "request": {
+    "operation": "start",
+    "accountId": "fixture-account",
+    "jobId": "",
+    "query": "Q7M4ZP",
+    "limit": 10,
+    "filter": {
+      "sender": "",
+      "after": 0,
+      "before": 0,
+      "categoryId": ""
+    },
+    "mode": "hybrid"
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "jobId": "11111111111111111111111111111111",
+    "status": "complete",
+    "code": "",
+    "emails": [
+      {
+        "emailId": "fixture-email",
+        "subject": "Travel confirmation",
+        "sender": "Alex <alex@example.test>",
+        "receivedAt": 1700000000000,
+        "evidence": [
+          {
+            "chunkId": "fixture-chunk",
+            "score": 0,
+            "excerpt": "Your confirmation code is Q7M4ZP.",
+            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "scoreKind": "keyword"
+          }
+        ],
+        "readerRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rankScore": 1.25,
+        "keywordRank": 1,
+        "semanticRank": 0,
+        "exactMatch": true,
+        "partialContent": true
+      }
+    ],
+    "scannedChunks": 12,
+    "elapsedMs": 8.3,
+    "searchableMessages": 0,
+    "eligibleMessages": 8,
+    "mode": "keyword",
+    "requestedMode": "hybrid",
+    "warning": "semantic_unavailable",
+    "keywordMessages": 7
+  }
+}

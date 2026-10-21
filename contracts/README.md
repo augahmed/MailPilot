@@ -346,41 +346,55 @@ runtime diagnostics. Disconnect/session replacement cancels work. Neither startu
 nor polling invokes inference; explicit Resume is required after interruption.
 Indexing calls neither Gmail nor external AI and changes no existing AI consent.
 
-## Local vector search (additive protocol-v1 extension)
+## Local search (additive protocol-v1 extension)
 
-Tauri `vector_search` forwards to `search.local`; see
-[vector-search-v1.json](vector-search-v1.json) and [service/evaluation details](../docs/VECTOR_SEARCH.md).
-This is separate from the retired `search.semantic` contract. Protocol remains 1.
+Tauri `vector_search` forwards to `search.local`; see [vector-search-v1.json](vector-search-v1.json),
+[hybrid-search-v1.json](hybrid-search-v1.json) and [behavior/evaluation](../docs/HYBRID_SEARCH.md).
+The retired `search.semantic` operation remains rejected. Protocol remains 1;
+ship version-matched strict Go/Rust/TypeScript components together.
 
-Every request has exactly `operation`, `accountId`, `jobId`, `query`, `limit` and
-`filter` (`sender`, `after`, `before`, `categoryId`). Start requires a current
-nonempty authorized account, empty job ID, bounded query and 1–20 maximum emails.
-Dates are UTC epoch milliseconds, after inclusive/before exclusive; zero omits.
-Sender is a literal substring; category means assigned local category. Status/cancel
-require empty query, zero limit and an empty filter. Cancel requires account/job;
-status accepts empty account/job to discover the active authorized view. Job IDs
-are 32 characters. No raw vectors, model, path, SQL, endpoint or AI options exist.
-Go rechecks authorization and limits independently of the native/frontend validators.
+Requests retain `operation`, `accountId`, `jobId`, `query`, `limit`, `filter`
+(`sender`, `after`, `before`, `categoryId`). Start optionally adds `mode`:
+`keyword`, `semantic`, `hybrid`; omission preserves semantic behavior. Start requires
+an authorized nonempty account, empty job ID, bounded nonempty query and 1–20 maximum
+emails. Query is limited to 2,048 UTF-8 bytes; semantic inference also enforces the
+pinned 254-token budget. Dates are UTC epoch milliseconds, after inclusive/before
+exclusive; zero omits. Sender is a literal substring and category means assigned
+local category. Status/cancel omit mode and use empty query, zero limit, empty filter.
+Cancel requires account/job; status permits empty account/job. Job IDs are 32 characters.
+No raw vectors, model, path, SQL/FTS syntax, endpoint or AI options exist.
 
-Responses require `accountId`, `jobId`, `status` (idle/running/complete/cancelled/error),
+Responses retain `accountId`, `jobId`, `status` (idle/running/complete/cancelled/error),
 `code`, `emails`, `scannedChunks`, `elapsedMs`, `searchableMessages`, `eligibleMessages`.
-Emails contain `emailId`, `readerRevision`, original `subject`, formatted `sender`,
-`receivedAt` (UTC epoch ms), and 1–3 `evidence` records with `chunkId`, raw cosine
-`score` [-1,1], `excerpt` and `sourceRevision` (original content SHA-256). The
-separate reader revision binds the same source to its readable projection and is
-passed as the existing `mail.read` revision when opening a result. It is not the
-source hash. Emails are ranked by their best evidence, with deterministic ties.
-Only complete compatible message generations qualify; coverage reports exclusions.
+Additional required fields are `mode`, `requestedMode` (empty or keyword/semantic/hybrid),
+`warning` (empty or `semantic_unavailable`), and `keywordMessages`. Hybrid can complete
+in keyword mode with that warning when local query inference is unavailable. Keyword
+mode performs no inference. Semantic-only retains its safe errors. Coverage describes
+the authorized whole cache, independent of query filters: searchable is complete
+compatible semantic coverage; keyword includes current prepared partial text.
+`scannedChunks` counts branch candidate visits, so hybrid can count a chunk twice.
 
-Safe codes: empty, unauthorized, validation, unavailable, busy, storage_error,
+Emails retain original source metadata, reader revision and 1–3 evidence records;
+additional required email fields are `rankScore` (finite), `keywordRank`, `semanticRank`
+(0–100; zero means absent), `exactMatch`, `partialContent`. Rank score is negated
+SQLite BM25 in keyword mode, cosine in semantic mode, RRF sum in hybrid mode;
+exact literal hits receive priority in keyword/hybrid. Each branch votes once per
+email, with deterministic ties. Evidence retains `chunkId`, `score`, `excerpt`,
+`sourceRevision` and adds `scoreKind: cosine | keyword`. Score is raw cosine [-1,1]
+for cosine evidence and zero for keyword evidence, never a confidence probability.
+Reader revision is the shared readable projection cursor; source revision is the
+original content SHA-256. Both branches recheck source/generation/filter membership
+before publication and completed-result access; retained vector evidence still
+requires complete compatible vectors, while keyword evidence does not.
+
+Safe codes remain empty, unauthorized, validation, unavailable, busy, storage_error,
 model_unavailable, inference_failed, stale, cancelled, timeout, too_large. Mail is
-returned only with complete/empty-code status. Up to 20 emails, 3 excerpts of 600
-UTF-8 bytes each, 240 bytes per subject/sender and 48 KiB total after JSON escaping.
-Larger output fails closed. Query inference runs only on explicit start; status
-and cancellation use ordinary 5/7-second IPC deadlines while a bounded cancellable
-local worker runs. Completed snapshots expire after five minutes and are rechecked
-on access. No external AI or Gmail request, persistent search history or automatic
-indexing is added. Session changes clear results; stale/deleted sources revoke them.
+returned only with complete/empty-code status. Bounds remain 20 emails, 3 excerpts
+of 600 UTF-8 bytes each, 240 bytes per subject/sender and 48 KiB encoded JSON.
+Larger output fails closed. One cancellable 30-second worker serves explicit starts;
+status/cancel retain ordinary 5/7-second transport deadlines and never infer.
+Completed snapshots expire in five minutes and clear on session/source revocation.
+No Gmail request, generative AI call, persistent search history or automatic indexing.
 
 ## Local category representations (protocol-v1 extension)
 

@@ -117,7 +117,7 @@ describe("desktop status", () => {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
     expect(
-      screen.getByRole("heading", { name: "Semantic search" }),
+      screen.getByRole("heading", { name: "Email search" }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(/Optional instruction/i)).toBeNull();
     expect(screen.queryByLabelText(/Include earlier cached/i)).toBeNull();

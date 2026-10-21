@@ -25,7 +25,7 @@ marks interrupted work resumable; it never auto-starts inference. See
 [local embedding contract](docs/LOCAL_EMBEDDING.md) for bounds, fixed resources,
 cancellation, signing and macOS 13.4+ qualification, and
 [local indexing contract](docs/LOCAL_INDEXING.md) for durable generations, current
-coverage counts and purge/restart fences. Shared exact `retrieval.VectorSearch` and the `search.local` / `vector_search` UI now consume complete compatible snapshots; see [search contract/evaluation](docs/VECTOR_SEARCH.md). Category prototypes and explicit confirmed examples now reuse that coordinator/provider through migration 018 and `Store.CategoryVectors()`; see [category vector contract](docs/CATEGORY_VECTORS.md). Shared semantic classification now consumes these records and runs after prototype work in the same coordinator; see [classification contract/evaluation](docs/SEMANTIC_CLASSIFICATION.md). Keyword/hybrid search remains unimplemented. Preserve unrelated uncommitted work.
+coverage counts and purge/restart fences. Shared exact `retrieval.VectorSearch` and the `search.local` / `vector_search` UI now consume complete compatible snapshots; see [search contract/evaluation](docs/VECTOR_SEARCH.md). Category prototypes and explicit confirmed examples now reuse that coordinator/provider through migration 018 and `Store.CategoryVectors()`; see [category vector contract](docs/CATEGORY_VECTORS.md). Shared semantic classification now consumes these records and runs after prototype work in the same coordinator; see [classification contract/evaluation](docs/SEMANTIC_CLASSIFICATION.md). Keyword and hybrid retrieval now reuse these shared chunks with the external-content FTS index in migration 020; see [hybrid retrieval/evaluation](docs/HYBRID_SEARCH.md). Preserve unrelated uncommitted work.
 
 ## Product and scope
 
@@ -93,8 +93,8 @@ possible with embeddings or external AI disabled.
 - Use bounded cancellable local jobs with explicit enablement, progress, partial/error
   states and restart recovery. One local coordinator owns durable indexing and
   dependent assessment work; no parallel feature-specific queues/frameworks.
-  Preserve keyword/rule fallback and truthful coverage; keyword search is planned,
-  not already implemented by the existing FTS capability test.
+  Preserve keyword/rule fallback and truthful coverage. Keyword search uses the shared
+  chunk FTS index independently of embedding readiness.
 - Version new semantic assessment hashes/scores and organization evidence explicitly.
   Existing rule hashes, confidence DTOs and immutable plan digests are not a drop-in
   semantic contract. Preserve old decoding, reconciliation and undo independently

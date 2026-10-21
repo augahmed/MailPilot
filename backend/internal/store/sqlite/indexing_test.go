@@ -178,7 +178,7 @@ func TestIndexJobUpgradeSixteenPreservesVectorsAndJournals(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if s.SchemaVersion() != 19 || count(t, s, "local_index_jobs") != 0 || count(t, s, "chunk_embeddings") != 2 {
+	if s.SchemaVersion() != 20 || count(t, s, "local_index_jobs") != 0 || count(t, s, "chunk_embeddings") != 2 {
 		t.Fatal("upgrade changed existing data")
 	}
 	after, err := s.Chunks().State(ctx, a, input.EmailID)

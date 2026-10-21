@@ -22,6 +22,7 @@ type SearchRequest struct {
 	Query     string                  `json:"query"`
 	Limit     int                     `json:"limit"`
 	Filter    repository.SearchFilter `json:"filter"`
+	Mode      string                  `json:"mode,omitempty"`
 }
 
 func (r SearchRequest) Valid() bool {
@@ -30,9 +31,9 @@ func (r SearchRequest) Valid() bool {
 	}
 	switch r.Operation {
 	case "start":
-		return r.AccountID != "" && r.JobID == "" && retrieval.ValidQuery(r.Query, r.Limit, r.Filter)
+		return r.AccountID != "" && r.JobID == "" && retrieval.ValidMode(r.Mode) && retrieval.ValidQuery(r.Query, r.Limit, r.Filter)
 	case "status", "cancel":
-		return r.Query == "" && r.Limit == 0 && r.Filter == (repository.SearchFilter{}) && (r.Operation == "status" || r.AccountID != "" && r.JobID != "") && (r.JobID == "" || len(r.JobID) == 32)
+		return r.Mode == "" && r.Query == "" && r.Limit == 0 && r.Filter == (repository.SearchFilter{}) && (r.Operation == "status" || r.AccountID != "" && r.JobID != "") && (r.JobID == "" || len(r.JobID) == 32)
 	default:
 		return false
 	}
@@ -48,6 +49,10 @@ type SearchResponse struct {
 	ElapsedMS          float64                 `json:"elapsedMs"`
 	SearchableMessages int                     `json:"searchableMessages"`
 	EligibleMessages   int                     `json:"eligibleMessages"`
+	KeywordMessages    int                     `json:"keywordMessages"`
+	Mode               string                  `json:"mode"`
+	RequestedMode      string                  `json:"requestedMode"`
+	Warning            string                  `json:"warning"`
 }
 type searchJob struct {
 	id       string
@@ -135,13 +140,17 @@ func (s *LocalSearch) Manage(ctx context.Context, r SearchRequest) SearchRespons
 		j.response.AccountID = string(account)
 		j.response.JobID = j.id
 		j.response.Status = "running"
+		j.response.RequestedMode = r.Mode
+		if j.response.RequestedMode == "" {
+			j.response.RequestedMode = "semantic"
+		}
 		s.job = j
 		revoke := context.AfterFunc(session, jobCancel)
 		go func() {
 			defer close(j.done)
 			defer jobCancel()
 			defer revoke()
-			result, err := s.search.Search(jobCtx, account, r.Query, r.Limit, r.Filter)
+			result, err := s.search.SearchMode(jobCtx, account, r.Query, r.Limit, r.Filter, r.Mode)
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			if s.job != j || session.Err() != nil {
@@ -160,6 +169,8 @@ func (s *LocalSearch) Manage(ctx context.Context, r SearchRequest) SearchRespons
 			j.response.Emails = result.Emails
 			j.response.ScannedChunks = result.Scanned
 			j.response.ElapsedMS = float64(result.Elapsed.Microseconds()) / 1000
+			j.response.Mode = result.Mode
+			j.response.Warning = result.Warning
 		}()
 	}
 	result := emptySearch("")
@@ -176,7 +187,7 @@ func (s *LocalSearch) Manage(ctx context.Context, r SearchRequest) SearchRespons
 			j.response.Code = "cancelled"
 		}
 		if j.response.Status == "complete" {
-			if err = s.search.Vectors.CheckVectorSources(ctx, account, s.search.Profile, j.filter, j.result.Sources); err != nil {
+			if err = s.search.CheckSources(ctx, account, j.filter, j.result.Sources); err != nil {
 				j.result = retrieval.Result{}
 				j.response.Emails = []retrieval.EmailResult{}
 				j.response.Status = "error"
@@ -193,6 +204,12 @@ func (s *LocalSearch) Manage(ctx context.Context, r SearchRequest) SearchRespons
 	}
 	result.SearchableMessages = coverage.Complete
 	result.EligibleMessages = coverage.Eligible
+	if s.search.Keywords != nil {
+		result.KeywordMessages, err = s.search.Keywords.KeywordCoverage(ctx, account, s.search.Profile)
+		if err != nil {
+			return emptySearch(searchError(err))
+		}
+	}
 	if session.Err() != nil {
 		return emptySearch("unauthorized")
 	}
@@ -201,6 +218,7 @@ func (s *LocalSearch) Manage(ctx context.Context, r SearchRequest) SearchRespons
 	encoded, err := json.Marshal(result)
 	if err != nil || len(encoded) > 48*1024 {
 		if s.job != nil {
+			keywordMessages := result.KeywordMessages
 			s.job.result = retrieval.Result{}
 			s.job.response = emptySearch("too_large")
 			s.job.response.AccountID = string(account)
@@ -209,6 +227,7 @@ func (s *LocalSearch) Manage(ctx context.Context, r SearchRequest) SearchRespons
 			result = s.job.response
 			result.SearchableMessages = coverage.Complete
 			result.EligibleMessages = coverage.Eligible
+			result.KeywordMessages = keywordMessages
 			return result
 		}
 		return emptySearch("too_large")

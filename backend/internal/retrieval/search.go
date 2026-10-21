@@ -1,4 +1,4 @@
-// Package retrieval provides shared local vector retrieval, independent of AI
+// Package retrieval provides shared keyword/vector/hybrid retrieval, independent of AI
 // generation and classification. It owns no index, scheduler or database.
 package retrieval
 
@@ -32,6 +32,7 @@ type Evidence struct {
 	Score          float64 `json:"score"`
 	Excerpt        string  `json:"excerpt"`
 	SourceRevision string  `json:"sourceRevision"`
+	ScoreKind      string  `json:"scoreKind"`
 }
 type EmailResult struct {
 	ReaderRevision string     `json:"readerRevision"`
@@ -40,33 +41,47 @@ type EmailResult struct {
 	Sender         string     `json:"sender"`
 	ReceivedAt     int64      `json:"receivedAt"`
 	Evidence       []Evidence `json:"evidence"`
+	RankScore      float64    `json:"rankScore"`
+	KeywordRank    int        `json:"keywordRank"`
+	SemanticRank   int        `json:"semanticRank"`
+	ExactMatch     bool       `json:"exactMatch"`
+	PartialContent bool       `json:"partialContent"`
 }
 type Result struct {
 	Emails  []EmailResult
 	Sources []repository.VectorSource
 	Scanned int
 	Elapsed time.Duration
+	Mode    string
+	Warning string
 }
 type VectorSearch struct {
 	Vectors  repository.VectorRepository
 	Embedder QueryEmbedder
 	Profile  repository.IndexProfile
+	Keywords repository.KeywordRepository
 }
 
 func New(v repository.VectorRepository, e QueryEmbedder) *VectorSearch {
 	d := e.Descriptor()
-	return &VectorSearch{v, e, repository.IndexProfile{Model: repository.EmbeddingModel{ID: d.ModelID, Version: d.Version, Dimension: d.Dimensions}, PreprocessingVersion: mailtext.PreprocessingVersion, IndexVersion: mailtext.ChunkIndexVersion, Fingerprint: d.PreprocessingFingerprint}}
+	keywords, _ := v.(repository.KeywordRepository)
+	return &VectorSearch{Vectors: v, Embedder: e, Keywords: keywords, Profile: repository.IndexProfile{Model: repository.EmbeddingModel{ID: d.ModelID, Version: d.Version, Dimension: d.Dimensions}, PreprocessingVersion: mailtext.PreprocessingVersion, IndexVersion: mailtext.ChunkIndexVersion, Fingerprint: d.PreprocessingFingerprint}}
 }
 func ValidQuery(q string, k int, f repository.SearchFilter) bool {
 	return utf8.ValidString(q) && strings.TrimSpace(q) != "" && len(q) <= 2048 && !strings.ContainsRune(q, 0) && k >= 1 && k <= MaxResults && utf8.ValidString(f.Sender) && len(f.Sender) <= 200 && !strings.ContainsRune(f.Sender, 0) && len(f.CategoryID) <= 100 && utf8.ValidString(f.CategoryID) && !strings.ContainsRune(f.CategoryID, 0) && f.After >= 0 && f.Before >= 0 && f.After <= 253402300799999 && f.Before <= 253402300799999 && (f.Before == 0 || f.After < f.Before)
 }
 
 type hit struct {
-	source repository.VectorSource
-	score  float64
+	source  repository.VectorSource
+	score   float64
+	exact   bool
+	excerpt string
 }
 
 func better(a, b hit) bool {
+	if a.exact != b.exact {
+		return a.exact
+	}
 	if a.score != b.score {
 		return a.score > b.score
 	}
@@ -120,12 +135,45 @@ func overlaps(a, b repository.EmailChunk) bool {
 // suppressing overlapping passages only within the same email. Distinct replies,
 // including conflicting evidence in the same thread, remain independently visible.
 func (s *VectorSearch) Search(ctx context.Context, account domain.AccountID, q string, k int, f repository.SearchFilter) (Result, error) {
-	start := time.Now()
-	result := Result{Emails: []EmailResult{}}
-	query, err := s.queryVector(ctx, account, q, k, f)
-	if err != nil {
-		return result, err
+	if !ValidQuery(q, k, f) {
+		return Result{}, ErrInput
 	}
+	return s.searchVector(ctx, account, q, k, f)
+}
+func (s *VectorSearch) searchVector(ctx context.Context, account domain.AccountID, q string, k int, f repository.SearchFilter) (Result, error) {
+	start := time.Now()
+	query, err := s.queryVector(ctx, account, q, min(k, MaxResults), f)
+	if err != nil {
+		return Result{}, err
+	}
+	result, err := rank(ctx, account, k, func(visit func(hit) error) error {
+		return s.Vectors.ScanVectors(ctx, account, s.Profile, f, func(v repository.VectorSource) error {
+			score, err := Cosine(query, v.Vector)
+			if err != nil {
+				return err
+			}
+			v.Vector = nil
+			return visit(hit{source: v, score: score})
+		})
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	if err = s.CheckSources(ctx, account, f, result.Sources); err != nil {
+		return Result{}, err
+	}
+	for i := range result.Emails {
+		result.Emails[i].SemanticRank = i + 1
+	}
+	result.Mode = "semantic"
+	result.Elapsed = time.Since(start)
+	return result, nil
+}
+
+// rank holds at most K messages and three nonoverlapping passages per message.
+// Both scans are ordered by email; each branch contributes one rank per email.
+func rank(ctx context.Context, account domain.AccountID, k int, scan func(func(hit) error) error) (Result, error) {
+	result := Result{Emails: []EmailResult{}}
 	type group struct{ hits []hit }
 	groups := []group{}
 	current := []hit{}
@@ -141,10 +189,11 @@ func (s *VectorSearch) Search(ctx context.Context, account domain.AccountID, q s
 		}
 		current = nil
 	}
-	err = s.Vectors.ScanVectors(ctx, account, s.Profile, f, func(v repository.VectorSource) error {
+	err := scan(func(candidate hit) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		v := candidate.source
 		if v.Chunk.AccountID != account {
 			return repository.ErrConflict
 		}
@@ -152,13 +201,7 @@ func (s *VectorSearch) Search(ctx context.Context, account domain.AccountID, q s
 			flush()
 			email = v.Chunk.EmailID
 		}
-		score, err := Cosine(query, v.Vector)
-		if err != nil {
-			return err
-		}
 		result.Scanned++
-		v.Vector = nil // never retain corpus vectors
-		candidate := hit{v, score}
 		// Highest score wins before overlap suppression. Retain the best passage even
 		// if a later overlapping chunk arrives with a higher score.
 		current = append(current, candidate)
@@ -188,9 +231,17 @@ func (s *VectorSearch) Search(ctx context.Context, account domain.AccountID, q s
 	flush()
 	for _, g := range groups {
 		best := g.hits[0].source
-		e := EmailResult{ReaderRevision: mailtext.ReaderRevision(best.Chunk.SourceRevision), EmailID: string(best.Chunk.EmailID), Subject: clip(best.Subject, 240), Sender: clip(best.SenderName+" <"+best.SenderAddress+">", 240), ReceivedAt: best.ReceivedAt, Evidence: []Evidence{}}
+		e := EmailResult{ReaderRevision: mailtext.ReaderRevision(best.Chunk.SourceRevision), EmailID: string(best.Chunk.EmailID), Subject: clip(best.Subject, 240), Sender: clip(best.SenderName+" <"+best.SenderAddress+">", 240), ReceivedAt: best.ReceivedAt, Evidence: []Evidence{}, RankScore: g.hits[0].score, ExactMatch: g.hits[0].exact, PartialContent: best.Partial}
 		for _, h := range g.hits {
-			e.Evidence = append(e.Evidence, Evidence{h.source.Chunk.ID, h.score, clip(h.source.Chunk.Text, 600), h.source.Chunk.SourceRevision})
+			kind, score := "cosine", h.score
+			if h.source.Keyword {
+				kind, score = "keyword", 0
+			}
+			excerpt := h.excerpt
+			if excerpt == "" {
+				excerpt = clip(h.source.Chunk.Text, 600)
+			}
+			e.Evidence = append(e.Evidence, Evidence{ChunkID: h.source.Chunk.ID, Score: score, Excerpt: excerpt, SourceRevision: h.source.Chunk.SourceRevision, ScoreKind: kind})
 			source := h.source
 			source.Chunk.Text = ""
 			source.Chunk.ContextText = ""
@@ -201,10 +252,6 @@ func (s *VectorSearch) Search(ctx context.Context, account domain.AccountID, q s
 	if err = ctx.Err(); err != nil {
 		return Result{}, err
 	}
-	if err = s.Vectors.CheckVectorSources(ctx, account, s.Profile, f, result.Sources); err != nil {
-		return Result{}, err
-	}
-	result.Elapsed = time.Since(start)
 	return result, nil
 }
 func clip(s string, n int) string {

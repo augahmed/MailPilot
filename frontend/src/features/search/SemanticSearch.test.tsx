@@ -144,3 +144,31 @@ it("clears evidence after cache invalidation", async () => {
   expect(screen.queryByText("Project meeting")).toBeNull();
   expect(screen.getByText(/Cached evidence changed/)).toBeVisible();
 });
+
+it("selects keyword mode and discloses fallback and partial index coverage", async () => {
+  vi.mocked(vectorSearch).mockResolvedValue(idle);
+  render(<SemanticSearch onOpen={vi.fn()} onEvidence={vi.fn()} />);
+  await waitFor(() => expect(vectorSearch).toHaveBeenCalled());
+  fireEvent.change(screen.getByLabelText("Search mode"), {
+    target: { value: "keyword" },
+  });
+  fireEvent.change(screen.getByLabelText("Search query"), {
+    target: { value: "Q7M4ZP" },
+  });
+  vi.mocked(vectorSearch).mockResolvedValue({
+    ...complete,
+    mode: "keyword",
+    requestedMode: "hybrid",
+    warning: "semantic_unavailable",
+    searchableMessages: 0,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
+  await screen.findByText(
+    /Semantic retrieval unavailable; showing keyword-only results/,
+  );
+  expect(vectorSearch).toHaveBeenLastCalledWith(
+    expect.objectContaining({ mode: "keyword" }),
+  );
+  expect(screen.getByText(/Semantic index is partial/)).toBeVisible();
+  expect(screen.getByText(/Keyword coverage: 7 of 8/)).toBeVisible();
+});

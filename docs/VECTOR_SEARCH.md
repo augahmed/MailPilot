@@ -2,7 +2,7 @@
 
 Implemented 2026-10-20 over the existing migrations 015–017. No schema, model,
 tokenizer, dependency, external AI authority or Gmail write behavior changed.
-Keyword/hybrid search and semantic classification remain planned.
+This document records the original semantic slice and its measurements. Keyword/hybrid retrieval now extends it through migration 020; see [current hybrid contract and held-out evaluation](HYBRID_SEARCH.md). Semantic classification is also implemented separately.
 
 ## Service and compatible sources
 
@@ -63,7 +63,7 @@ after five minutes, with expiry enforced on access. Nothing is written to browse
 storage or to a second index; no Gmail fetch, AI provider, key or AI consent is used.
 Status polling never runs inference. Ordinary reading works without embeddings.
 
-The Semantic search form exposes query, sender, UTC dates, assigned categories and
+The original Semantic search form exposed query, sender, UTC dates, assigned categories and
 5/10/20 maximum emails. It shows searchable/eligible coverage, cancellation, errors,
 cosine scores and escaped excerpts (up to 600 UTF-8 bytes per chunk). Metadata is
 bounded to 240 bytes per field and encoded responses to 48 KiB. An oversized result
@@ -125,8 +125,8 @@ Important observed limits: `INV-2048-AX` ranked the neighboring invoice first an
 the exact invoice second; `Q7M4ZP` ranked its correct itinerary third. Both unrelated
 queries returned ten candidates (top scores 0.191 and 0.256). Conflicting budget
 updates and the quoted earlier proposal remained independently discoverable. These
-results support keeping the separately planned keyword fallback; this task adds
-semantic search only and does not claim full M3 completion.
+results motivated the now-implemented [keyword/hybrid extension](HYBRID_SEARCH.md).
+This historical evaluation does not claim full M3 qualification.
 
 ## Exact-scan scale benchmark
 

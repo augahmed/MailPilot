@@ -32,6 +32,20 @@ func TestLocalSearchContractAndStrictBoundary(t *testing.T) {
 	if strictDecode(fixture.Request, &request) != nil || !request.Valid() || strictDecode(fixture.Response, &response) != nil || len(response.Emails) != 1 {
 		t.Fatal("invalid contract")
 	}
+	for _, mode := range []string{"keyword", "semantic", "hybrid"} {
+		request.Mode = mode
+		if !request.Valid() {
+			t.Fatal("mode rejected", mode)
+		}
+	}
+	request.Mode = "remote"
+	if request.Valid() {
+		t.Fatal("unknown mode accepted")
+	}
+	raw, err = os.ReadFile("../../../contracts/hybrid-search-v1.json")
+	if err != nil || json.Unmarshal(raw, &fixture) != nil || strictDecode(fixture.Request, &request) != nil || !request.Valid() || strictDecode(fixture.Response, &response) != nil || response.Mode != "keyword" || response.Warning != "semantic_unavailable" {
+		t.Fatal("invalid hybrid contract", err)
+	}
 	for _, params := range []string{`{"operation":"start","accountId":"a","jobId":"","query":"find","limit":21,"filter":{"sender":"","after":0,"before":0,"categoryId":""}}`, `{"operation":"start","accountId":"a","modelPath":"private-canary"}`, `{"operation":"status","accountId":"","filter":{"sql":"private-canary"}}`, `{"operation":"start","accountId":"a","provider":"private-canary"}`} {
 		input := `{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":1}}` + "\n" + `{"jsonrpc":"2.0","id":"index","method":"search.local","params":` + params + "}\n"
 		var output bytes.Buffer

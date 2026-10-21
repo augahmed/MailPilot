@@ -14,7 +14,7 @@ Status: M1 source/chunking and M2 persistence plus a lazy packaged CPU MiniLM
 provider plus explicit resumable indexing/UI are implemented. The provider has real synthetic/native and fake-model
 checks; [qualification details](LOCAL_EMBEDDING.md) cover resource/signing/OS limits.
 The coordinator now publishes bounded vector batches through generation-fenced
-SQLite writes. Exact vector search and its UI are now implemented ([details and measurements](VECTOR_SEARCH.md)); Local category prototypes and explicit confirmed examples are implemented through the same coordinator ([contract](CATEGORY_VECTORS.md)). Shared semantic classification, explicit primary preferences and evidence review are now implemented ([evaluation and limitations](SEMANTIC_CLASSIFICATION.md)); the user-selected multi-category policy has 60.7% definition-only held-out per-suggestion precision, below the 90% target. Keyword/hybrid search and AI milestones remain planned.
+SQLite writes. Exact vector search and its UI are now implemented ([details and measurements](VECTOR_SEARCH.md)); Local category prototypes and explicit confirmed examples are implemented through the same coordinator ([contract](CATEGORY_VECTORS.md)). Shared semantic classification, explicit primary preferences and evidence review are now implemented ([evaluation and limitations](SEMANTIC_CLASSIFICATION.md)); the user-selected multi-category policy has 60.7% definition-only held-out per-suggestion precision, below the 90% target. Keyword/hybrid search is now implemented ([held-out evaluation and latency](HYBRID_SEARCH.md)); evidence-answer AI milestones remain planned.
 The additive `index.local` control returns metadata only; external AI consent is
 unchanged. See [local indexing](LOCAL_INDEXING.md) for scope and qualification. Further product work requires a scoped implementation request.
 
@@ -157,7 +157,7 @@ Generation is optional and no provider/key is needed for local search/classifica
 
 Milestones are coherent slices, not a second list of copyable implementation prompts.
 M1 and the M2 storage/provider/coordinator slice are implemented and tested,
-including real offline indexing on synthetic mail. A 10,000-message/50,000-chunk exact-scan benchmark and a small native synthetic search evaluation are recorded in [VECTOR_SEARCH.md](VECTOR_SEARCH.md). Held-out retrieval/classification quality and keyword fallback remain open; M3 is only partially implemented. Supporting reading fixes may be separately requested. Do not add AI routes before reliable local retrieval/evidence.
+including real offline indexing on synthetic mail. A 10,000-message/50,000-chunk exact-scan benchmark and a small native synthetic search evaluation are recorded in [VECTOR_SEARCH.md](VECTOR_SEARCH.md). Keyword fallback and a fixed synthetic held-out comparison of all search modes are now implemented ([report](HYBRID_SEARCH.md)). Production mailbox relevance, lower large-corpus latency and full M3 qualification remain open. Supporting reading fixes may be separately requested. Do not add AI routes before reliable local retrieval/evidence.
 
 ## 5. Evaluation, operational limits and decisions still open
 

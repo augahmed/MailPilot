@@ -24,6 +24,7 @@ export const searchRequestSchema = z
     query: bytes(2048),
     limit: z.number().int().min(0).max(20),
     filter,
+    mode: z.enum(["keyword", "semantic", "hybrid"]).optional(),
   })
   .strict()
   .refine((r) =>
@@ -32,7 +33,8 @@ export const searchRequestSchema = z
         r.jobId === "" &&
         r.query.trim() !== "" &&
         r.limit >= 1
-      : r.query === "" &&
+      : r.mode === undefined &&
+        r.query === "" &&
         r.limit === 0 &&
         JSON.stringify(r.filter) === JSON.stringify(emptyFilter) &&
         (r.jobId === "" || r.jobId.length === 32) &&
@@ -45,6 +47,7 @@ const evidence = z
     score: z.number().min(-1).max(1),
     excerpt: bytes(600).refine(Boolean),
     sourceRevision: z.string().regex(/^[a-f0-9]{64}$/),
+    scoreKind: z.enum(["cosine", "keyword"]),
   })
   .strict();
 export const searchResponseSchema = z
@@ -76,6 +79,11 @@ export const searchResponseSchema = z
             sender: bytes(240),
             receivedAt: z.number().int(),
             evidence: z.array(evidence).min(1).max(3),
+            rankScore: z.number().finite(),
+            keywordRank: z.number().int().min(0).max(100),
+            semanticRank: z.number().int().min(0).max(100),
+            exactMatch: z.boolean(),
+            partialContent: z.boolean(),
           })
           .strict(),
       )
@@ -84,11 +92,16 @@ export const searchResponseSchema = z
     elapsedMs: z.number().nonnegative(),
     searchableMessages: z.number().int().nonnegative(),
     eligibleMessages: z.number().int().nonnegative(),
+    keywordMessages: z.number().int().nonnegative(),
+    mode: z.enum(["", "keyword", "semantic", "hybrid"]),
+    requestedMode: z.enum(["", "keyword", "semantic", "hybrid"]),
+    warning: z.enum(["", "semantic_unavailable"]),
   })
   .strict()
   .refine(
     (r) =>
       r.searchableMessages <= r.eligibleMessages &&
+      r.keywordMessages <= r.eligibleMessages &&
       (r.emails.length === 0 ||
         (r.status === "complete" && r.code === "" && r.accountId !== "")),
   );

@@ -1,0 +1,713 @@
+{
+  "version": 1,
+  "split": "held-out",
+  "description": "Fixed synthetic English judgments frozen after selecting equal-weight RRF k=60 and depth=100, before measuring this fixture. No tuning on these queries. Development corpus: evaluation.json. Related threads/templates stay together in this held-out corpus. Not a private mailbox or production quality claim.",
+  "messages": [
+    {
+      "id": "hotel",
+      "account": "a",
+      "subject": "Reservation details",
+      "body": "Your room at Harbor House is reserved for March 18 through March 21. Confirmation H6T9KL. Check-in begins at 3 PM.",
+      "sender": "stay@harborhouse.test",
+      "thread": "hotel"
+    },
+    {
+      "id": "hotel-other",
+      "account": "a",
+      "subject": "Hotel reservation",
+      "body": "Your room at Harbor House is reserved for April 9. Confirmation H6T9KM.",
+      "sender": "stay@harborhouse.test",
+      "thread": "hotel-other"
+    },
+    {
+      "id": "refund",
+      "account": "a",
+      "subject": "Return accepted",
+      "body": "We have received your returned headphones. A credit of $79 will appear on your original card within five business days.",
+      "sender": "returns@aurora.test",
+      "thread": "refund"
+    },
+    {
+      "id": "refund-other",
+      "account": "a",
+      "subject": "Refund policy",
+      "body": "Refund requests must be submitted within thirty days. Unopened items qualify for store credit.",
+      "sender": "help@shops.test",
+      "thread": "refund-other"
+    },
+    {
+      "id": "renewal",
+      "account": "a",
+      "subject": "Service agreement",
+      "body": "Your annual membership renews automatically on August 4 for $240. Cancel before July 28 to avoid another charge.",
+      "sender": "membership@club.test",
+      "thread": "renewal"
+    },
+    {
+      "id": "renewal-other",
+      "account": "a",
+      "subject": "Welcome member",
+      "body": "Your gym access card is ready. You can use the fitness room from 6 AM to 10 PM.",
+      "sender": "desk@gym.test",
+      "thread": "renewal-other"
+    },
+    {
+      "id": "security",
+      "account": "a",
+      "subject": "Account access warning",
+      "body": "We noticed a sign-in from an unfamiliar device in Madrid. If this was not you, change your password and review active sessions.",
+      "sender": "alerts@account.test",
+      "thread": "security"
+    },
+    {
+      "id": "security-other",
+      "account": "a",
+      "subject": "Password changed",
+      "body": "Your password was successfully updated. No further action is required.",
+      "sender": "alerts@account.test",
+      "thread": "security-other"
+    },
+    {
+      "id": "package",
+      "account": "a",
+      "subject": "Delivery exception",
+      "body": "The courier could not enter the building. Your parcel is being held at the local depot for collection with photo identification. Tracking PK-87031.",
+      "sender": "courier@parcel.test",
+      "thread": "package"
+    },
+    {
+      "id": "package-other",
+      "account": "a",
+      "subject": "Delivery complete",
+      "body": "Your parcel was delivered to the front desk yesterday. Tracking PK-87032.",
+      "sender": "courier@parcel.test",
+      "thread": "package-other"
+    },
+    {
+      "id": "repair",
+      "account": "a",
+      "subject": "Maintenance visit",
+      "body": "The technician will replace the broken water heater on Thursday between 10 AM and noon. Please clear the utility closet.",
+      "sender": "repairs@home.test",
+      "thread": "repair"
+    },
+    {
+      "id": "repair-other",
+      "account": "a",
+      "subject": "Repair completed",
+      "body": "The dishwasher repair is finished. You may use it immediately.",
+      "sender": "repairs@home.test",
+      "thread": "repair-other"
+    },
+    {
+      "id": "tuition",
+      "account": "a",
+      "subject": "Student account",
+      "body": "The spring semester tuition balance of $4200 must be paid by February 2. Financial aid has already been applied.",
+      "sender": "bursar@school.test",
+      "thread": "tuition"
+    },
+    {
+      "id": "tuition-other",
+      "account": "a",
+      "subject": "Course registration",
+      "body": "Registration for summer classes opens Monday. Choose courses in the student portal.",
+      "sender": "registrar@school.test",
+      "thread": "tuition-other"
+    },
+    {
+      "id": "appointment",
+      "account": "a",
+      "subject": "Visit instructions",
+      "body": "Your eye examination with Dr. Mina Patel is scheduled for June 6 at 9:15 AM. Bring your current glasses and insurance card.",
+      "sender": "clinic@vision.test",
+      "thread": "appointment"
+    },
+    {
+      "id": "appointment-other",
+      "account": "a",
+      "subject": "Dental appointment",
+      "body": "Your tooth extraction is scheduled for July 3. Avoid solid food before arrival.",
+      "sender": "clinic@dental.test",
+      "thread": "appointment-other"
+    },
+    {
+      "id": "meeting-old",
+      "account": "a",
+      "subject": "Orion workshop proposal",
+      "body": "We propose holding the Orion workshop on May 8 in the east conference room. The date is tentative.",
+      "sender": "morgan@orion.test",
+      "thread": "meeting-old"
+    },
+    {
+      "id": "meeting-new",
+      "account": "a",
+      "subject": "Orion workshop confirmed",
+      "body": "The Orion workshop has moved to May 15 in the west conference room. This replaces the tentative May 8 proposal.",
+      "sender": "morgan@orion.test",
+      "thread": "meeting-new"
+    },
+    {
+      "id": "company",
+      "account": "a",
+      "subject": "Project statement",
+      "body": "Northstar Labs approved the materials purchase for the sensor prototype. Purchase order NS-5102.",
+      "sender": "finance@northstar.test",
+      "thread": "company"
+    },
+    {
+      "id": "company-other",
+      "account": "a",
+      "subject": "Project statement",
+      "body": "Northshore Labs approved the materials purchase for the sensor prototype. Purchase order NH-5102.",
+      "sender": "finance@northshore.test",
+      "thread": "company-other"
+    },
+    {
+      "id": "sender",
+      "account": "a",
+      "subject": "Contract signature",
+      "body": "The revised consulting agreement is ready for signature. Please review the indemnity clause.",
+      "sender": "elena@quartz.test",
+      "thread": "sender"
+    },
+    {
+      "id": "sender-other",
+      "account": "a",
+      "subject": "Contract signature",
+      "body": "The revised consulting agreement is ready for signature. Please review the indemnity clause.",
+      "sender": "elena@quartz-other.test",
+      "thread": "sender-other"
+    },
+    {
+      "id": "code",
+      "account": "a",
+      "subject": "Access to building",
+      "body": "Your temporary entry code is 735291. It expires at midnight on Friday.",
+      "sender": "access@office.test",
+      "thread": "code"
+    },
+    {
+      "id": "code-other",
+      "account": "a",
+      "subject": "Access to building",
+      "body": "Your temporary entry code is 735292. It expires at midnight on Saturday.",
+      "sender": "access@office.test",
+      "thread": "code-other"
+    },
+    {
+      "id": "invoice",
+      "account": "a",
+      "subject": "Amount outstanding",
+      "body": "Invoice AC-6021-X has an unpaid balance of $630. Please pay by September 12.",
+      "sender": "billing@acorn.test",
+      "thread": "invoice"
+    },
+    {
+      "id": "invoice-other",
+      "account": "a",
+      "subject": "Amount outstanding",
+      "body": "Invoice AC-6021-Y has an unpaid balance of $830. Please pay by September 14.",
+      "sender": "billing@acorn.test",
+      "thread": "invoice-other"
+    },
+    {
+      "id": "leave",
+      "account": "a",
+      "subject": "Time off request",
+      "body": "Your vacation request for October 10 through October 14 has been approved by your manager.",
+      "sender": "hr@employer.test",
+      "thread": "leave"
+    },
+    {
+      "id": "leave-other",
+      "account": "a",
+      "subject": "Holiday schedule",
+      "body": "The office will be closed for the public holiday next Monday.",
+      "sender": "hr@employer.test",
+      "thread": "leave-other"
+    },
+    {
+      "id": "quote",
+      "account": "a",
+      "subject": "Supplier reply",
+      "body": "The updated estimate is $8600 including installation.\n\n> Earlier proposal: the installation estimate was $7200 excluding tax.",
+      "sender": "sales@supplier.test",
+      "thread": "quote"
+    },
+    {
+      "id": "outage",
+      "account": "a",
+      "subject": "Service interruption",
+      "body": "Database maintenance will make the reporting dashboard unavailable from 1 AM to 3 AM on Sunday.",
+      "sender": "ops@service.test",
+      "thread": "outage"
+    },
+    {
+      "id": "job",
+      "account": "a",
+      "subject": "Application progress",
+      "body": "We are moving your application to the final interview stage. Meet the engineering director next Wednesday.",
+      "sender": "talent@employer.test",
+      "thread": "job"
+    },
+    {
+      "id": "job-other",
+      "account": "a",
+      "subject": "Application progress",
+      "body": "We will not be moving forward with your application. Thank you for your interest.",
+      "sender": "talent@another.test",
+      "thread": "job-other"
+    },
+    {
+      "id": "gift",
+      "account": "a",
+      "subject": "Gift receipt",
+      "body": "A bookstore gift card worth $50 has been sent to your niece. Redemption code BK-55091.",
+      "sender": "gifts@books.test",
+      "thread": "gift"
+    },
+    {
+      "id": "pickup",
+      "account": "a",
+      "subject": "Collection ready",
+      "body": "Your prescription is ready for pickup at Oak Street Pharmacy. Bring identification.",
+      "sender": "pharmacy@oak.test",
+      "thread": "pickup"
+    },
+    {
+      "id": "tax",
+      "account": "a",
+      "subject": "Tax records",
+      "body": "Your annual interest statement is available in the secure document center. Use it when preparing your tax return.",
+      "sender": "statements@bank.test",
+      "thread": "tax"
+    },
+    {
+      "id": "subscription",
+      "account": "a",
+      "subject": "Digital issue",
+      "body": "The latest edition of the science magazine is ready to read. Your subscription remains active.",
+      "sender": "news@science.test",
+      "thread": "subscription"
+    },
+    {
+      "id": "background-00",
+      "account": "a",
+      "subject": "Recipe",
+      "body": "Mix flour and butter. Bake at 180 degrees for twenty minutes.",
+      "sender": "digest@community.test",
+      "thread": "background-00"
+    },
+    {
+      "id": "background-01",
+      "account": "a",
+      "subject": "Gardening",
+      "body": "Plant tulip bulbs in autumn for spring flowers.",
+      "sender": "digest@community.test",
+      "thread": "background-01"
+    },
+    {
+      "id": "background-02",
+      "account": "a",
+      "subject": "Music",
+      "body": "The orchestra performs symphonies in the concert hall.",
+      "sender": "digest@community.test",
+      "thread": "background-02"
+    },
+    {
+      "id": "background-03",
+      "account": "a",
+      "subject": "Cycling",
+      "body": "Lubricate the bicycle chain and inspect brake pads.",
+      "sender": "digest@community.test",
+      "thread": "background-03"
+    },
+    {
+      "id": "background-04",
+      "account": "a",
+      "subject": "Astronomy",
+      "body": "The meteor shower will peak after midnight under clear skies.",
+      "sender": "digest@community.test",
+      "thread": "background-04"
+    },
+    {
+      "id": "background-05",
+      "account": "a",
+      "subject": "Language",
+      "body": "Practice French pronunciation with the weekly vocabulary exercise.",
+      "sender": "digest@community.test",
+      "thread": "background-05"
+    },
+    {
+      "id": "background-06",
+      "account": "a",
+      "subject": "Hiking",
+      "body": "Bring waterproof boots and a map for the mountain trail.",
+      "sender": "digest@community.test",
+      "thread": "background-06"
+    },
+    {
+      "id": "background-07",
+      "account": "a",
+      "subject": "Museum",
+      "body": "The ceramics exhibition includes vessels from ancient trade routes.",
+      "sender": "digest@community.test",
+      "thread": "background-07"
+    },
+    {
+      "id": "background-08",
+      "account": "a",
+      "subject": "Swimming",
+      "body": "The pool lane timetable has changed for the winter season.",
+      "sender": "digest@community.test",
+      "thread": "background-08"
+    },
+    {
+      "id": "background-09",
+      "account": "a",
+      "subject": "Chess",
+      "body": "The tournament uses rapid time controls with a ten second increment.",
+      "sender": "digest@community.test",
+      "thread": "background-09"
+    },
+    {
+      "id": "background-10",
+      "account": "a",
+      "subject": "Volunteering",
+      "body": "Help sort food donations at the community pantry this weekend.",
+      "sender": "digest@community.test",
+      "thread": "background-10"
+    },
+    {
+      "id": "background-11",
+      "account": "a",
+      "subject": "Photography",
+      "body": "Use a narrow aperture to keep the landscape in focus.",
+      "sender": "digest@community.test",
+      "thread": "background-11"
+    },
+    {
+      "id": "background-12",
+      "account": "a",
+      "subject": "Sailing",
+      "body": "Strong winds are forecast near the harbor. Inspect the rigging.",
+      "sender": "digest@community.test",
+      "thread": "background-12"
+    },
+    {
+      "id": "background-13",
+      "account": "a",
+      "subject": "Birdwatching",
+      "body": "Migratory shorebirds have arrived at the coastal wetlands.",
+      "sender": "digest@community.test",
+      "thread": "background-13"
+    },
+    {
+      "id": "background-14",
+      "account": "a",
+      "subject": "Art class",
+      "body": "Bring charcoal pencils and a sketchbook for portrait practice.",
+      "sender": "digest@community.test",
+      "thread": "background-14"
+    },
+    {
+      "id": "background-15",
+      "account": "a",
+      "subject": "Running",
+      "body": "Warm up before the interval session and stretch afterward.",
+      "sender": "digest@community.test",
+      "thread": "background-15"
+    },
+    {
+      "id": "background-16",
+      "account": "a",
+      "subject": "Car care",
+      "body": "Check tire pressure when the tires are cold.",
+      "sender": "digest@community.test",
+      "thread": "background-16"
+    },
+    {
+      "id": "background-17",
+      "account": "a",
+      "subject": "History",
+      "body": "The lecture explores Roman engineering and aqueduct construction.",
+      "sender": "digest@community.test",
+      "thread": "background-17"
+    },
+    {
+      "id": "background-18",
+      "account": "a",
+      "subject": "Composting",
+      "body": "Add dry leaves to balance kitchen scraps in the compost pile.",
+      "sender": "digest@community.test",
+      "thread": "background-18"
+    },
+    {
+      "id": "background-19",
+      "account": "a",
+      "subject": "Robotics",
+      "body": "The motor controller connects to the sensor bus at 115200 baud.",
+      "sender": "digest@community.test",
+      "thread": "background-19"
+    },
+    {
+      "id": "background-20",
+      "account": "a",
+      "subject": "Knitting",
+      "body": "Use wool yarn and circular needles for the scarf pattern.",
+      "sender": "digest@community.test",
+      "thread": "background-20"
+    },
+    {
+      "id": "background-21",
+      "account": "a",
+      "subject": "Geology",
+      "body": "The rock samples show layers of volcanic ash.",
+      "sender": "digest@community.test",
+      "thread": "background-21"
+    },
+    {
+      "id": "background-22",
+      "account": "a",
+      "subject": "Film club",
+      "body": "The documentary screening will be followed by a discussion.",
+      "sender": "digest@community.test",
+      "thread": "background-22"
+    },
+    {
+      "id": "background-23",
+      "account": "a",
+      "subject": "Pottery",
+      "body": "Glaze the bowl before placing it in the kiln.",
+      "sender": "digest@community.test",
+      "thread": "background-23"
+    },
+    {
+      "id": "background-24",
+      "account": "a",
+      "subject": "Dog training",
+      "body": "Reward calm behavior and practice recall in a fenced area.",
+      "sender": "digest@community.test",
+      "thread": "background-24"
+    },
+    {
+      "id": "background-25",
+      "account": "a",
+      "subject": "Poetry",
+      "body": "Read the sonnet aloud and compare its rhyme pattern.",
+      "sender": "digest@community.test",
+      "thread": "background-25"
+    },
+    {
+      "id": "background-26",
+      "account": "a",
+      "subject": "Coffee",
+      "body": "A finer grind increases extraction time in the espresso machine.",
+      "sender": "digest@community.test",
+      "thread": "background-26"
+    },
+    {
+      "id": "background-27",
+      "account": "a",
+      "subject": "Piano",
+      "body": "Practice scales slowly with an even rhythm.",
+      "sender": "digest@community.test",
+      "thread": "background-27"
+    },
+    {
+      "id": "background-28",
+      "account": "a",
+      "subject": "Weather",
+      "body": "Heavy snow is expected on the mountain pass overnight.",
+      "sender": "digest@community.test",
+      "thread": "background-28"
+    },
+    {
+      "id": "background-29",
+      "account": "a",
+      "subject": "Sewing",
+      "body": "Measure the seam allowance before cutting the cotton fabric.",
+      "sender": "digest@community.test",
+      "thread": "background-29"
+    },
+    {
+      "id": "background-30",
+      "account": "a",
+      "subject": "Furniture",
+      "body": "Assemble the bookshelf with the supplied wooden dowels.",
+      "sender": "digest@community.test",
+      "thread": "background-30"
+    },
+    {
+      "id": "background-31",
+      "account": "a",
+      "subject": "Yoga",
+      "body": "The beginner class focuses on balance and breathing.",
+      "sender": "digest@community.test",
+      "thread": "background-31"
+    },
+    {
+      "id": "background-32",
+      "account": "a",
+      "subject": "Beach cleanup",
+      "body": "Meet by the dunes to collect litter from the shoreline.",
+      "sender": "digest@community.test",
+      "thread": "background-32"
+    },
+    {
+      "id": "background-33",
+      "account": "a",
+      "subject": "Baking",
+      "body": "Allow the bread dough to rise until doubled in volume.",
+      "sender": "digest@community.test",
+      "thread": "background-33"
+    },
+    {
+      "id": "background-34",
+      "account": "a",
+      "subject": "Train club",
+      "body": "The model railway display features a new station platform.",
+      "sender": "digest@community.test",
+      "thread": "background-34"
+    },
+    {
+      "id": "background-35",
+      "account": "a",
+      "subject": "Book review",
+      "body": "This novel follows a family across three generations.",
+      "sender": "digest@community.test",
+      "thread": "background-35"
+    },
+    {
+      "id": "private-hotel",
+      "account": "b",
+      "subject": "Reservation details",
+      "body": "Your room at Harbor House is reserved for March 18 through March 21. Confirmation H6T9KL. Check-in begins at 3 PM.",
+      "sender": "stay@harborhouse.test",
+      "thread": "hotel"
+    }
+  ],
+  "queries": [
+    {
+      "kind": "identifier",
+      "query": "H6T9KL",
+      "relevant": ["hotel"]
+    },
+    {
+      "kind": "identifier",
+      "query": "invoice AC-6021-X",
+      "relevant": ["invoice"]
+    },
+    {
+      "kind": "identifier",
+      "query": "tracking PK-87031",
+      "relevant": ["package"]
+    },
+    {
+      "kind": "identifier",
+      "query": "735291",
+      "relevant": ["code"]
+    },
+    {
+      "kind": "identifier",
+      "query": "BK-55091",
+      "relevant": ["gift"]
+    },
+    {
+      "kind": "identifier",
+      "query": "elena@quartz.test",
+      "relevant": ["sender"]
+    },
+    {
+      "kind": "company",
+      "query": "Northstar Labs",
+      "relevant": ["company"]
+    },
+    {
+      "kind": "company",
+      "query": "Oak Street Pharmacy",
+      "relevant": ["pickup"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "money back for returned audio equipment",
+      "relevant": ["refund"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "deadline to stop my automatic membership payment",
+      "relevant": ["renewal"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "someone else may have accessed my account",
+      "relevant": ["security"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "where can I collect the shipment after a failed delivery",
+      "relevant": ["package"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "when will someone fix the hot water",
+      "relevant": ["repair"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "payment deadline for university fees",
+      "relevant": ["tuition"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "appointment for checking my eyesight",
+      "relevant": ["appointment"]
+    },
+    {
+      "kind": "conflict",
+      "query": "Orion workshop date change",
+      "relevant": ["meeting-old", "meeting-new"]
+    },
+    {
+      "kind": "quoted",
+      "query": "previous installation estimate before the update",
+      "relevant": ["quote"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "has my time away from work been accepted",
+      "relevant": ["leave"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "reporting tool downtime",
+      "relevant": ["outage"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "did I reach the last hiring interview",
+      "relevant": ["job"]
+    },
+    {
+      "kind": "paraphrase",
+      "query": "bank document needed for filing taxes",
+      "relevant": ["tax"]
+    },
+    {
+      "kind": "mixed",
+      "query": "Northstar Labs sensor purchase order",
+      "relevant": ["company"]
+    },
+    {
+      "kind": "unrelated",
+      "query": "quantum entanglement experiment results",
+      "relevant": []
+    },
+    {
+      "kind": "unrelated",
+      "query": "volcano evacuation order for Iceland",
+      "relevant": []
+    }
+  ]
+}

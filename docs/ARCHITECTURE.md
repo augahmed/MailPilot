@@ -6,7 +6,7 @@ plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. The later
 authorized persistence/chunking slices add migrations 015–019, typed storage and
 bounded cached source projection during manual sync. A lazy CPU MiniLM provider
 is implemented and packaged; explicit resumable indexing/UI now connects it to
-SQLite through `index.local`. Shared exact vector retrieval and a semantic-search UI are now implemented; see [VECTOR_SEARCH.md](VECTOR_SEARCH.md). Historical plans are under [archive](archive/LEGACY_FEATURES.md).
+SQLite through `index.local`. Shared exact vector, keyword and hybrid retrieval and the Email search UI are implemented; see [HYBRID_SEARCH.md](HYBRID_SEARCH.md). Historical plans are under [archive](archive/LEGACY_FEATURES.md).
 
 [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) is the detailed technical
 supplement for the same scope: exact source reuse/disabled paths, logical shared
@@ -30,7 +30,7 @@ claim that all tests/builds passed. Preserve that work when implementing later.
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
 | AI | `ai.settings`, provider-scoped OS keys and one approved cached-email Summary through `SummarizeEmail`; OpenAI is the only installed functional adapter. | No evidence-question operation, retrieved context, tools, replies, new drafts or general chat. |
-| Search/storage | SQLite migrations 001–019, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; tests probe FTS5 availability. | Local vector indexing is active on explicit Start/Resume. Semantic search is implemented over complete compatible chunk generations; keyword search remains planned. Old vector schemas are inert. |
+| Search/storage | SQLite migrations 001–020, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; migration 020 indexes shared passages with external-content FTS5. | Local vector indexing is active on explicit Start/Resume. Semantic search uses complete compatible chunk generations. Keyword search works without vectors; hybrid fuses email ranks and prioritizes exact literals. Old vector schemas are inert. |
 | Historical recovery | GET-only Gmail draft matching and local status/reconcile/resolve/cancel for old journal actions. | No draft creation, resending, remote deletion or reactivation of historical previews. |
 
 Composition is in [main.go](../backend/cmd/mailpilot-core/main.go). Actual command
@@ -197,6 +197,7 @@ Current source-of-truth DDL is [the migrations directory](../backend/internal/st
 | 017 | Durable local index job, model fingerprint/dimension registry, per-message attempt/failure metadata and cache-removal publication revocation. |
 | 018 | Account-scoped category prototypes and explicit confirmed examples, derived-data invalidation and compatible coordinator recipe. |
 | 019 | Versioned semantic assessment evidence, account/email invalidation fences, explicit primary preferences and classifier identity in the shared coordinator. |
+| 020 | External-content FTS5 index over shared chunks, backfilled on upgrade and maintained by transactional triggers; no duplicate passage store. |
 
 The historical `email_embeddings`, `category_embeddings`, `email_passage_vectors`
 and `email_retrieval_indexes` have no active inference/retrieval consumers.
@@ -251,7 +252,7 @@ verification and synthetic measurements.
 Extend the implemented chunk/vector/state records only as needed for FTS mapping, assessment/override provenance. Category examples/prototypes are implemented in migration 018 through the same coordinator.
 Reuse compatible existing category assignments; preserve conflicting legacy data
 until explicit resolution rather than deleting extra assignments to force a new rule.
-Semantic classification consumes current prototypes through the same coordinator and existing assessment store. Keyword schemas remain planned.
+Semantic classification consumes current prototypes through the same coordinator and existing assessment store. Keyword retrieval uses migration 020 over the same chunks.
 
 `repository.EmailContentHash` already covers normalized mail evidence excluding IDs,
 labels and local categories. Current `classification.InputHash` covers rules' inputs
@@ -260,7 +261,7 @@ feature and category/example revision without rewriting historical evidence form
 
 | Event | Required derived-data behavior |
 | --- | --- |
-| New/changed source | In the source/checkpoint transaction invalidate affected active state, update FTS and queue/coalesce local indexing. |
+| New/changed source | In the source/checkpoint transaction invalidate active source/keyword/vector visibility and queue/coalesce local work. Bounded post-commit cache preparation replaces shared chunks/FTS without inference. |
 | Unchanged reimport | Reuse compatible derived state; do not re-embed. |
 | Label/metadata-only change | Refresh filters and consumed classifier features; retain unchanged body vectors when their actual input is unchanged. |
 | Category/example/correction edit | Invalidate affected prototypes/assessments and new-write previews, not unchanged mail chunks. |
@@ -281,24 +282,21 @@ Never infer remote deletion from incomplete Gmail listings.
 
 ### Semantic search with complementary keyword search
 
-The semantic-only slice is implemented by `retrieval.VectorSearch`, `Store.Vectors()`,
-`app.LocalSearch` and `search.local` / `vector_search`. It supports sender/date/assigned-category
-filters and complete compatible snapshots. [VECTOR_SEARCH.md](VECTOR_SEARCH.md) records
-exact behavior, evaluation and limits. The following keyword/hybrid, label filtering
-and empty-query browsing behavior remains planned.
+`retrieval.VectorSearch.Search` / `SearchChunks` retain exact cosine retrieval.
+`SearchMode` adds keyword-only and hybrid retrieval through `Store.Vectors()` and
+the same `app.LocalSearch` / `search.local` / `vector_search` boundary. Keyword
+search uses FTS5 BM25 over current shared chunks without requiring vectors. Hybrid
+uses equal-weight reciprocal rank fusion after email deduplication, with exact
+literal identifiers/phrases prioritized. All modes share account/sender/date/assigned
+category filters, source revision checks and bounded escaped excerpts. Gmail label
+filters and empty-query browsing remain planned.
 
-Validate account, bounded query, filters and pagination in Go. Embed nonempty queries
-locally, compare only current compatible chunks, return original email identities
-and relevant source passages. Add transactional SQLite full-text search for literal
-terms/identifiers and fallback. An FTS capability probe is not that implementation.
-
-Hybrid ranking may merge lexical/semantic ranks, initially evaluating reciprocal
-rank fusion; do not add raw BM25 and cosine scores. Group chunks by message,
-deduplicate overlaps/repeated quotes, keep stable tie-breaks and revision-bound
-excerpts/cursors. Apply account/sender/date/label/category filters correctly and
-separate assigned from suggested categories. Empty queries allow filtered browsing.
-Show mode, cache/index coverage and missing bodies. Top-K is not exhaustive evidence
-for aggregate claims. No generative API/key is needed for local retrieval.
+The UI shows actual/requested mode, fallback, keyword and semantic coverage,
+partial cached content, source navigation, ranks and typed similarity metadata.
+Manual sync prepares searchable text without inference. Only explicit semantic or
+hybrid submission can embed a query; polling and keyword-only submission never do.
+No generative API/key or external search service is used. See [HYBRID_SEARCH.md](HYBRID_SEARCH.md)
+for the exact lifecycle, strict contract, held-out quality and latency limits.
 
 ### Intelligent classification and local review
 

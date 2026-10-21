@@ -15,7 +15,14 @@ import (
 // BenchmarkVectorSearch50K uses 10,000 synthetic cached messages and 50,000
 // SQLite float32/384 vectors. Query inference is a fixed vector: this isolates
 // exact retrieval/storage cost. Native inference latency is measured separately.
-func BenchmarkVectorSearch50K(b *testing.B) {
+func BenchmarkVectorSearch50K(b *testing.B) { benchmarkSearch50K(b, "semantic") }
+
+func BenchmarkSearchModes50K(b *testing.B) {
+	for _, mode := range []string{"keyword", "semantic", "hybrid"} {
+		b.Run(mode, func(b *testing.B) { benchmarkSearch50K(b, mode) })
+	}
+}
+func benchmarkSearch50K(b *testing.B, mode string) {
 	ctx := context.Background()
 	s, err := Open(ctx, b.TempDir())
 	if err != nil {
@@ -98,8 +105,12 @@ func BenchmarkVectorSearch50K(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		start := time.Now()
-		r, e := search.Search(ctx, a, "synthetic benchmark query", 10, repository.SearchFilter{})
-		if e != nil || r.Scanned != 50000 || len(r.Emails) != 10 {
+		r, e := search.SearchMode(ctx, a, "synthetic benchmark query", 10, repository.SearchFilter{}, mode)
+		wantScanned := 50000
+		if mode == "hybrid" {
+			wantScanned = 100000
+		}
+		if e != nil || r.Scanned != wantScanned || len(r.Emails) != 10 {
 			b.Fatalf("invalid benchmark: chunks %d emails %d %v", r.Scanned, len(r.Emails), e)
 		}
 		samples = append(samples, float64(time.Since(start).Microseconds())/1000)

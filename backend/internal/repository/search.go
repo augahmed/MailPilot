@@ -19,6 +19,20 @@ type VectorSource struct {
 	Subject, SenderName, SenderAddress string
 	ReceivedAt                         int64
 	Vector                             []float32
+	Keyword                            bool
+	Partial                            bool
+}
+
+// KeywordQuery contains escaped FTS terms and literal identifiers built by Go.
+// No caller-supplied MATCH syntax or SQL crosses IPC.
+type KeywordQuery struct {
+	Match    string
+	Literals []string
+}
+type KeywordRepository interface {
+	ScanKeywords(context.Context, domain.AccountID, IndexProfile, SearchFilter, KeywordQuery, func(VectorSource, float64) error) error
+	CheckKeywordSources(context.Context, domain.AccountID, IndexProfile, SearchFilter, []VectorSource) error
+	KeywordCoverage(context.Context, domain.AccountID, IndexProfile) (int, error)
 }
 
 // VectorRepository streams a consistent SQLite snapshot. Callbacks must not call
