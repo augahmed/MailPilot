@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"mailpilot.local/core/internal/reply"
 	"mailpilot.local/core/internal/repository"
 )
 
@@ -45,7 +44,7 @@ func (s *ReplyService) HandleMaintenance(ctx context.Context, p ReplyRequest) Re
 		r := s.response
 		a, e := s.store.Latest(ctx, account)
 		if e == nil {
-			r = maintenanceAction(r, a)
+			r = actionReply(r, a)
 		} else if !errors.Is(e, repository.ErrNotFound) {
 			return fail(aiWorkflowCode(e))
 		}
@@ -70,12 +69,12 @@ func (s *ReplyService) HandleMaintenance(ctx context.Context, p ReplyRequest) Re
 			return fail(aiWorkflowCode(err))
 		}
 		a.State, a.Code = "resolved", "manually_resolved"
-		s.response = maintenanceAction(s.response, a)
+		s.response = actionReply(s.response, a)
 	} else {
 		if a.State != "in_flight" && a.State != "uncertain" && a.State != "conflict" {
 			return fail("stale_preview")
 		}
-		s.startLocked(account, session, "reconciling", func(job context.Context, r ReplyResponse) ReplyResponse {
+		s.startLocked(session, "reconciling", func(job context.Context, r ReplyResponse) ReplyResponse {
 			return s.reconcile(job, account, a, r)
 		})
 	}
@@ -83,8 +82,4 @@ func (s *ReplyService) HandleMaintenance(ctx context.Context, p ReplyRequest) Re
 		return fail("unauthorized")
 	}
 	return boundReply(s.response)
-}
-
-func maintenanceAction(r ReplyResponse, a reply.Action) ReplyResponse {
-	return actionReply(r, a)
 }

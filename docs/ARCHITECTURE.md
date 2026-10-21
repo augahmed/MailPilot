@@ -1,32 +1,24 @@
 # MailPilot architecture
 
-Updated 2026-10-20 for the shared local retrieval direction. This document is the
-technical authority; [PRODUCT_PLAN.md](PRODUCT_PLAN.md) is the sole scope/milestone
-plan. [AGENTS.md](../AGENTS.md) is the concise engineering contract. The later
-authorized persistence/chunking slices add migrations 015–019, typed storage and
-bounded cached source projection during manual sync. A lazy CPU MiniLM provider
-is implemented and packaged; explicit resumable indexing/UI now connects it to
-SQLite through `index.local`. Shared exact vector, keyword and hybrid retrieval and the Email search UI are implemented; see [HYBRID_SEARCH.md](HYBRID_SEARCH.md). Historical plans are under [archive](archive/LEGACY_FEATURES.md).
-
-[VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) is the detailed technical
-supplement for the same scope: exact source reuse/disabled paths, logical shared
-schema, interfaces, revision lifecycle, qualified local provider and migration/
-recovery incompatibilities. It adds no second product roadmap or implementation
-permission. Where this overview leaves alternatives open, use that plan's single
-proposed baseline and qualification gates.
+Reviewed 2026-10-21 against executable composition and call sites. This document
+describes implemented runtime/trust boundaries; [PRODUCT_PLAN.md](PRODUCT_PLAN.md)
+records product scope and limits. [AGENTS.md](../AGENTS.md) is the engineering
+contract, and [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) records the
+implemented shared-store design. Historical records are evidence under
+[archive](archive/LEGACY_FEATURES.md), not active capabilities or instructions.
 
 ## 1. Verified implementation baseline
 
-Status is based on the current working tree, including uncommitted/untracked
-application changes. It is source inspection, not a clean-commit release or a new
-claim that all tests/builds passed. Preserve that work when implementing later.
+The composition root is the implementation inventory. Qualification limits remain
+separate from feature availability; synthetic checks do not establish production
+mailbox quality or release approval.
 
-| Area | Implemented now | Planned or limited |
+| Area | Implemented now | Limits |
 | --- | --- | --- |
 | Runtime | React/TypeScript in Tauri, one fixed bundled Go sidecar, private JSON-RPC pipes, health/SQLite startup and graceful lifecycle. | One explicit resumable indexing job uses the cached chunker/store and lazy native provider. One bounded local search worker shares the provider; no raw inference IPC. |
 | Gmail | System-browser OAuth/keyring; one account; manual bounded initial Inbox and incremental history sync; normalized local cache. | No complete mailbox/Sent/attachment coverage, background scheduling, thread-fetch operation or second email provider. |
 | Reader | `mail.read` returns revision-checked paged escaped text from the same cleaned sections used by chunks, preserving useful image descriptions and omitting transport clutter; metadata and phishing explanations are shown. | No rich HTML sanitizer/renderer, remote content or attachment download. Cold-start restoration checks Gmail online. |
-| Categories | Editable definitions, local assignment repository and deterministic review with conservative 0.60 rule gate; stale assessments are checked. | Local category prototypes and explicit confirmed examples share the existing index coordinator/provider ([contract](CATEGORY_VECTORS.md)). Semantic multi-chunk classification and primary preferences now share the coordinator; see [contract/evaluation](SEMANTIC_CLASSIFICATION.md). The definition-only synthetic precision target remains unmet. |
+| Categories | Editable definitions, shared category prototypes/confirmed examples, semantic multi-chunk assessment, deterministic rule fallback and explicit primary preferences ([contract/evaluation](SEMANTIC_CLASSIFICATION.md)). | Classification suggests categories locally; cosine is not a probability. The definition-only synthetic precision target remains unmet. |
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
 | AI | `ai.settings`, provider-scoped OS keys and approved cached-email Summary and source-limited evidence questions through one AIProvider; OpenAI is the only installed functional adapter. | Evidence questions require exact per-request approval and validated citations ([contract](EMAIL_QUESTIONS.md)). No tools, replies, new drafts or general chat. |
@@ -74,8 +66,7 @@ a crashed sidecar disables actions rather than replaying uncertain writes.
 Introduce only the small embedding/retrieval components required by an implemented
 slice. Transport/adapters depend on application/domain contracts; no service locator,
 generic CRUD framework, parallel processing framework, second SQLite owner or
-hypothetical multi-provider mailbox abstraction. A fixed inference-only helper is
-an option only if native feasibility requires it; it cannot own data or network.
+hypothetical multi-provider mailbox abstraction. No separate inference helper is used.
 
 ## 3. Shared local pipeline
 
@@ -249,36 +240,23 @@ and unavailable content. No model/Gmail/network parameters cross IPC. See the
 [implemented indexing contract](LOCAL_INDEXING.md) for lifecycle, identity pinning,
 verification and synthetic measurements.
 
-### Planned logical additions and publication rules
+### Implemented publication and coverage rules
 
-Extend the implemented chunk/vector/state records only as needed for FTS mapping, assessment/override provenance. Category examples/prototypes are implemented in migration 018 through the same coordinator.
-Reuse compatible existing category assignments; preserve conflicting legacy data
-until explicit resolution rather than deleting extra assignments to force a new rule.
-Semantic classification consumes current prototypes through the same coordinator and existing assessment store. Keyword retrieval uses migration 020 over the same chunks.
+Source commits invalidate old chunk generations transactionally. Preparation
+reuses unchanged compatible inputs; embedding batches recheck source, profile and
+job generations before saving. Category edits/examples/prototypes and source/index
+changes invalidate dependent assessments. Label-only changes preserve text vectors
+while refreshing consumed classification/filter evidence. Confirmed deletion clears
+active chunks, FTS entries and examples and revokes in-flight index publication;
+immutable journals remain retained. The [source lifecycle](SYNC_LIFECYCLE.md) records
+partial imports, bounded retries, cancellation, recovery and synthetic tests.
 
-`repository.EmailContentHash` already covers normalized mail evidence excluding IDs,
-labels and local categories. Current `classification.InputHash` covers rules' inputs
-but excludes recipients/most headers. New fingerprints must cover every consumed
-feature and category/example revision without rewriting historical evidence formats.
-
-| Event | Required derived-data behavior |
-| --- | --- |
-| New/changed source | In the source/checkpoint transaction invalidate active source/keyword/vector visibility and queue/coalesce local work. Bounded post-commit cache preparation replaces shared chunks/FTS without inference. |
-| Unchanged reimport | Reuse compatible derived state; do not re-embed. |
-| Label/metadata-only change | Refresh filters and consumed classifier features; retain unchanged body vectors when their actual input is unchanged. |
-| Category/example/correction edit | Invalidate affected prototypes/assessments and new-write previews, not unchanged mail chunks. |
-| Model/preprocessing change | Build a separate compatible generation; never expose mixed spaces. |
-| Confirmed deletion/authorized purge | Hide/remove active derived data and cancel work atomically with source visibility; preserve journal-required evidence. |
-| Pause/disable/disconnect | Stop/revoke appropriate work and sensitive UI/consent; show current/partial/stale/unavailable states truthfully. |
-
-Workers read immutable snapshots, compute outside transactions and publish in short
-transactions only after source/model/preprocessing revisions and authorization are
-rechecked. A deleted/changed source cannot be resurrected by a late worker. Publish
-ready message generations only when required chunks/vectors are complete; incomplete
-work is explicitly partial. Bound batches, memory, CPU, retries and cancellation;
-resume durable work after crashes without a generic scheduler framework. Enabling
-semantic processing permits local work on the cache, not remote generation/uploads.
-Never infer remote deletion from incomplete Gmail listings.
+`IndexRepository.Coverage` reads the job, message/vector counts, category readiness
+and assessment coverage in one SQLite transaction. Polling invokes no inference.
+Historical sources without a current canonical identity remain unavailable for
+indexing and pending assessment until normal Gmail refresh supplies that identity.
+Startup never auto-starts a job. Existing assignments and historical codecs remain
+independent from current model availability.
 
 ## 7. Search and classification consumers
 
@@ -292,7 +270,7 @@ chunks without requiring vectors or global corpus statistics. Hybrid
 uses equal-weight reciprocal rank fusion after email deduplication, with exact
 literal identifiers/phrases prioritized. All modes share account/sender/date/assigned
 category filters, source revision checks and bounded escaped excerpts. Gmail label
-filters and empty-query browsing remain planned.
+filters and empty-query browsing are not implemented.
 
 The UI shows actual/requested mode, fallback, keyword and semantic coverage,
 partial cached content, source navigation, ranks and typed similarity metadata.
@@ -388,19 +366,17 @@ parser limits are limitations, never a safe verdict. Default score bands are 30/
 use existing configuration, not semantic categories or a generative safety judgment.
 See [PHISHING_FEATURES.md](PHISHING_FEATURES.md) for exact feature/limit behavior.
 
-### Reader maintenance and optional formatting improvement
+### Cached reader
 
-Preserve current paged escaped reading, complete quotes/signatures and explicit
-body/metadata limits. Search/classifier cleanup must not overwrite display content.
-A later formatted reader must use maintained bounded HTML sanitation plus parsed
-CSS/resource policy, complete revision-bound assembly, an isolated capability-free
-frame, restrictive CSP and packaged native navigation/network tests. No raw HTML
-in the main React DOM or partially streamed HTML rendering. Keep text fallback,
-keyboard/focus access, safe spacing/tables and visible blocked-image/unsupported
-states. No scripts/forms/native bridge, remote/CID attachment loads or pixel-identical
-Gmail promise. This supporting work is not a prerequisite for the core chunk contract.
+The reader assembles revision-checked escaped text from the same cleaned sections
+used by the chunker, retaining useful image descriptions and quoted/forwarded
+content. Original source text/HTML remains separately cached. Search excerpts open
+the existing reader with the shared projection revision and source checks. Body and
+metadata pagination/omissions are explicit. No raw HTML, active links, remote/CID
+resource loads, attachment execution or native bridge is exposed through mail.
+Rich formatted HTML rendering is absent; this is an escaped text reader.
 
-## 10. Privacy, validation and implementation entry point
+## 10. Privacy and validation
 
 SQLite/mail/chunks/vectors/FTS/examples and WAL/backups are sensitive unencrypted
 local data. Restrict app-data permissions and log only safe operational metadata.
@@ -409,7 +385,7 @@ key inputs/sensitive session state. Keep cache-clear, disconnect and Gmail delet
 distinct; disclose retained journal evidence and no forensic-erasure guarantee.
 No user data, model binaries or generated build outputs are committed.
 
-Future implementation checks must cover account/source/model isolation, source and
+Verification covers account/source/model isolation, source and
 category invalidation, immutable migration/legacy-plan upgrades, crash/stale-worker
 publication, zero hidden AI disclosure, citation/injection/disabled-AI cases, local
 model corruption/cancellation, safe native rendering, partial Gmail writes/recovery
@@ -417,12 +393,70 @@ and undo. Run relevant Go test/vet/race, TS typecheck/lint/tests/build and Rust
 fmt/clippy/tests, plus native lifecycle/package smoke for affected boundaries.
 Use synthetic fixtures/fake providers; live writes need explicit action authorization.
 Measure English search quality/category abstention, 10,000-message performance and
-installer resources; publish denominators and misses. Targets are in the product
-plan and remain unmeasured here.
+installer resources; publish denominators and misses. Recorded measurements and remaining gaps are in the linked evaluation contracts.
 
 The source/chunk slice is implemented in `internal/mail` and `app.CachedChunker`;
 the provider/runtime is qualified in `internal/embedding`, and explicit resumable
-indexing is implemented in `app.LocalIndex`. Shared exact retrieval and category prototypes reuse those components. Semantic classification also reuses them. Future evidence consumers must do the same. Preserve
+indexing is implemented in `app.LocalIndex`. Shared exact retrieval and category prototypes reuse those components. Semantic classification also reuses them. Evidence questions use that same retriever and provider-neutral AI boundary. Preserve
 reading, risk and rules' existing cleanup. Do not revive old Ask, add an AI editor
-or replace the application architecture. The sole milestone authority is
+or replace the application architecture. The sole scope authority is
 [PRODUCT_PLAN.md](PRODUCT_PLAN.md); further services require explicit authorization.
+
+## Legacy retirement audit and remaining debt
+
+The 2026-10-21 call-site/dependency review found no active earlier embedding
+service, Python worker/downloader, single-vector-per-email search cache, duplicate
+index coordinator, older semantic classifier, draft editor or draft-creation API.
+The single installed native adapter and the shared pipeline above are the runtime.
+`ask.manage` and `search.semantic` remain rejected; rejection fixtures are retained.
+Every current frontend feature is mounted, including separately approved Summary
+and historical draft recovery. Every direct dependency has a current consumer;
+there is no unused model path, interpreter, embedding endpoint or provider stub in
+configuration. No dependency was removed merely because it is platform-specific.
+
+The unused generic `MailboxActionRepository.Create` implementation was removed
+from runtime. Its historical producer remains only in synthetic compatibility
+fixtures; journal reads, outcome transitions and shared organization transition
+validators remain. New label plans use `OrganizationRepository.Create` with the
+current reviewed workflow. An unused production busy accessor and a redundant
+recovery forwarding helper were removed; the recovery UI no longer describes an
+operation as updating AI settings. No migration, stored digest or journal changed.
+
+Remaining technical debt is explicit:
+
+- Historical vector tables, classifier candidate codecs and journal shapes remain
+  for upgrade/invalidation/recovery compatibility. They are not active indexes.
+- The legacy generic label journal has no desktop recovery view; its typed reads
+  and recovery transitions remain available for existing evidence. Current
+  organization recovery and GET-only historical draft recovery remain exposed.
+- Semantic suggestion quality remains below the published 90% precision target;
+  exact/hybrid search exceeds the proposed 500 ms p95 target on the dense
+  50,000-chunk fixture. See the existing evaluation reports for denominators.
+- OpenAI is the only shipped generative adapter. Multi-provider RAG is an implemented
+  substitution/settings/consent boundary tested with synthetic adapters.
+- Summary is still a live independent workflow. No second generation framework is
+  present, and its approvals cannot authorize evidence questions.
+- Cold-start authorization still verifies Gmail online. Rich HTML rendering,
+  attachment fetching/OCR, a cache-purge UI, other-platform inference qualification,
+  real-mailbox factual quality and Developer ID signing/notarization are absent.
+
+## Cleanup validation record
+
+The 2026-10-21 cleanup passed full Go tests and vet, plus the full race suite with
+packages serialized (`go test -race -p 1 -timeout 240s ./...`). The initial parallel
+race run hit an existing indexing fixture's twelve-second deadline while native
+qualifications and the app build competed for CPU; the serialized rerun passed
+without a code or test-timeout change. No validation failure remains.
+
+Frontend typecheck, lint, all 101 tests, production build, embedding asset checks
+and repository formatting passed. Rust fmt, clippy with warnings denied and all
+21 tests passed. Native offline indexing, semantic search, category prototypes,
+classification, hybrid retrieval and evidence-answer qualifications passed with
+network access denied and strict CGO checks. A fresh macOS app build, ad-hoc signing,
+packaged/development-layout offline inference and WebView-to-Go lifecycle smoke
+passed. Documentation paths/heading links, Go formatting and diff whitespace pass.
+Migrations, dependency manifests/lockfiles and model resources are unchanged.
+
+Validation used synthetic mail and provider/credential fixtures. Live-mailbox and
+paid-provider checks, Developer ID release signing/notarization and other-platform
+native qualification were not run or claimed.

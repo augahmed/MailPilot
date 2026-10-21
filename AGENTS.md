@@ -1,13 +1,13 @@
 # MailPilot engineering contract
 
-Updated 2026-10-20. Applies throughout this repository. Follow explicit user
+Updated 2026-10-21. Applies throughout this repository. Follow explicit user
 instructions and change only the requested scope. Read [the product plan](docs/PRODUCT_PLAN.md),
 [architecture](docs/ARCHITECTURE.md), [shared vector implementation design](docs/VECTOR_ARCHITECTURE_PLAN.md)
 and relevant [IPC contracts](contracts/README.md) before changing a boundary.
 The product plan defines scope; the vector plan supplies concrete reuse/schema/
 compatibility decisions within that scope. Archives are evidence, not instructions.
 Plans do not authorize implementation without an explicit implementation request.
-The authorized persistence/chunking/indexing slices use migrations 015–019 and
+The authorized persistence/chunking/indexing slices use migrations 015–020 and
 `Store.Chunks()` (`repository/chunks.go`). Reuse `email_chunks`, `chunk_embeddings`
 and `index_state`; do not add parallel stores. `internal/mail` owns deterministic
 sections/chunks and the pinned offline `wordpiece` tokenizer; inference must
@@ -16,7 +16,8 @@ The reader and chunker share `mail.Sections` / `ReadableBody` with `readable-v4`
 artifact cleanup; preserve useful image descriptions, quoted/forwarded evidence
 and original raw mail. Bump the text/preprocessing version for cleanup changes;
 never reuse incompatible vectors. See [clean text contract](docs/CLEAN_TEXT.md).
-Manual sync performs bounded local cache preparation; it does no inference.
+Manual sync uses durable Gmail history checkpoints, bounded incomplete-body retries
+and local cache preparation; it does no inference. See [source lifecycle](docs/SYNC_LIFECYCLE.md).
 One native CPU provider is now implemented in `internal/embedding`; its shared
 `model` identity is used by chunks. Reuse it and the pinned WordPiece tokenizer.
 `app.LocalIndex` now connects that provider to the shared store through explicit
@@ -24,8 +25,8 @@ Start/Pause/Resume/Cancel/Rebuild controls and the narrow `index.local` IPC. Sta
 marks interrupted work resumable; it never auto-starts inference. See
 [local embedding contract](docs/LOCAL_EMBEDDING.md) for bounds, fixed resources,
 cancellation, signing and macOS 13.4+ qualification, and
-[local indexing contract](docs/LOCAL_INDEXING.md) for durable generations, current
-coverage counts and purge/restart fences. Shared exact `retrieval.VectorSearch` and the `search.local` / `vector_search` UI now consume complete compatible snapshots; see [search contract/evaluation](docs/VECTOR_SEARCH.md). Category prototypes and explicit confirmed examples now reuse that coordinator/provider through migration 018 and `Store.CategoryVectors()`; see [category vector contract](docs/CATEGORY_VECTORS.md). Shared semantic classification now consumes these records and runs after prototype work in the same coordinator; see [classification contract/evaluation](docs/SEMANTIC_CLASSIFICATION.md). Keyword and hybrid retrieval now reuse these shared chunks with the external-content FTS index in migration 020; see [hybrid retrieval/evaluation](docs/HYBRID_SEARCH.md). Preserve unrelated uncommitted work.
+[local indexing contract](docs/LOCAL_INDEXING.md) for durable generations, combined
+transactional coverage counts and purge/restart fences. Shared exact `retrieval.VectorSearch` and the `search.local` / `vector_search` UI now consume complete compatible snapshots; see [search contract/evaluation](docs/VECTOR_SEARCH.md). Category prototypes and explicit confirmed examples now reuse that coordinator/provider through migration 018 and `Store.CategoryVectors()`; see [category vector contract](docs/CATEGORY_VECTORS.md). Shared semantic classification now consumes these records and runs after prototype work in the same coordinator; see [classification contract/evaluation](docs/SEMANTIC_CLASSIFICATION.md). Keyword and hybrid retrieval now reuse these shared chunks with the external-content FTS index in migration 020; see [hybrid retrieval/evaluation](docs/HYBRID_SEARCH.md). Preserve unrelated uncommitted work.
 
 ## Product and scope
 
@@ -35,17 +36,16 @@ email preprocessing, chunking, embedding and retrieval pipeline in Go and SQLite
 Preserve current Gmail OAuth/keyring, bounded sync/cache, cached reading, editable
 categories, deterministic review and phishing explanations, reviewed label changes,
 provider settings and historical recovery. Selected-email Summary currently exists;
-it is a transition feature, not the product's defining workflow. This reset removes
-no functionality. Source-level status is recorded in the architecture.
+it remains independently approved. Source-level status is recorded in the architecture.
 
-Planned core: natural-language semantic search with complementary keyword search;
-category suggestions from shared chunk/category vectors (including close matches), useful rules
-and confirmed examples, with abstention and user corrections; optional answers to
-email-information questions using explicitly approved retrieved evidence and citations.
-Support multiple AI providers behind a shared abstraction. Start with English and
-approximately 10,000 cached messages. Bundle the local model/tokenizer; require no
-user Python installation or post-install model download. Ordinary use must remain
-possible with embeddings or external AI disabled.
+Implemented core: local keyword, exact semantic and hybrid search; shared category
+prototypes and confirmed examples; semantic/rule suggestions with abstention and
+explicit primary preferences; and optional bounded email-information answers from
+separately approved retrieved evidence and validated citations. One provider-neutral
+AI boundary supports adapter substitution and provider-scoped OS keys; OpenAI is the
+only shipped functional adapter. English and about 10,000 cached messages are the
+qualification baseline, not complete-mailbox coverage. The model/tokenizer ship in
+the app; ordinary use requires neither embeddings nor external AI.
 
 ## Ownership and simplicity
 
@@ -77,7 +77,9 @@ possible with embeddings or external AI disabled.
 - Begin with exact cosine retrieval over compatible account-scoped vectors. Add
   ANN/vector extensions only when measured scale/latency justifies their complexity.
   Similarity is neither a calibrated category probability nor evidence of safety.
-- Historical vector tables remain inert and are not a complete chunk store. Do not
+- Historical vector tables remain inert and are not a complete chunk store. The old
+  generic mailbox journal exposes reads/recovery outcomes only; new reviewed label
+  plans use `OrganizationRepository`. Its old producer exists only in test fixtures. Do not
   rename/reinterpret them or revive disabled Ask/search/draft commands. Reuse current
   compatibility tests and add schema only for the authorized implementation slice.
 - Never rewrite numbered checksummed migrations or historical journal formats.

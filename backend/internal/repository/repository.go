@@ -77,9 +77,8 @@ type ActionItemUpdate struct {
 	LastErrorCode string
 }
 type MailboxActionRepository interface {
-	// Create stores an immutable preview and snapshots. IDs are allocated if absent;
-	// an existing action ID is a conflict, never an overwrite or a remote retry.
-	Create(context.Context, domain.MailboxAction) (domain.ActionID, error)
+	// Historical journal reads and recovery outcomes only. New reviewed label
+	// plans are created exclusively through OrganizationRepository.
 	Get(context.Context, domain.AccountID, domain.ActionID) (domain.MailboxAction, error)
 	ListRecoverable(context.Context, domain.AccountID, Page) ([]domain.MailboxAction, error)
 	// Revision checks prevent competing workers from overwriting outcomes.

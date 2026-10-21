@@ -128,8 +128,8 @@ Gmail `FindDraft` remain. Recovery has no AI/key/settings dependency and cannot
 resume previews or create/resend/delete drafts. Journal bodies/source references
 remain immutable evidence in SQLite. See [draft recovery](REPLY_DRAFTING.md).
 
-Wire endpoints are `ai.settings` and `email.summarize`, exposed by narrow native
-commands `ai_settings` and `email_summarize`. `reply.manage` only handles historical
+Wire endpoints are `ai.settings`, `email.summarize` and `email.answer`, exposed by
+narrow native commands `ai_settings`, `email_summarize` and `email_answer`. `reply.manage` only handles historical
 status/reconcile/resolve/cancel. [Contracts and synthetic examples](../contracts/README.md)
 define the operation-specific fields; unknown prompt/thread/tool fields reject.
 

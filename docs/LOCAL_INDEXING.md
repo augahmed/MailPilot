@@ -2,7 +2,7 @@
 
 Implemented 2026-10-19. One explicitly started local coordinator connects the
 existing cached email/chunk repository to the bundled MiniLM CPU provider and
-writes vectors to the same SQLite database. [Shared exact search](VECTOR_SEARCH.md) now consumes completed compatible snapshots through the same provider/store. Enabled category prototypes now share this coordinator/provider ([contract](CATEGORY_VECTORS.md)); separate category counts report current readiness. Semantic classification now reads these same vectors and stores assessments after prototypes ([contract/evaluation](SEMANTIC_CLASSIFICATION.md)); evidence QA remains unimplemented. No Gmail or external AI
+writes vectors to the same SQLite database. [Shared exact search](VECTOR_SEARCH.md) now consumes completed compatible snapshots through the same provider/store. Enabled category prototypes now share this coordinator/provider ([contract](CATEGORY_VECTORS.md)); separate category counts report current readiness. Semantic classification now reads these same vectors and stores assessments after prototypes ([contract/evaluation](SEMANTIC_CLASSIFICATION.md)); bounded evidence questions now use the shared retriever ([contract](EMAIL_QUESTIONS.md)). No Gmail or external AI
 adapter is called by indexing.
 
 ## User controls and coverage
@@ -150,4 +150,5 @@ including the Go test harness, native allocations and loading buffers, not a
 steady-state allocation or hard memory limit. Database plus WAL size includes the
 original synthetic mail and journal overhead. No user's database or mailbox is used.
 
-Current status also reports `assessedMessages` and `pendingAssessments`. The same explicit Start/Resume/Pause/Cancel lifecycle controls dependent semantic assessment work. No new inference occurs for classification.
+Current status also reports `assessedMessages` and `pendingAssessments`. The job,
+message, category and assessment counts are read in one SQLite transaction. The same explicit Start/Resume/Pause/Cancel lifecycle controls dependent semantic assessment work. No new inference occurs for classification.

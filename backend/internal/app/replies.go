@@ -48,8 +48,7 @@ func (a *App) Reply(ctx context.Context, p ReplyRequest) ReplyResponse {
 		r.Code = "unauthorized"
 		return r
 	}
-	r := a.Replies.HandleMaintenance(ctx, p)
-	return r
+	return a.Replies.HandleMaintenance(ctx, p)
 }
 func actionReply(base ReplyResponse, a reply.Action) ReplyResponse {
 	base.ActionID = a.Plan.ID
@@ -71,7 +70,7 @@ func actionReply(base ReplyResponse, a reply.Action) ReplyResponse {
 
 // Background work is joined on shutdown. Mailbox outcomes are persisted even
 // when the account session disconnects; sensitive UI output is suppressed.
-func (s *ReplyService) startLocked(account domain.AccountID, session context.Context, state string, work func(context.Context, ReplyResponse) ReplyResponse) {
+func (s *ReplyService) startLocked(session context.Context, state string, work func(context.Context, ReplyResponse) ReplyResponse) {
 	job, cancel := context.WithTimeout(s.root, 2*time.Minute)
 	stop := context.AfterFunc(session, cancel)
 	s.cancel = cancel

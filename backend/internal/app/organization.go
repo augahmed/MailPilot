@@ -58,7 +58,6 @@ func (s *Organization) Close() {
 	s.mu.Unlock()
 	s.wg.Wait()
 }
-func (s *Organization) Busy() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.busy }
 func (a *App) Organize(ctx context.Context, p OrganizationRequest) OrganizationResponse {
 	if a.Organization == nil {
 		r := emptyOrganization()

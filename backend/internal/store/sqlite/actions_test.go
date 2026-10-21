@@ -2,8 +2,12 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"errors"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -17,7 +21,7 @@ func actionPlan(account domain.AccountID, id domain.EmailID, remote domain.Provi
 }
 func createAction(t *testing.T, s *Store, plan domain.MailboxAction) domain.ActionID {
 	t.Helper()
-	id, err := s.MailboxActions().Create(context.Background(), plan)
+	id, err := seedLegacyAction(context.Background(), s, plan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +56,7 @@ func TestActionJournalSurvivesRestartAndSupportsUndo(t *testing.T) {
 		t.Fatal("repository mutated caller snapshot")
 	}
 	plan.ID = actionID
-	if _, err := s.MailboxActions().Create(ctx, plan); !errors.Is(err, repository.ErrConflict) {
+	if _, err := seedLegacyAction(ctx, s, plan); !errors.Is(err, repository.ErrConflict) {
 		t.Fatal("duplicate plan overwrote history", err)
 	}
 	if err := s.MailboxActions().Transition(ctx, a, actionID, 0, domain.ActionApplying); err != nil {
@@ -122,7 +126,7 @@ func TestActionCreationRollsBackAndEnforcesAccountOwnership(t *testing.T) {
 	otherID := saveEmail(t, s, other)
 	plan := actionPlan(a, id, first.ProviderID)
 	plan.Items = append(plan.Items, actionPlan(b, otherID, other.ProviderID).Items[0])
-	if _, err := s.MailboxActions().Create(ctx, plan); !errors.Is(err, repository.ErrNotFound) {
+	if _, err := seedLegacyAction(ctx, s, plan); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatal("cross-account action accepted", err)
 	}
 	if count(t, s, "mailbox_actions") != 0 || count(t, s, "mailbox_action_items") != 0 {
@@ -130,12 +134,12 @@ func TestActionCreationRollsBackAndEnforcesAccountOwnership(t *testing.T) {
 	}
 	plan = actionPlan(a, id, first.ProviderID)
 	plan.Items[0].ProviderMessageID = "wrong"
-	if _, err := s.MailboxActions().Create(ctx, plan); !errors.Is(err, repository.ErrNotFound) {
+	if _, err := seedLegacyAction(ctx, s, plan); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatal("wrong remote identity accepted", err)
 	}
 	plan = actionPlan(a, id, first.ProviderID)
 	plan.Items[0].RequestedDelta.Remove = []domain.ProviderLabelID{"INBOX"}
-	if _, err := s.MailboxActions().Create(ctx, plan); !errors.Is(err, repository.ErrNotFound) {
+	if _, err := seedLegacyAction(ctx, s, plan); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatal("system-label mutation allowed", err)
 	}
 	actionID := createAction(t, s, actionPlan(a, id, first.ProviderID))
@@ -151,7 +155,7 @@ func TestActionCreationRollsBackAndEnforcesAccountOwnership(t *testing.T) {
 	undo := actionPlan(b, otherID, other.ProviderID)
 	undo.Kind = domain.ActionUndo
 	undo.ReversesActionID = &actionID
-	if _, err := s.MailboxActions().Create(ctx, undo); !errors.Is(err, repository.ErrNotFound) {
+	if _, err := seedLegacyAction(ctx, s, undo); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatal("cross-account undo accepted", err)
 	}
 }
@@ -298,7 +302,7 @@ func TestActionValidationRejectsContradictoryPlans(t *testing.T) {
 	} {
 		plan := actionPlan(a, id, e.ProviderID)
 		change(&plan)
-		if _, err := s.MailboxActions().Create(ctx, plan); !errors.Is(err, repository.ErrInvalid) {
+		if _, err := seedLegacyAction(ctx, s, plan); !errors.Is(err, repository.ErrInvalid) {
 			t.Fatal("invalid plan accepted", err)
 		}
 	}
@@ -314,10 +318,131 @@ func TestUnencodableActionCannotCreateDigest(t *testing.T) {
 	id := saveEmail(t, s, e)
 	plan := actionPlan(a, id, e.ProviderID)
 	plan.ExpiresAt = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
-	if _, err := s.MailboxActions().Create(context.Background(), plan); !errors.Is(err, repository.ErrInvalid) {
+	if _, err := seedLegacyAction(context.Background(), s, plan); !errors.Is(err, repository.ErrInvalid) {
 		t.Fatal("unencodable plan accepted")
 	}
 	if count(t, s, "mailbox_actions") != 0 {
 		t.Fatal("invalid plan persisted")
+	}
+}
+
+// seedLegacyAction reproduces the old producer only for synthetic compatibility
+// fixtures. No runtime API can create this obsolete journal plan shape.
+func seedLegacyAction(ctx context.Context, store *Store, a domain.MailboxAction) (domain.ActionID, error) {
+	now := nowMillis()
+	if a.AccountID == "" || len(a.Items) == 0 || len(a.Items) > 100 || a.ExpiresAt.UnixMilli() <= now {
+		return "", repository.ErrInvalid
+	}
+	if a.Status != "" && a.Status != domain.ActionPreview {
+		return "", repository.ErrInvalid
+	}
+	if (a.Kind != domain.ActionLabelDelta && a.Kind != domain.ActionUndo) || (a.Kind == domain.ActionUndo) != (a.ReversesActionID != nil) {
+		return "", repository.ErrInvalid
+	}
+	if a.ID == "" {
+		a.ID = domain.ActionID(newID())
+	}
+	// Copy before normalization: repositories never mutate caller-owned slices.
+	a.Items = append([]domain.MailboxActionItem{}, a.Items...)
+	seen := map[domain.EmailID]bool{}
+	for i := range a.Items {
+		item := &a.Items[i]
+		if item.EmailID == "" || item.ProviderMessageID == "" || seen[item.EmailID] || item.ActualDelta != nil || item.AfterLabels != nil || item.AttemptCount != 0 || item.LastErrorCode != "" || (item.State != "" && item.State != domain.ItemPending) {
+			return "", repository.ErrInvalid
+		}
+		seen[item.EmailID] = true
+		var err error
+		item.RequestedDelta, err = normalizeDelta(item.RequestedDelta)
+		if err != nil {
+			return "", err
+		}
+		if len(item.RequestedDelta.Add)+len(item.RequestedDelta.Remove) == 0 {
+			return "", repository.ErrInvalid
+		}
+		item.BeforeLabels, err = labelSet(item.BeforeLabels)
+		if err != nil {
+			return "", err
+		}
+		item.State = domain.ItemPending
+		item.UpdatedAt = instant(now)
+	}
+	slices.SortFunc(a.Items, func(x, y domain.MailboxActionItem) int {
+		if x.EmailID < y.EmailID {
+			return -1
+		}
+		if x.EmailID > y.EmailID {
+			return 1
+		}
+		return 0
+	})
+	a.Status = domain.ActionPreview
+	a.CreatedAt = instant(now)
+	a.ExpiresAt = instant(a.ExpiresAt.UnixMilli())
+	a.ConfirmedAt = nil
+	a.CompletedAt = nil
+	a.Revision = 0
+	a.PlanDigest = ""
+	plan, err := encode(a)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(plan))
+	a.PlanDigest = hex.EncodeToString(sum[:])
+	err = store.transaction(ctx, func(tx *sql.Tx) error {
+		if a.ReversesActionID != nil {
+			if *a.ReversesActionID == a.ID {
+				return repository.ErrInvalid
+			}
+			if err := exists(ctx, tx, `SELECT 1 FROM mailbox_actions WHERE account_id=? AND id=? AND status IN ('applied','partial','cancelled')`, a.AccountID, *a.ReversesActionID); err != nil {
+				return err
+			}
+		}
+		var reverses any
+		if a.ReversesActionID != nil {
+			reverses = string(*a.ReversesActionID)
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO mailbox_actions(id,account_id,kind,reverses_action_id,status,plan_digest,revision,created_at,expires_at) VALUES(?,?,?,?,?,?,0,?,?)`, a.ID, a.AccountID, a.Kind, reverses, a.Status, a.PlanDigest, now, a.ExpiresAt.UnixMilli())
+		if err != nil {
+			return err
+		}
+		for _, item := range a.Items {
+			if err := exists(ctx, tx, "SELECT 1 FROM emails WHERE remote_deleted=0 AND account_id=? AND id=? AND provider_message_id=?", a.AccountID, item.EmailID, item.ProviderMessageID); err != nil {
+				return err
+			}
+			for _, ids := range [][]domain.ProviderLabelID{item.RequestedDelta.Add, item.RequestedDelta.Remove} {
+				for _, id := range ids {
+					if err := exists(ctx, tx, "SELECT 1 FROM labels WHERE account_id=? AND provider_label_id=? AND kind='user'", a.AccountID, id); err != nil {
+						return err
+					}
+				}
+			}
+			requested, err := encode(item.RequestedDelta)
+			if err != nil {
+				return err
+			}
+			before, err := encode(item.BeforeLabels)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO mailbox_action_items(action_id,account_id,email_id,provider_message_id,requested_delta_json,before_labels_json,state,updated_at) VALUES(?,?,?,?,?,?,?,?)`, a.ID, a.AccountID, item.EmailID, item.ProviderMessageID, requested, before, domain.ItemPending, now); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return a.ID, nil
+}
+
+func TestLegacyJournalCannotCreateNewRuntimePlans(t *testing.T) {
+	legacy := reflect.TypeFor[repository.MailboxActionRepository]()
+	if _, ok := legacy.MethodByName("Create"); ok {
+		t.Fatal("obsolete generic plan producer returned to the runtime contract")
+	}
+	current := reflect.TypeFor[repository.OrganizationRepository]()
+	if _, ok := current.MethodByName("Create"); !ok {
+		t.Fatal("reviewed organization plan creation was removed")
 	}
 }

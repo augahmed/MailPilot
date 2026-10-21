@@ -163,7 +163,7 @@ export function AIMaintenance() {
             <p role="status">
               {view.state === "reconciling"
                 ? "Checking the historical Gmail draft…"
-                : "Updating settings…"}
+                : "Updating historical action…"}
             </p>
           )}
           {view.jobId && busy && (

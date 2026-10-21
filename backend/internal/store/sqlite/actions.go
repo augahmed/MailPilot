@@ -2,9 +2,7 @@ package sqlite
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"slices"
 
@@ -45,114 +43,6 @@ func encode(value any) (string, error) {
 		return "", repository.ErrInvalid
 	}
 	return string(data), nil
-}
-
-func (r *actionRepository) Create(ctx context.Context, a domain.MailboxAction) (domain.ActionID, error) {
-	now := nowMillis()
-	if a.AccountID == "" || len(a.Items) == 0 || len(a.Items) > 100 || a.ExpiresAt.UnixMilli() <= now {
-		return "", repository.ErrInvalid
-	}
-	if a.Status != "" && a.Status != domain.ActionPreview {
-		return "", repository.ErrInvalid
-	}
-	if (a.Kind != domain.ActionLabelDelta && a.Kind != domain.ActionUndo) || (a.Kind == domain.ActionUndo) != (a.ReversesActionID != nil) {
-		return "", repository.ErrInvalid
-	}
-	if a.ID == "" {
-		a.ID = domain.ActionID(newID())
-	}
-	// Copy before normalization: repositories never mutate caller-owned slices.
-	a.Items = append([]domain.MailboxActionItem{}, a.Items...)
-	seen := map[domain.EmailID]bool{}
-	for i := range a.Items {
-		item := &a.Items[i]
-		if item.EmailID == "" || item.ProviderMessageID == "" || seen[item.EmailID] || item.ActualDelta != nil || item.AfterLabels != nil || item.AttemptCount != 0 || item.LastErrorCode != "" || (item.State != "" && item.State != domain.ItemPending) {
-			return "", repository.ErrInvalid
-		}
-		seen[item.EmailID] = true
-		var err error
-		item.RequestedDelta, err = normalizeDelta(item.RequestedDelta)
-		if err != nil {
-			return "", err
-		}
-		if len(item.RequestedDelta.Add)+len(item.RequestedDelta.Remove) == 0 {
-			return "", repository.ErrInvalid
-		}
-		item.BeforeLabels, err = labelSet(item.BeforeLabels)
-		if err != nil {
-			return "", err
-		}
-		item.State = domain.ItemPending
-		item.UpdatedAt = instant(now)
-	}
-	slices.SortFunc(a.Items, func(x, y domain.MailboxActionItem) int {
-		if x.EmailID < y.EmailID {
-			return -1
-		}
-		if x.EmailID > y.EmailID {
-			return 1
-		}
-		return 0
-	})
-	a.Status = domain.ActionPreview
-	a.CreatedAt = instant(now)
-	a.ExpiresAt = instant(a.ExpiresAt.UnixMilli())
-	a.ConfirmedAt = nil
-	a.CompletedAt = nil
-	a.Revision = 0
-	a.PlanDigest = ""
-	plan, err := encode(a)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256([]byte(plan))
-	a.PlanDigest = hex.EncodeToString(sum[:])
-	err = r.store.transaction(ctx, func(tx *sql.Tx) error {
-		if a.ReversesActionID != nil {
-			if *a.ReversesActionID == a.ID {
-				return repository.ErrInvalid
-			}
-			if err := exists(ctx, tx, `SELECT 1 FROM mailbox_actions WHERE account_id=? AND id=? AND status IN ('applied','partial','cancelled')`, a.AccountID, *a.ReversesActionID); err != nil {
-				return err
-			}
-		}
-		var reverses any
-		if a.ReversesActionID != nil {
-			reverses = string(*a.ReversesActionID)
-		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO mailbox_actions(id,account_id,kind,reverses_action_id,status,plan_digest,revision,created_at,expires_at) VALUES(?,?,?,?,?,?,0,?,?)`, a.ID, a.AccountID, a.Kind, reverses, a.Status, a.PlanDigest, now, a.ExpiresAt.UnixMilli())
-		if err != nil {
-			return err
-		}
-		for _, item := range a.Items {
-			if err := exists(ctx, tx, "SELECT 1 FROM emails WHERE remote_deleted=0 AND account_id=? AND id=? AND provider_message_id=?", a.AccountID, item.EmailID, item.ProviderMessageID); err != nil {
-				return err
-			}
-			for _, ids := range [][]domain.ProviderLabelID{item.RequestedDelta.Add, item.RequestedDelta.Remove} {
-				for _, id := range ids {
-					if err := exists(ctx, tx, "SELECT 1 FROM labels WHERE account_id=? AND provider_label_id=? AND kind='user'", a.AccountID, id); err != nil {
-						return err
-					}
-				}
-			}
-			requested, err := encode(item.RequestedDelta)
-			if err != nil {
-				return err
-			}
-			before, err := encode(item.BeforeLabels)
-			if err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO mailbox_action_items(action_id,account_id,email_id,provider_message_id,requested_delta_json,before_labels_json,state,updated_at) VALUES(?,?,?,?,?,?,?,?)`, a.ID, a.AccountID, item.EmailID, item.ProviderMessageID, requested, before, domain.ItemPending, now); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	return a.ID, nil
 }
 
 func readAction(ctx context.Context, tx *sql.Tx, account domain.AccountID, id domain.ActionID) (domain.MailboxAction, error) {

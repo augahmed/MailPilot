@@ -323,10 +323,10 @@ func TestOrganizationWaitingForSyncIsCancellable(t *testing.T) {
 	}
 	s.Handle(context.Background(), OrganizationRequest{Operation: "cancel", AccountID: "a"})
 	deadline := time.Now().Add(time.Second)
-	for s.Busy() && time.Now().Before(deadline) {
+	for organizationBusy(s) && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	if s.Busy() {
+	if organizationBusy(s) {
 		<-gate
 		t.Fatal("cancel waited for sync to finish")
 	}
@@ -382,4 +382,10 @@ func TestOrganizationListReportsAssessmentReadFailure(t *testing.T) {
 	if r.Code != "operation_failed" || len(r.Rows) != 0 {
 		t.Fatal("storage failure silently appeared as unclassified mail")
 	}
+}
+
+func organizationBusy(s *Organization) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.busy
 }

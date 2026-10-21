@@ -1,7 +1,7 @@
 # MailPilot
 
 Local-first intelligent Gmail management built with Go, React + TypeScript,
-Tauri 2 and SQLite. The intended core is one shared local preprocessing, chunking,
+Tauri 2 and SQLite. The core uses one shared local preprocessing, chunking,
 embedding and vector-retrieval pipeline supporting semantic search, category
 suggestions and optional answers grounded in approved email evidence.
 
@@ -24,8 +24,8 @@ AI replies/composition, new Gmail drafts, sending and Chrome integration are out
 the immediate scope. Existing Summary remains until a later tested transition.
 
 Read [AGENTS.md](AGENTS.md) for engineering rules, the single
-[product plan](docs/PRODUCT_PLAN.md) for scope/milestones and
-[architecture](docs/ARCHITECTURE.md) for implemented versus intended boundaries.
+[product plan](docs/PRODUCT_PLAN.md) for implemented scope and limits and
+[architecture](docs/ARCHITECTURE.md) for implemented runtime boundaries.
 [Legacy records](docs/archive/LEGACY_FEATURES.md) preserve migration/recovery history.
 
 This bootstrap opens a native desktop window and checks the real Go backend and SQLite database. A healthy startup displays:
@@ -195,7 +195,7 @@ AGENTS.md                      Engineering rules
 
 Go owns business behavior and persistence, including reviewed Gmail label plans and undo in `internal/app`. Rust only starts the fixed packaged binary, validates a bounded protocol, and handles native lifecycle; it uses `std::process` rather than installing a shell plugin. The frontend cannot run shell commands, access arbitrary files/SQL, select executables, or invoke arbitrary Go methods. A versioned handshake precedes database initialization; frontend capabilities allow only the commands listed in [the IPC contracts](contracts/README.md). The host alone opens a validated Google authorization URL in the system browser.
 
-The architecture's dependency recommendations are adopted only as needed: SQLite itself uses pure-Go modernc (Apple Silicon inference additionally needs CGO/Xcode command-line tools), React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. Local inference uses the single pinned ONNX binding. Gmail and OpenAI adapters use bounded HTTP transport from Go's standard library. Current and planned package responsibilities are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
+The architecture's dependency recommendations are adopted only as needed: SQLite itself uses pure-Go modernc (Apple Silicon inference additionally needs CGO/Xcode command-line tools), React/TypeScript/Vite build the UI, Zod validates runtime IPC, and Tauri/Serde provide native integration. The single-instance plugin prevents duplicate desktop data owners. Vitest/Testing Library, ESLint, Prettier and native Go/Rust tests cover this phase. Go OAuth2 and go-keyring supply PKCE/token exchange and secure refresh-token storage. Local inference uses the single pinned ONNX binding. Gmail and OpenAI adapters use bounded HTTP transport from Go's standard library. Current package responsibilities are recorded in [the architecture](docs/ARCHITECTURE.md); read [AGENTS.md](AGENTS.md) before future implementation.
 
 ## Inbox synchronization
 
@@ -205,7 +205,9 @@ Connect Gmail, then select **Sync inbox**. The screen reports messages discovere
 MAILPILOT_SYNC_LIMIT=1000 npm run dev
 ```
 
-The default is 500; accepted values are 1–10,000. The first run imports a bounded Inbox snapshot and stores a history baseline captured before enumeration. Later runs use Gmail history to fetch only changed messages, including label changes and deletions of cached mail. Metadata-only reads preserve valid cached bodies; a no-change run makes no message fetches. Updated counts include replayed observations. Run again when the UI reports more work; large history records and recovery scans resume from saved progress. Expired/invalid history triggers individual reconciliation of cached messages and a fresh bounded Inbox snapshot, never deletion inferred from an incomplete listing. Stop sync cancels pending work; completed transactions remain saved. Older mail outside the initial subset is not backfilled automatically. Sync does not modify labels, classify mail or send messages. Manual classification is available separately below. Attachments are not downloaded; separately stored or unsupported/oversized bodies are reported rather than silently treated as complete. The cache is sensitive, unencrypted local data and persists after disconnect. A disconnected account's cache is hidden until that account reconnects.
+The default is 500; accepted values are 1–10,000. The first run imports a bounded Inbox snapshot and stores a history baseline captured before enumeration. Later runs use Gmail history to fetch only changed messages, including label changes and deletions of cached mail. Metadata-only reads preserve valid cached bodies; a no-change run fetches no complete messages. Remaining observation budget retries
+incomplete cached bodies without requiring another history event, rotating across
+manual runs; bodies requiring unsupported fetching can remain unavailable. Updated counts include replayed observations. Run again when the UI reports more work; large history records and recovery scans resume from saved progress. Expired/invalid history triggers individual reconciliation of cached messages and a fresh bounded Inbox snapshot, never deletion inferred from an incomplete listing. Stop sync cancels pending work; completed transactions remain saved. Older mail outside the initial subset is not backfilled automatically. Sync does not modify labels, classify mail or send messages. Manual classification is available separately below. Attachments are not downloaded; separately stored or unsupported/oversized bodies are reported rather than silently treated as complete. The cache is sensitive, unencrypted local data and persists after disconnect. A disconnected account's cache is hidden until that account reconnects.
 
 Automated sync tests use synthetic JSON fixtures and local HTTP servers with temporary databases; they never access a live Gmail account. To test manually with a dedicated account, connect, sync twice, verify a no-change second run imports nothing, then change a test message’s labels and verify a metadata update without duplicate imports, and disconnect during a run. Native smoke tests run without Google configuration.
 

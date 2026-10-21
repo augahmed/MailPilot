@@ -1,6 +1,6 @@
 # Historical draft recovery only
 
-Status reviewed 2026-10-19. This is a current compatibility specification, not a
+Status reviewed 2026-10-21. This is a current compatibility specification, not a
 reply/composition roadmap. Those features are outside the immediate
 [product scope](PRODUCT_PLAN.md). Preserve recovery without adding any new remote
 creation or mutation capability.
@@ -27,5 +27,6 @@ becomes a frontend editing session.
 
 `reply.manage` / `reply_manage` permits only status, reconcile, resolve and cancel.
 It rejects settings, generation, prompts, thread fields, body changes and creation.
-AI settings now use their own narrow endpoint. The only active AI workflow is
-[one selected cached-email summary](GENERATIVE_AI.md).
+AI settings now use their own narrow endpoint. Active AI workflows are [selected-email Summary](GENERATIVE_AI.md) and
+[separately approved evidence questions](EMAIL_QUESTIONS.md), both independent of
+this recovery boundary.
