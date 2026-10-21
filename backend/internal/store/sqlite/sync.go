@@ -28,7 +28,7 @@ func (r *syncRepository) Load(ctx context.Context, a domain.AccountID) (reposito
 	return state, nil
 }
 func (r *syncRepository) Commit(ctx context.Context, a domain.AccountID, expected, next repository.SyncCheckpoint, email *domain.Email, deleted domain.ProviderMessageID) error {
-	if a == "" || len(next.Cursor) > 4096 || len(next.After) > 1024 || len(next.Record) > 4096 || next.Offset < 0 || next.Offset > 10000 || (next.Phase != "snapshot" && next.Phase != "reconcile" && next.Phase != "history") || (email != nil && (email.AccountID != a || email.Validate() != nil || deleted != "")) {
+	if a == "" || len(next.Cursor) > 4096 || len(next.After) > 1024 || len(next.RetryAfter) > 1024 || len(next.Record) > 4096 || next.Offset < 0 || next.Offset > 10000 || (next.Phase != "snapshot" && next.Phase != "reconcile" && next.Phase != "history") || (email != nil && (email.AccountID != a || email.Validate() != nil || deleted != "")) {
 		return repository.ErrInvalid
 	}
 	return r.store.transaction(ctx, func(tx *sql.Tx) error {
@@ -45,7 +45,7 @@ func (r *syncRepository) Commit(ctx context.Context, a domain.AccountID, expecte
 			return repository.ErrConflict
 		}
 		if email != nil {
-			if _, err := tx.ExecContext(ctx, "UPDATE emails SET remote_deleted=0 WHERE account_id=? AND provider_message_id=?", a, email.ProviderID); err != nil {
+			if _, err := tx.ExecContext(ctx, "UPDATE emails SET remote_deleted=0 WHERE account_id=? AND provider_message_id=? AND remote_deleted<>0", a, email.ProviderID); err != nil {
 				return err
 			}
 			if _, err := upsertEmail(ctx, tx, *email); err != nil {
@@ -81,10 +81,20 @@ func (r *syncRepository) Commit(ctx context.Context, a domain.AccountID, expecte
 	})
 }
 func (r *syncRepository) CachedIDs(ctx context.Context, a domain.AccountID, after string, limit int) ([]domain.ProviderMessageID, error) {
+	return r.cachedIDs(ctx, a, after, limit, false)
+}
+func (r *syncRepository) IncompleteIDs(ctx context.Context, a domain.AccountID, after string, limit int) ([]domain.ProviderMessageID, error) {
+	return r.cachedIDs(ctx, a, after, limit, true)
+}
+func (r *syncRepository) cachedIDs(ctx context.Context, a domain.AccountID, after string, limit int, incomplete bool) ([]domain.ProviderMessageID, error) {
 	if a == "" || limit < 1 || limit > 100 {
 		return nil, repository.ErrInvalid
 	}
-	rows, err := r.store.db.QueryContext(ctx, "SELECT provider_message_id FROM emails WHERE account_id=? AND remote_deleted=0 AND provider_message_id>? ORDER BY provider_message_id LIMIT ?", a, after, limit)
+	query := "SELECT provider_message_id FROM emails WHERE account_id=? AND remote_deleted=0 AND provider_message_id>?"
+	if incomplete {
+		query += " AND body_state<>'complete'"
+	}
+	rows, err := r.store.db.QueryContext(ctx, query+" ORDER BY provider_message_id LIMIT ?", a, after, limit)
 	if err != nil {
 		return nil, storageError(err)
 	}

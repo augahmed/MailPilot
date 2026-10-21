@@ -258,3 +258,21 @@ func TestIndexCandidatesHaveNoVisiblePageOrTenThousandMessageCap(t *testing.T) {
 		t.Fatal("cache counts capped", counts, err)
 	}
 }
+
+func TestCombinedCoverageIncludesHistoricalUnavailableSources(t *testing.T) {
+	s, run, _, _ := indexStoreFixture(t)
+	ctx := context.Background()
+	old := sampleEmail(run.AccountID, "historical-unavailable")
+	old.ID = saveEmail(t, s, old)
+	if _, err := s.db.Exec(`UPDATE emails SET content_hash='legacy-unversioned-source' WHERE account_id=? AND id=?`, run.AccountID, old.ID); err != nil {
+		t.Fatal(err)
+	}
+	coverage, err := s.Indexing().Coverage(ctx, run.AccountID, run.Profile, "current-classifier")
+	if err != nil || coverage.Run == nil || coverage.Run.Generation != run.Generation || coverage.Messages.Eligible != 2 || coverage.Messages.Unavailable != 1 || coverage.Assessments.Eligible != 2 || coverage.Assessments.Pending != 2 || coverage.Assessments.Assessed != 0 {
+		t.Fatal("unavailable source omitted or claimed assessed", coverage, err)
+	}
+	disabled, err := s.Indexing().Coverage(ctx, run.AccountID, run.Profile, "")
+	if err != nil || disabled.Messages.Eligible != 2 || disabled.Assessments != (repository.SemanticProgress{}) {
+		t.Fatal("disabled assessments changed coverage", disabled, err)
+	}
+}

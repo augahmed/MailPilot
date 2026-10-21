@@ -200,8 +200,16 @@ func (s *LocalIndex) authorizedResponse(ctx context.Context, a domain.AccountID,
 func (s *LocalIndex) response(ctx context.Context, a domain.AccountID, code string) IndexResponse {
 	p := s.profile
 	result := IndexResponse{AccountID: string(a), Status: "idle", ModelID: p.Model.ID, ModelVersion: p.Model.Version, Dimension: p.Model.Dimension, Fingerprint: p.Fingerprint, Code: code}
-	run, err := s.jobs.Run(ctx, a)
-	if err == nil {
+	classifier := ""
+	if s.semantic != nil {
+		classifier = s.classifier.Version()
+	}
+	coverage, err := s.jobs.Coverage(ctx, a, p, classifier)
+	if err != nil {
+		result.Code = "storage_error"
+		return result
+	}
+	if run := coverage.Run; run != nil {
 		result.Status = run.Status
 		result.Generation = run.Generation
 		// Category work adds pending derivatives without invalidating compatible mail.
@@ -216,14 +224,8 @@ func (s *LocalIndex) response(ctx context.Context, a domain.AccountID, code stri
 		} else if code == "" {
 			result.Code = run.Code
 		}
-	} else if !errors.Is(err, repository.ErrNotFound) {
-		result.Code = "storage_error"
 	}
-	counts, err := s.jobs.Progress(ctx, a, p)
-	if err != nil {
-		result.Code = "storage_error"
-		return result
-	}
+	counts := coverage.Messages
 	result.EligibleMessages = counts.Eligible
 	result.IndexedMessages = counts.Indexed
 	result.CompleteMessages = counts.Complete
@@ -234,22 +236,14 @@ func (s *LocalIndex) response(ctx context.Context, a domain.AccountID, code stri
 	result.ChunksCreated = counts.Chunks
 	result.EmbeddingsGenerated = counts.Embeddings
 	if s.categoryVectors != nil {
-		c, e := s.categoryVectors.Progress(ctx, a, p)
-		if e != nil {
-			result.Code = "storage_error"
-			return result
-		}
+		c := coverage.Categories
 		result.EligibleCategories = c.Eligible
 		result.ReadyCategories = c.Ready
 		result.PartialCategories = c.Partial
 		result.PendingCategories = c.Pending
 	}
 	if s.semantic != nil {
-		semantic, e := s.semantic.Progress(ctx, a, s.classifier.Version())
-		if e != nil {
-			result.Code = "storage_error"
-			return result
-		}
+		semantic := coverage.Assessments
 		result.AssessedMessages = semantic.Assessed
 		result.PendingAssessments = semantic.Pending
 	}

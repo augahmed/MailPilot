@@ -215,6 +215,8 @@ chunks, and rejects stale work. Source changes retain inaccessible old chunks on
 until refresh for cache reuse; confirmed deletion removes them. Vector BLOBs are
 little-endian float32 with dimension/length checks plus Go finite/nonzero validation.
 Unknown or unavailable bodies remain partial; an empty projection is unavailable.
+The [source lifecycle review](SYNC_LIFECYCLE.md) records bounded incomplete-body
+retries after history, idempotent observations and end-to-end synthetic coverage.
 Manual sync wires `app.CachedChunker` to the shared `mail.Chunker` before sync
 for bounded cache backfill and after each cache/checkpoint commit. Processing errors
 retain source mail/checkpoints, report `chunking_failed`, and leave old chunks stale.

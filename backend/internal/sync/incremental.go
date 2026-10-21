@@ -43,6 +43,7 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 		mode("recovery")
 	}
 	budget := s.limit
+	observed := map[domain.ProviderMessageID]bool{}
 	observe := func(id domain.ProviderMessageID, deleted bool, next repository.SyncCheckpoint) error {
 		s.update(g, func(p *Progress) { p.Discovered++ })
 		old, err := s.emails.GetByProviderID(ctx, a, id)
@@ -91,14 +92,7 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 		if err := commit(next, email, removed); err != nil {
 			return err
 		}
-		if email != nil && s.prepareChunks != nil {
-			if err := s.prepareChunks(ctx, a, id); err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				s.update(g, func(p *Progress) { p.Errors++; p.Code = "chunking_failed" })
-			}
-		}
+		observed[id] = true
 		budget--
 		s.update(g, func(p *Progress) {
 			if deleted && exists {
@@ -113,8 +107,19 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 			if email != nil && email.BodyState != "complete" {
 				p.Errors++
 				p.Code = "body_unavailable"
+				p.More = true
 			}
 		})
+		// Report committed observations even if post-commit chunk preparation is
+		// interrupted. The source/checkpoint must never be counted as rolled back.
+		if email != nil && s.prepareChunks != nil {
+			if err := s.prepareChunks(ctx, a, id); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				s.update(g, func(p *Progress) { p.Errors++; p.Code = "chunking_failed" })
+			}
+		}
 		return nil
 	}
 	// Expiration recovery reconciles every cached identity with authoritative GETs.
@@ -291,7 +296,48 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 			}
 			next := state
 			next.Cursor = page.Cursor
-			return commit(next, nil, "")
+			if err := commit(next, nil, ""); err != nil {
+				return err
+			}
+			// History has priority. Use only the remaining observation budget to
+			// retry cached incomplete bodies, which may recover without a new Gmail
+			// history event. Persist the rotation with each source observation so
+			// interruption cannot skip a failed read or starve later identities.
+			for budget > 0 {
+				ids, err := s.checkpoints.IncompleteIDs(ctx, a, state.RetryAfter, min(budget, 100))
+				if err != nil {
+					return err
+				}
+				if len(ids) == 0 {
+					next := state
+					next.RetryAfter = ""
+					if err := commit(next, nil, ""); err != nil {
+						return err
+					}
+					break
+				}
+				for _, id := range ids {
+					next := state
+					next.RetryAfter = string(id)
+					if observed[id] {
+						if err := commit(next, nil, ""); err != nil {
+							return err
+						}
+						continue
+					}
+					if err := observe(id, false, next); err != nil {
+						return err
+					}
+				}
+			}
+			remaining, err := s.checkpoints.IncompleteIDs(ctx, a, "", 1)
+			if err != nil {
+				return err
+			}
+			if len(remaining) > 0 {
+				more()
+			}
+			return nil
 		}
 		if budget <= 0 {
 			more()

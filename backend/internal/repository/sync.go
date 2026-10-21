@@ -9,8 +9,10 @@ import (
 // Record/Offset allow a single large history record to resume without skipping it.
 type SyncCheckpoint struct {
 	Cursor, Phase, After, Record string
-	Offset                       int
-	Limited                      bool
+	// RetryAfter rotates bounded incomplete-body retries independently of history.
+	RetryAfter string
+	Offset     int
+	Limited    bool
 }
 type SyncRepository interface {
 	Load(context.Context, domain.AccountID) (SyncCheckpoint, error)
@@ -18,4 +20,5 @@ type SyncRepository interface {
 	// compare-and-swap guard against stale/concurrent workers. Nil mail is allowed.
 	Commit(context.Context, domain.AccountID, SyncCheckpoint, SyncCheckpoint, *domain.Email, domain.ProviderMessageID) error
 	CachedIDs(context.Context, domain.AccountID, string, int) ([]domain.ProviderMessageID, error)
+	IncompleteIDs(context.Context, domain.AccountID, string, int) ([]domain.ProviderMessageID, error)
 }

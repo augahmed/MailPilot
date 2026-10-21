@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/repository"
@@ -63,11 +64,14 @@ func (r *indexRepository) Begin(ctx context.Context, a domain.AccountID, p repos
 	return run, nil
 }
 func (r *indexRepository) Run(ctx context.Context, a domain.AccountID) (repository.IndexRun, error) {
+	return readIndexRun(ctx, r.store.db, a)
+}
+func readIndexRun(ctx context.Context, q indexQuery, a domain.AccountID) (repository.IndexRun, error) {
 	run := repository.IndexRun{AccountID: a}
 	if a == "" {
 		return run, repository.ErrInvalid
 	}
-	err := r.store.db.QueryRowContext(ctx, `SELECT generation,model_id,model_version,dimension,preprocessing_version,index_version,fingerprint,status,code,category_recipe,classifier_version FROM local_index_jobs WHERE account_id=?`, a).Scan(&run.Generation, &run.Profile.Model.ID, &run.Profile.Model.Version, &run.Profile.Model.Dimension, &run.Profile.PreprocessingVersion, &run.Profile.IndexVersion, &run.Profile.Fingerprint, &run.Status, &run.Code, &run.Profile.CategoryRecipe, &run.ClassifierVersion)
+	err := q.QueryRowContext(ctx, `SELECT generation,model_id,model_version,dimension,preprocessing_version,index_version,fingerprint,status,code,category_recipe,classifier_version FROM local_index_jobs WHERE account_id=?`, a).Scan(&run.Generation, &run.Profile.Model.ID, &run.Profile.Model.Version, &run.Profile.Model.Dimension, &run.Profile.PreprocessingVersion, &run.Profile.IndexVersion, &run.Profile.Fingerprint, &run.Status, &run.Code, &run.Profile.CategoryRecipe, &run.ClassifierVersion)
 	return run, storageError(err)
 }
 
@@ -195,6 +199,45 @@ func (r *indexRepository) Fail(ctx context.Context, run repository.IndexRun, c r
 // Current counts only: no historical, stale, unrelated-account or incompatible vectors.
 func (r *indexRepository) Progress(ctx context.Context, a domain.AccountID, p repository.IndexProfile) (repository.IndexProgress, error) {
 	return indexProgress(ctx, r.store.db, a, p)
+}
+
+func (r *indexRepository) Coverage(ctx context.Context, a domain.AccountID, p repository.IndexProfile, classifier string) (repository.IndexCoverage, error) {
+	var result repository.IndexCoverage
+	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
+		run, err := readIndexRun(ctx, tx, a)
+		if err != nil && !errors.Is(err, repository.ErrNotFound) {
+			return err
+		}
+		if err == nil {
+			result.Run = &run
+		}
+		result.Messages, err = indexProgress(ctx, tx, a, p)
+		if err != nil {
+			return err
+		}
+		if p.CategoryRecipe != "" {
+			result.Categories, err = categoryVectorProgress(ctx, tx, a, p)
+			if err != nil {
+				return err
+			}
+		}
+		if classifier != "" {
+			result.Assessments, err = semanticProgress(ctx, tx, a, classifier)
+			if err != nil {
+				return err
+			}
+			// Historical noncanonical sources cannot be assessed until Gmail
+			// refresh supplies their current identity. Keep them pending in the
+			// account-wide DTO rather than claiming assessments or omitting mail.
+			result.Assessments.Eligible = result.Messages.Eligible
+			result.Assessments.Pending = result.Messages.Eligible - result.Assessments.Assessed
+		}
+		return nil
+	})
+	if err != nil {
+		return repository.IndexCoverage{}, err
+	}
+	return result, nil
 }
 
 type indexQuery interface {

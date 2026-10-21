@@ -73,22 +73,40 @@ func upsertEmail(ctx context.Context, tx *sql.Tx, e domain.Email) (domain.EmailI
 	_, err = tx.ExecContext(ctx, `INSERT INTO emails(id,account_id,provider_message_id,provider_thread_id,subject,body_text,body_html,received_at,headers_json,attachments_json,content_hash,created_at,updated_at,content_revision,body_state)
  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,provider_message_id) DO UPDATE SET
  content_revision=excluded.content_revision,body_state=excluded.body_state,provider_thread_id=excluded.provider_thread_id,subject=excluded.subject,body_text=excluded.body_text,body_html=excluded.body_html,
- received_at=excluded.received_at,headers_json=excluded.headers_json,attachments_json=excluded.attachments_json,content_hash=excluded.content_hash,updated_at=excluded.updated_at`,
+ received_at=excluded.received_at,headers_json=excluded.headers_json,attachments_json=excluded.attachments_json,content_hash=excluded.content_hash,updated_at=excluded.updated_at
+ WHERE emails.content_hash<>excluded.content_hash OR emails.content_revision<>excluded.content_revision OR emails.provider_thread_id<>excluded.provider_thread_id OR emails.body_state<>excluded.body_state`,
 		id, e.AccountID, e.ProviderID, e.ProviderThreadID, e.Subject, e.BodyText, e.BodyHTML, e.ReceivedAt.UnixMilli(), string(headers), string(attachments), hash, now, now, e.ContentRevision, e.BodyState)
 	if err != nil {
 		return "", err
 	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM email_addresses WHERE email_id=?", id); err != nil {
-		return "", err
-	}
-	for role, addresses := range map[string][]domain.EmailAddress{"sender": {e.Sender}, "to": e.Recipients, "cc": e.CCRecipients} {
-		for position, address := range addresses {
-			if _, err = tx.ExecContext(ctx, "INSERT INTO email_addresses VALUES(?,?,?,?,?)", id, role, position, address.Name, address.Address); err != nil {
-				return "", err
+	if oldHash != hash {
+		if _, err = tx.ExecContext(ctx, "DELETE FROM email_addresses WHERE email_id=?", id); err != nil {
+			return "", err
+		}
+		for role, addresses := range map[string][]domain.EmailAddress{"sender": {e.Sender}, "to": e.Recipients, "cc": e.CCRecipients} {
+			for position, address := range addresses {
+				if _, err = tx.ExecContext(ctx, "INSERT INTO email_addresses VALUES(?,?,?,?,?)", id, role, position, address.Name, address.Address); err != nil {
+					return "", err
+				}
 			}
 		}
 	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM email_labels WHERE account_id=? AND email_id=?", e.AccountID, id); err != nil {
+	rows, err := tx.QueryContext(ctx, "SELECT label_id FROM email_labels WHERE account_id=? AND email_id=?", e.AccountID, id)
+	if err != nil {
+		return "", err
+	}
+	previous := map[domain.LabelID]bool{}
+	for rows.Next() {
+		var labelID domain.LabelID
+		if err := rows.Scan(&labelID); err != nil {
+			_ = rows.Close()
+			return "", err
+		}
+		previous[labelID] = true
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil {
 		return "", err
 	}
 	for _, label := range e.Labels {
@@ -97,6 +115,12 @@ func upsertEmail(ctx context.Context, tx *sql.Tx, e domain.Email) (domain.EmailI
 			return "", err
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO email_labels VALUES(?,?,?) ON CONFLICT DO NOTHING", e.AccountID, id, labelID); err != nil {
+			return "", err
+		}
+		delete(previous, labelID)
+	}
+	for labelID := range previous {
+		if _, err = tx.ExecContext(ctx, "DELETE FROM email_labels WHERE account_id=? AND email_id=? AND label_id=?", e.AccountID, id, labelID); err != nil {
 			return "", err
 		}
 	}
@@ -125,7 +149,7 @@ func upsertLabel(ctx context.Context, tx *sql.Tx, l domain.EmailLabel) (domain.L
 	if l.ID != "" && l.ID != id {
 		return "", repository.ErrConflict
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO labels VALUES(?,?,?,?,?) ON CONFLICT(account_id,provider_label_id) DO UPDATE SET name=excluded.name,kind=excluded.kind`, id, l.AccountID, l.ProviderID, l.Name, l.Kind)
+	_, err = tx.ExecContext(ctx, `INSERT INTO labels VALUES(?,?,?,?,?) ON CONFLICT(account_id,provider_label_id) DO UPDATE SET name=excluded.name,kind=excluded.kind WHERE labels.name<>excluded.name OR labels.kind<>excluded.kind`, id, l.AccountID, l.ProviderID, l.Name, l.Kind)
 	return id, err
 }
 

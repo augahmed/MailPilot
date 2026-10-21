@@ -364,6 +364,10 @@ snapshot). Omitted counts/flags mean zero/false. `discovered` now counts change
 observations, which may refresh one message multiple times across history records.
 `capped` retains its initial snapshot meaning. Body-unavailable warnings can coexist
 with a successfully advanced checkpoint; failed reads/writes leave unfinished work.
+Manual sync also uses its remaining observation budget after history to retry
+incomplete cached bodies, rotating across runs. Still-incomplete bodies report
+`body_unavailable` and `more`; retries perform no inference. A message observed
+through history is not retried again in that run. See the [source lifecycle](../docs/SYNC_LIFECYCLE.md).
 No history cursor, provider IDs or email content is exposed by status.
 
 [sync-incremental-v1.json](sync-incremental-v1.json) is a shared synthetic example

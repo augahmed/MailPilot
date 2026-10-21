@@ -21,6 +21,14 @@ type IndexProgress struct {
 	Eligible, Indexed, Complete, Partial, Failed, Pending, Unavailable int
 	Chunks, Embeddings                                                 int
 }
+
+// IndexCoverage is one consistent view for the combined indexing status DTO.
+type IndexCoverage struct {
+	Run         *IndexRun
+	Messages    IndexProgress
+	Categories  CategoryVectorProgress
+	Assessments SemanticProgress
+}
 type IndexCandidate struct {
 	EmailID        domain.EmailID
 	SourceRevision string
@@ -35,6 +43,7 @@ type IndexRepository interface {
 	Transition(context.Context, IndexRun, string, string) error
 	Next(context.Context, IndexRun) ([]IndexCandidate, error)
 	Progress(context.Context, domain.AccountID, IndexProfile) (IndexProgress, error)
+	Coverage(context.Context, domain.AccountID, IndexProfile, string) (IndexCoverage, error)
 	ReplaceIndexed(context.Context, IndexRun, ChunkSnapshot) (IndexState, error)
 	SaveIndexed(context.Context, IndexRun, EmbeddingBatch) (IndexState, error)
 	Fail(context.Context, IndexRun, IndexCandidate, string) error

@@ -218,6 +218,11 @@ func (r *chunkRepository) replace(ctx context.Context, input repository.ChunkSna
 		if err = refreshIndexStatus(ctx, tx, &result); err != nil {
 			return err
 		}
+		if same && result.Status == old.Status {
+			// Replayed sync observations must not invalidate prototypes or saved
+			// assessments through a no-op index_state update.
+			return nil
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO index_state(account_id,email_id,source_revision,preprocessing_version,index_version,model_id,model_version,dimension,generation,body_state,status,last_indexed_at,content_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,email_id) DO UPDATE SET source_revision=excluded.source_revision,preprocessing_version=excluded.preprocessing_version,index_version=excluded.index_version,model_id=excluded.model_id,model_version=excluded.model_version,dimension=excluded.dimension,generation=excluded.generation,body_state=excluded.body_state,status=excluded.status,last_indexed_at=excluded.last_indexed_at,content_status=excluded.content_status`, result.AccountID, result.EmailID, result.SourceRevision, result.PreprocessingVersion, result.IndexVersion, result.Model.ID, result.Model.Version, result.Model.Dimension, result.Generation, result.BodyState, result.Status, timeValue(result), result.ContentStatus)
 		if err == nil && r.store.version >= 17 {
 			_, err = tx.ExecContext(ctx, `UPDATE index_state SET failure_code='',attempt_generation='' WHERE account_id=? AND email_id=?`, input.AccountID, input.EmailID)
@@ -452,6 +457,8 @@ func (r *chunkRepository) saveEmbeddings(ctx context.Context, b repository.Embed
 		if current.Generation != s.Generation || current.SourceRevision != s.SourceRevision || current.Model != s.Model {
 			return repository.ErrConflict
 		}
+		previousStatus := current.Status
+		changedVectors := false
 		for i, e := range b.Embeddings {
 			if err := exists(ctx, tx, `SELECT 1 FROM email_chunks WHERE account_id=? AND email_id=? AND id=? AND source_revision=? AND preprocessing_version=?`, s.AccountID, s.EmailID, e.ChunkID, s.SourceRevision, current.PreprocessingVersion); err != nil {
 				return err
@@ -465,14 +472,18 @@ func (r *chunkRepository) saveEmbeddings(ctx context.Context, b repository.Embed
 				return err
 			}
 			if changed > 0 {
+				changedVectors = true
 				current.LastIndexedAt = nil
 			}
 		}
 		if err := refreshIndexStatus(ctx, tx, &current); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE index_state SET status=?,last_indexed_at=? WHERE account_id=? AND email_id=?`, current.Status, timeValue(current), s.AccountID, s.EmailID)
 		result = current
+		if !changedVectors && current.Status == previousStatus {
+			return nil
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE index_state SET status=?,last_indexed_at=? WHERE account_id=? AND email_id=?`, current.Status, timeValue(current), s.AccountID, s.EmailID)
 		return err
 	})
 	if err != nil {

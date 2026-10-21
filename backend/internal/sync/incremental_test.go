@@ -307,3 +307,134 @@ func TestChunkProcessingAfterCheckpointCommitDoesNotLoseCacheOnFailure(t *testin
 		t.Fatal("metadata-only reimport skipped chunk processing or fetched body again")
 	}
 }
+
+func TestIncompleteRetriesRotatePersistentlyWithinBudget(t *testing.T) {
+	db, s, r := deltaFixture(t, 1)
+	ctx := context.Background()
+	// Seed incomplete cached mail outside the bounded Inbox snapshot.
+	for _, id := range []domain.ProviderMessageID{"one", "two", "three"} {
+		r.add(id)
+		m := r.messages[id]
+		m.BodyState = "unavailable"
+		m.BodyText = ""
+		r.messages[id] = m
+		if _, err := db.Emails().Upsert(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	initial := repository.SyncCheckpoint{Phase: "history", Cursor: "100"}
+	if err := db.SyncCheckpoints().Commit(ctx, "a", repository.SyncCheckpoint{}, initial, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for range 3 {
+		p := runDelta(t, s)
+		if p.Discovered != 1 || p.Updated != 1 || !p.More || p.Errors != 1 {
+			t.Fatal("unbounded or hidden incomplete retry", p)
+		}
+		state, err := db.SyncCheckpoints().Load(ctx, "a")
+		if err != nil || state.Cursor != "100" || state.RetryAfter == "" || seen[state.RetryAfter] {
+			t.Fatal("retry starved a later identity", state, err)
+		}
+		seen[state.RetryAfter] = true
+		// Each iteration uses a fresh worker service, preserving only durable state.
+		s = New(ctx, s.session, s.factory, db.Emails(), 1)
+		s.SetCheckpoints(db.SyncCheckpoints())
+		t.Cleanup(s.Clear)
+	}
+	if r.full != 3 {
+		t.Fatal("unexpected fetch count", r.full)
+	}
+	if p := runDelta(t, s); !p.More || p.Discovered != 0 { // Reset without a redundant fetch.
+		t.Fatal("incomplete coverage hidden at rotation boundary", p)
+	}
+	state, err := db.SyncCheckpoints().Load(ctx, "a")
+	if err != nil || state.RetryAfter != "" || r.full != 3 {
+		t.Fatal(state, err)
+	}
+	// A confirmed missing incomplete message is tombstoned by authoritative GET.
+	delete(r.messages, "one")
+	if p := runDelta(t, s); p.Removed != 1 || p.Discovered != 1 {
+		t.Fatal(p)
+	}
+	if _, err := db.Emails().GetByProviderID(ctx, "a", "one"); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatal("retry did not clear deleted source", err)
+	}
+}
+
+func TestHistoryPrioritizesChangesAndDoesNotRetrySameIncompleteBodyTwice(t *testing.T) {
+	db, s, r := deltaFixture(t, 2)
+	ctx := context.Background()
+	runDelta(t, s)
+	r.add("one")
+	m := r.messages["one"]
+	m.BodyState = "unavailable"
+	m.BodyText = ""
+	r.messages["one"] = m
+	r.cursor = "200"
+	r.records = []provider.ChangeRecord{{Cursor: "200", Changes: []provider.MessageChange{{ProviderID: "one"}}}}
+	if p := runDelta(t, s); p.Discovered != 1 || r.full != 1 || p.Errors != 1 {
+		t.Fatal("body retried twice in one run", p, r.full)
+	}
+	m.BodyState = "complete"
+	m.BodyText = "Complete body without a new history event."
+	r.messages["one"] = m
+	r.fail = "one"
+	s.Start()
+	if p := finished(t, s); p.State != "error" {
+		t.Fatal(p)
+	}
+	state, err := db.SyncCheckpoints().Load(ctx, "a")
+	if err != nil || state.Cursor != "200" || state.RetryAfter != "" {
+		t.Fatal("failed body retry skipped source", state, err)
+	}
+	r.fail = ""
+	if p := runDelta(t, s); p.Updated != 1 || p.Errors != 0 || r.full != 2 {
+		t.Fatal(p, r.full)
+	}
+}
+
+func TestCancellationDuringChunkPreparationReportsCommittedSource(t *testing.T) {
+	db, s, r := deltaFixture(t, 10)
+	ctx := context.Background()
+	r.add("one")
+	entered := make(chan struct{})
+	s.SetChunkProcessor(func(ctx context.Context, _ domain.AccountID, _ domain.ProviderMessageID) error {
+		close(entered)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	s.Start()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("source not committed")
+	}
+	s.Cancel()
+	p := finished(t, s)
+	if p.State != "cancelled" || p.Imported != 1 || p.Discovered != 1 || p.Errors != 0 || !p.More {
+		t.Fatal("committed observation omitted from progress", p)
+	}
+	if _, err := db.Emails().GetByProviderID(ctx, "a", "one"); err != nil {
+		t.Fatal("post-commit cancellation lost source", err)
+	}
+	checkpoint, err := db.SyncCheckpoints().Load(ctx, "a")
+	if err != nil || checkpoint.Phase != "snapshot" || checkpoint.Cursor != "100" {
+		t.Fatal("lost restart anchor", checkpoint, err)
+	}
+	s.SetChunkProcessor(nil)
+	if p := runDelta(t, s); p.Updated != 1 || p.Imported != 0 {
+		t.Fatal("restart duplicated source", p)
+	}
+}
+
+func TestFinishedHistoryAtBudgetDoesNotClaimMoreWork(t *testing.T) {
+	_, s, r := deltaFixture(t, 1)
+	runDelta(t, s)
+	r.add("one")
+	r.cursor = "200"
+	r.records = []provider.ChangeRecord{{Cursor: "200", Changes: []provider.MessageChange{{ProviderID: "one"}}}}
+	if p := runDelta(t, s); p.Discovered != 1 || p.More {
+		t.Fatal("finished history falsely claims another run is needed", p)
+	}
+}

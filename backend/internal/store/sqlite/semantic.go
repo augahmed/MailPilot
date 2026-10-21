@@ -188,14 +188,14 @@ func (r *semanticRepository) SetPreference(ctx context.Context, a domain.Account
 	})
 }
 
-const semanticCandidates = `SELECT e.id FROM emails e JOIN classification_state s ON s.account_id=e.account_id JOIN classification_email_state es ON es.account_id=e.account_id AND es.email_id=e.id LEFT JOIN classification_runs r ON r.account_id=e.account_id AND r.email_id=e.id WHERE e.account_id=? AND e.remote_deleted=0 AND length(e.content_hash)=64 AND (r.email_id IS NULL OR r.classifier_version<>? OR json_extract(CASE WHEN json_valid(r.semantic_json) THEN r.semantic_json ELSE '{}' END,'$.Revision') IS NOT s.revision OR json_extract(CASE WHEN json_valid(r.semantic_json) THEN r.semantic_json ELSE '{}' END,'$.EmailRevision') IS NOT es.revision)`
+const semanticPending = `(r.email_id IS NULL OR r.classifier_version<>? OR json_extract(CASE WHEN json_valid(r.semantic_json) THEN r.semantic_json ELSE '{}' END,'$.Revision') IS NOT s.revision OR json_extract(CASE WHEN json_valid(r.semantic_json) THEN r.semantic_json ELSE '{}' END,'$.EmailRevision') IS NOT es.revision)`
+const semanticSources = ` FROM emails e JOIN classification_state s ON s.account_id=e.account_id JOIN classification_email_state es ON es.account_id=e.account_id AND es.email_id=e.id LEFT JOIN classification_runs r ON r.account_id=e.account_id AND r.email_id=e.id WHERE e.account_id=? AND e.remote_deleted=0 AND length(e.content_hash)=64`
+const semanticCandidates = `SELECT e.id` + semanticSources + ` AND ` + semanticPending
 
 func semanticProgress(ctx context.Context, q indexQuery, a domain.AccountID, version string) (repository.SemanticProgress, error) {
 	p := repository.SemanticProgress{}
-	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM emails WHERE account_id=? AND remote_deleted=0 AND length(content_hash)=64`, a).Scan(&p.Eligible); err != nil {
-		return p, err
-	}
-	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM (`+semanticCandidates+`)`, a, version).Scan(&p.Pending); err != nil {
+	// Both counts describe the same SQLite snapshot during concurrent sync.
+	if err := q.QueryRowContext(ctx, `SELECT count(*),COALESCE(SUM(`+semanticPending+`),0)`+semanticSources, version, a).Scan(&p.Eligible, &p.Pending); err != nil {
 		return p, err
 	}
 	p.Assessed = p.Eligible - p.Pending

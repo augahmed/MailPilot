@@ -33,6 +33,13 @@ func (c *CachedChunker) Prepare(ctx context.Context, a domain.AccountID, id doma
 	if err != nil {
 		return err
 	}
+	state, err := c.chunks.State(ctx, a, stored.Email.ID)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return err
+	}
+	if err == nil && state.Status != repository.IndexStale && state.SourceRevision == stored.ContentHash && state.PreprocessingVersion == mailtext.PreprocessingVersion && state.IndexVersion == mailtext.ChunkIndexVersion && state.Model == mailtext.ChunkModel() {
+		return nil
+	}
 	snapshot, err := c.chunker.Build(ctx, stored)
 	if err != nil {
 		return err
