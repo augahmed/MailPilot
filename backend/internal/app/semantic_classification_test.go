@@ -193,7 +193,9 @@ func (r *blockingAssessment) SaveIndexed(ctx context.Context, run repository.Ind
 }
 func TestSemanticCoordinatorPauseAndResumeReusesVectors(t *testing.T) {
 	ctx := context.Background()
-	s, db, f, engine, _ := semanticAppFixture(t, 1)
+	// Cross a candidate-page boundary so cancellation also protects pending
+	// assessments already returned alongside the blocked first publication.
+	s, db, f, engine, _ := semanticAppFixture(t, 35)
 	block := &blockingAssessment{SemanticRepository: db.Semantic(), entered: make(chan struct{}), release: make(chan struct{})}
 	s.EnableClassification(block, engine)
 	indexCommand(s, "start")
@@ -211,7 +213,7 @@ func TestSemanticCoordinatorPauseAndResumeReusesVectors(t *testing.T) {
 	s.EnableClassification(db.Semantic(), engine)
 	indexCommand(s, "resume")
 	p := waitIndex(t, s)
-	if p.Status != "complete" || p.AssessedMessages != 1 || f.count() != calls {
+	if p.Status != "complete" || p.AssessedMessages != 35 || f.count() != calls {
 		t.Fatal("resume repeated inference", p)
 	}
 }

@@ -313,21 +313,30 @@ func (s *LocalIndex) work(ctx context.Context, run repository.IndexRun) {
 					return
 				}
 				if len(ids) > 0 {
-					snapshot, e := s.semantic.Snapshot(ctx, run.AccountID, ids[0], run.Profile)
-					if e == nil {
-						var assessment domain.ClassificationRun
-						assessment, e = s.classifier.Assess(ctx, snapshot)
-						if e == nil {
-							e = s.semantic.SaveIndexed(ctx, run, assessment)
+					// Consume the bounded candidate page before scanning the full
+					// cache again. Each assessment still rechecks its own snapshot
+					// and durable job generation before publication.
+					for _, id := range ids {
+						if ctx.Err() != nil {
+							return
 						}
+						snapshot, e := s.semantic.Snapshot(ctx, run.AccountID, id, run.Profile)
+						if e == nil {
+							var assessment domain.ClassificationRun
+							assessment, e = s.classifier.Assess(ctx, snapshot)
+							if e == nil {
+								e = s.semantic.SaveIndexed(ctx, run, assessment)
+							}
+						}
+						if e == nil || errors.Is(e, repository.ErrConflict) || errors.Is(e, repository.ErrNotFound) {
+							continue
+						}
+						if ctx.Err() == nil {
+							s.finish(run, "failed", "storage_error")
+						}
+						return
 					}
-					if e == nil || errors.Is(e, repository.ErrConflict) || errors.Is(e, repository.ErrNotFound) {
-						continue
-					}
-					if ctx.Err() == nil {
-						s.finish(run, "failed", "storage_error")
-					}
-					return
+					continue
 				}
 			}
 			counts, err := s.jobs.Progress(ctx, run.AccountID, run.Profile)

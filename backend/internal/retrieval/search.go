@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -92,6 +92,16 @@ func better(a, b hit) bool {
 		return a.source.Chunk.Index < b.source.Chunk.Index
 	}
 	return a.source.Chunk.ID < b.source.Chunk.ID
+}
+
+func compareHits(a, b hit) int {
+	if better(a, b) {
+		return -1
+	}
+	if better(b, a) {
+		return 1
+	}
+	return 0
 }
 func norm(v []float32) float64 {
 	var n float64
@@ -183,7 +193,7 @@ func rank(ctx context.Context, account domain.AccountID, k int, scan func(func(h
 			return
 		}
 		groups = append(groups, group{current})
-		sort.Slice(groups, func(i, j int) bool { return better(groups[i].hits[0], groups[j].hits[0]) })
+		slices.SortFunc(groups, func(a, b group) int { return compareHits(a.hits[0], b.hits[0]) })
 		if len(groups) > k {
 			groups = groups[:k]
 		}
@@ -205,8 +215,10 @@ func rank(ctx context.Context, account domain.AccountID, k int, scan func(func(h
 		// Highest score wins before overlap suppression. Retain the best passage even
 		// if a later overlapping chunk arrives with a higher score.
 		current = append(current, candidate)
-		sort.Slice(current, func(i, j int) bool { return better(current[i], current[j]) })
-		kept := make([]hit, 0, MaxEvidence)
+		slices.SortFunc(current, compareHits)
+		// Compact this at-most-four-item slice in place. Writes never overtake
+		// the range cursor, preserving ranking and overlap suppression.
+		kept := current[:0]
 		for _, h := range current {
 			duplicate := false
 			for _, prior := range kept {
@@ -222,6 +234,7 @@ func rank(ctx context.Context, account domain.AccountID, k int, scan func(func(h
 				break
 			}
 		}
+		clear(current[len(kept):])
 		current = kept
 		return nil
 	})

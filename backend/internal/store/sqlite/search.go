@@ -76,7 +76,9 @@ func (r *vectorRepository) ScanVectors(ctx context.Context, a domain.AccountID, 
 			var v repository.VectorSource
 			c := &v.Chunk
 			c.AccountID = a
-			var blob []byte
+			// Consume the row-owned bytes before Next; decoding into our float32
+			// buffer avoids database/sql cloning every 384-dimensional vector.
+			var blob sql.RawBytes
 			if err = rows.Scan(&c.ID, &c.EmailID, &c.Index, &c.SectionType, &c.Text, &c.TokenCount, &c.SourceRevision, &c.StartOffset, &c.EndOffset, &c.ContentHash, &c.PreprocessingVersion, &c.SourceKind, &c.SectionIndex, &c.SectionStartOffset, &c.SectionEndOffset, &c.ContextText, &v.Generation, &v.Subject, &v.SenderName, &v.SenderAddress, &v.ReceivedAt, &blob); err != nil {
 				return err
 			}
