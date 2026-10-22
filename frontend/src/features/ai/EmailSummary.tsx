@@ -24,8 +24,11 @@ function SummarySession({
   const accept = (next: Summary) => {
     setView(next);
     if (next.state !== "preview") setApproved(false);
-    if (next.code)
-      setError(errors[next.code] || `Summary unavailable (${next.code}).`);
+    setError(
+      next.code
+        ? errors[next.code] || `Summary unavailable (${next.code}).`
+        : "",
+    );
   };
   const acceptRef = useRef(accept);
   useEffect(() => {
@@ -101,7 +104,7 @@ function SummarySession({
     }
   };
   return (
-    <section aria-labelledby="email-summary-heading">
+    <section className="reader-summary" aria-labelledby="email-summary-heading">
       <h3 id="email-summary-heading">Optional email summary</h3>
       <p>
         Summarizes this selected cached email and extracts explicit requests and

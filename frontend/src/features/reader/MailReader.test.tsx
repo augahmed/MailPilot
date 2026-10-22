@@ -6,6 +6,7 @@ import {
   readerSchema,
   type ReadMailResponse,
 } from "../../lib/ipc/reader";
+vi.mock("../ai/EmailSummary", () => ({ EmailSummary: () => null }));
 vi.mock("../../lib/ipc/reader", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/ipc/reader")>()),
   readCachedMail: vi.fn(),
@@ -199,4 +200,66 @@ it("does not show old search evidence when the original source changed", async (
   );
   await screen.findByText(/cached message changed/i);
   expect(screen.queryByText("Old evidence")).toBeNull();
+});
+
+it("reloads the current original after stale search evidence without showing the old excerpt", async () => {
+  vi.mocked(readCachedMail).mockResolvedValueOnce({
+    ...fixture,
+    code: "stale",
+    body: "",
+    message: null,
+  });
+  render(
+    <MailReader
+      accountId="a"
+      emailId="e"
+      source="search"
+      onBack={vi.fn()}
+      evidence={{ text: "Old search evidence", revision: fixture.revision }}
+    />,
+  );
+  await screen.findByRole("alert");
+  const current = {
+    ...fixture,
+    revision: "b".repeat(64),
+    body: "Current cached text",
+    nextOffset: 19,
+    totalBytes: 19,
+  };
+  vi.mocked(readCachedMail).mockResolvedValue(current);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reload cached message" }),
+  );
+  expect(await screen.findByText("Current cached text")).toBeVisible();
+  expect(readCachedMail).toHaveBeenLastCalledWith("a", "e", 0, "");
+  expect(screen.queryByText("Old search evidence")).toBeNull();
+});
+it("clears a pagination error after loading more text succeeds", async () => {
+  vi.mocked(readCachedMail)
+    .mockResolvedValueOnce({
+      ...fixture,
+      body: "first",
+      nextOffset: 5,
+      totalBytes: 9,
+    })
+    .mockRejectedValueOnce(new Error("synthetic failure"));
+  render(
+    <MailReader accountId="a" emailId="e" source="mailbox" onBack={vi.fn()} />,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Load more cached text" }),
+  );
+  await screen.findByRole("alert");
+  vi.mocked(readCachedMail).mockResolvedValue({
+    ...fixture,
+    offset: 5,
+    body: "last",
+    nextOffset: 9,
+    totalBytes: 9,
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Load more cached text" }),
+  );
+  expect(await screen.findByText("firstlast")).toBeVisible();
+  expect(screen.queryByRole("alert")).toBeNull();
 });

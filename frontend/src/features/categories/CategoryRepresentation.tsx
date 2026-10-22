@@ -171,9 +171,9 @@ export function CategoryRepresentation({
       aria-label={`Local representation for ${category.name}`}
       aria-busy={busy}
     >
-      <h4 ref={heading} tabIndex={-1}>
+      <h3 ref={heading} tabIndex={-1}>
         Examples & local profile
-      </h4>
+      </h3>
       <p>
         Built on this device with the email embedding model. Start or resume
         Local Email Index to build pending representations. This does not
@@ -316,7 +316,7 @@ export function CategoryRepresentation({
       )}
       {preview && (
         <div role="group" aria-label="Confirm category example">
-          <h5>{preview.message?.subject}</h5>
+          <h4>{preview.message?.subject}</h4>
           <p>From: {preview.message?.sender.address}</p>
           <pre className="mail-body">{preview.body}</pre>
           {preview.nextOffset < preview.totalBytes && (

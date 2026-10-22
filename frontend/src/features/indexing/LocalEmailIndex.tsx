@@ -107,7 +107,7 @@ export function LocalEmailIndex() {
       aria-labelledby="local-index-heading"
       aria-busy={busy}
     >
-      <h2 id="local-index-heading">Local Email Index</h2>
+      <h2 id="local-index-heading">Index status</h2>
       <p>
         Indexing divides cached emails into searchable text chunks and generates
         local embeddings — numerical representations that help search match

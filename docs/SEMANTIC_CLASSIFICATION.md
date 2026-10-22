@@ -63,7 +63,7 @@ weight. All category scores and evidence IDs remain stored; visible excerpts are
 read from shared chunks. Evidence opens the source-revision-bound cached reader.
 
 Choose a category and **Assign primary category**, **Leave unclassified**, or
-**Use automatic suggestions** to change only the local primary preference.
+**Reset To Default** to change only the local primary preference.
 Preferences override both rules and semantic suggestions. Existing single manual
 assignments are honored; multiple legacy assignments remain preserved and do not
 produce an arbitrary primary prediction. Clearing the new preference restores the

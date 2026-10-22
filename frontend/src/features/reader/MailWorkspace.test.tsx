@@ -1,8 +1,15 @@
 import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MailWorkspace } from "./MailWorkspace";
 import type { OpenMail } from "../../lib/ipc/reader";
+beforeEach(() => {
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+});
 vi.mock("../mailbox/Mailbox", () => ({
   Mailbox: ({ onOpen }: { onOpen: OpenMail }) => {
     const [page, setPage] = useState(0);
@@ -105,4 +112,16 @@ it("restores focus to the workspace when a stale result disappeared while readin
   await waitFor(() =>
     expect(screen.getByLabelText("Cached email workspace")).toHaveFocus(),
   );
+});
+
+it("restores the previous list scroll position without scrolling the focused trigger", async () => {
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 280 });
+  render(<MailWorkspace connectionRevision={0} />);
+  const trigger = screen.getByText("Open mailbox message");
+  const focus = vi.spyOn(trigger, "focus");
+  fireEvent.click(trigger);
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+  fireEvent.click(screen.getByText("Back to mailbox"));
+  await waitFor(() => expect(window.scrollTo).toHaveBeenCalledWith(0, 280));
+  expect(focus).toHaveBeenCalledWith({ preventScroll: true });
 });

@@ -28,7 +28,8 @@ export function MailReader({
     generation.current++;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
-    heading.current?.focus();
+    heading.current?.parentElement?.scrollIntoView?.({ block: "start" });
+    heading.current?.focus({ preventScroll: true });
     const fail = (code: string) => {
       generation.current++;
       setBusy(false);
@@ -50,7 +51,7 @@ export function MailReader({
           accountId,
           emailId,
           0,
-          evidence?.revision ?? "",
+          retry === 0 ? (evidence?.revision ?? "") : "",
         );
         if (!active) return;
         if (result.code) {
@@ -60,6 +61,14 @@ export function MailReader({
         setPage(result);
         setBody(result.body);
         setError("");
+        // The loading card may be too short to scroll fully into view. Align
+        // again after the body renders so the return action remains visible.
+        requestAnimationFrame(() => {
+          if (active)
+            heading.current?.parentElement?.scrollIntoView?.({
+              block: "start",
+            });
+        });
         const check = async () => {
           try {
             const status = await readCachedMail(
@@ -117,6 +126,7 @@ export function MailReader({
       } else {
         setBody((value) => value + result.body);
         setPage(result);
+        setError("");
       }
     } catch {
       if (live.current && current === generation.current)
@@ -132,10 +142,13 @@ export function MailReader({
       .join(", ") || "None cached";
   return (
     <section
-      className="status-card mail-reader"
+      className="status-card feature-panel mail-reader"
       aria-labelledby="reader-heading"
+      aria-busy={busy}
     >
-      <button onClick={onBack}>Back to {source}</button>
+      <button className="secondary-button reader-back" onClick={onBack}>
+        <span aria-hidden="true">← </span>Back to {source}
+      </button>
       <h2 id="reader-heading" ref={heading} tabIndex={-1}>
         {m?.subject || (m ? "(No subject)" : "Cached message")}
       </h2>
@@ -162,7 +175,7 @@ export function MailReader({
               <blockquote>{evidence.text}</blockquote>
             </aside>
           )}
-          <dl>
+          <dl className="reader-metadata">
             <dt>From</dt>
             <dd>{addresses([m.sender])}</dd>
             <dt>To</dt>
@@ -192,8 +205,19 @@ export function MailReader({
           <h3>Phishing analysis</h3>
           {m.phishing ? (
             <>
-              <p>
-                {m.phishing.score}/100 · {m.phishing.risk}
+              <p
+                className={`reader-risk risk-${m.phishing.risk.toLowerCase()}`}
+              >
+                <span className="risk-badge">
+                  {m.phishing.risk.toLowerCase() === "low"
+                    ? "Low"
+                    : m.phishing.risk.toLowerCase() === "medium"
+                      ? "Medium"
+                      : m.phishing.risk.toLowerCase() === "high"
+                        ? "High"
+                        : m.phishing.risk}{" "}
+                  · {m.phishing.score}/100
+                </span>
               </p>
               <ul>
                 {m.phishing.reasons.map((r) => (
@@ -203,7 +227,10 @@ export function MailReader({
                   </li>
                 ))}
               </ul>
-              <small>Analyzer: {m.phishing.version}</small>
+              <details className="technical-details">
+                <summary>Risk analyzer details</summary>
+                <p>Analyzer: {m.phishing.version}</p>
+              </details>
             </>
           ) : (
             <p>Risk analysis unavailable.</p>
@@ -229,17 +256,12 @@ export function MailReader({
             </p>
           )}
           {!body && !m.bodyError && <p>No readable body is cached.</p>}
-          <div
-            className="reader-body"
-            style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-          >
-            {body}
-          </div>
+          <div className="reader-body">{body}</div>
           {page && page.nextOffset < page.totalBytes && (
             <>
-              <p>
-                {page.nextOffset} of {page.totalBytes} cleaned text bytes
-                loaded.
+              <p role="status">
+                More cached text is available below. {page.nextOffset} of{" "}
+                {page.totalBytes} text bytes loaded.
               </p>
               <button
                 disabled={busy}

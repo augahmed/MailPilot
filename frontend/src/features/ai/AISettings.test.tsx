@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { manageAISettings, aiSettingsSchema } from "../../lib/ipc/ai";
 import fixture from "../../../../contracts/ai-settings-v1.json";
 import { AISettings } from "./AISettings";
@@ -78,4 +84,23 @@ it("keeps provider disabling functional and clears any unsubmitted key", async (
     }),
   );
   expect(screen.queryByText("unsubmitted-synthetic-secret")).toBeNull();
+});
+
+afterEach(() => vi.useRealTimers());
+
+it("removes a transient settings error after a successful status retry", async () => {
+  vi.useFakeTimers();
+  vi.mocked(manageAISettings).mockRejectedValueOnce(
+    new Error("synthetic failure"),
+  );
+  render(<AISettings />);
+  await act(async () => {});
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Cannot read AI settings.",
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByLabelText("AI provider")).toBeVisible();
 });

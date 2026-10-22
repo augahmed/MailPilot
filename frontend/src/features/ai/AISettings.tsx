@@ -30,6 +30,7 @@ export function AISettings() {
       setError(`AI settings could not be updated (${next.code}).`);
       return;
     }
+    setError("");
     if (identity.current !== next.accountId) {
       identity.current = next.accountId;
       setProvider(next.provider || next.providers[0]?.id || "");

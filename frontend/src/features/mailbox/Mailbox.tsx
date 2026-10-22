@@ -206,7 +206,12 @@ export function Mailbox({
           </p>
         </div>
       ) : (
-        <div className="mail-table">
+        <div
+          className="mail-table"
+          tabIndex={0}
+          role="region"
+          aria-label="Cached email list"
+        >
           <table>
             <thead>
               <tr>

@@ -198,7 +198,7 @@ export function SemanticSearch({
       aria-labelledby="semantic-search-heading"
       aria-busy={busy || running}
     >
-      <h2 id="semantic-search-heading">Email search</h2>
+      <h2 id="semantic-search-heading">Search cached mail</h2>
       <p>
         Search cached mail with keywords, meaning, or both. Search runs only
         when you submit; no email or query is sent to an AI provider.
@@ -220,72 +220,74 @@ export function SemanticSearch({
             maxLength={2048}
           />
         </label>
-        <fieldset className="filter-grid">
+        <fieldset className="filter-group">
           <legend>Search options</legend>
-          <label>
-            Search mode
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as typeof mode)}
-            >
-              <option value="hybrid">Hybrid</option>
-              <option value="keyword">Keyword only</option>
-              <option value="semantic">Semantic only</option>
-            </select>
-          </label>
-          <label>
-            Sender contains
-            <input
-              value={sender}
-              onChange={(e) => setSender(e.target.value)}
-              maxLength={200}
-            />
-          </label>
-          <label>
-            Received on or after (UTC)
-            <input
-              type="date"
-              value={after}
-              onChange={(e) => setAfter(e.target.value)}
-            />
-          </label>
-          <label>
-            Received before (UTC)
-            <input
-              type="date"
-              value={before}
-              onChange={(e) => setBefore(e.target.value)}
-            />
-          </label>
-          <label>
-            Assigned categories
-            <select
-              disabled={!loadedCategories || loadedCategories.failed}
-              value={loadedCategories ? categoryId : ""}
-              onChange={(e) => setCategoryId(e.target.value)}
-            >
-              <option value="">All categories</option>
-              {(loadedCategories?.rows ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {!c.enabled ? " (disabled)" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Maximum emails
-            <select
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-            >
-              {[5, 10, 20].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="filter-grid">
+            <label>
+              Search mode
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value as typeof mode)}
+              >
+                <option value="hybrid">Hybrid</option>
+                <option value="keyword">Keyword only</option>
+                <option value="semantic">Semantic only</option>
+              </select>
+            </label>
+            <label>
+              Sender contains
+              <input
+                value={sender}
+                onChange={(e) => setSender(e.target.value)}
+                maxLength={200}
+              />
+            </label>
+            <label>
+              Received on or after (UTC)
+              <input
+                type="date"
+                value={after}
+                onChange={(e) => setAfter(e.target.value)}
+              />
+            </label>
+            <label>
+              Received before (UTC)
+              <input
+                type="date"
+                value={before}
+                onChange={(e) => setBefore(e.target.value)}
+              />
+            </label>
+            <label>
+              Assigned categories
+              <select
+                disabled={!loadedCategories || loadedCategories.failed}
+                value={loadedCategories ? categoryId : ""}
+                onChange={(e) => setCategoryId(e.target.value)}
+              >
+                <option value="">All categories</option>
+                {(loadedCategories?.rows ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {!c.enabled ? " (disabled)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Maximum emails
+              <select
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value))}
+              >
+                {[5, 10, 20].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </fieldset>
         <div className="category-filter-status">
           {result?.accountId && !loadedCategories && (
@@ -339,7 +341,7 @@ export function SemanticSearch({
             : running
               ? "Searching locally…"
               : result?.status === "complete"
-                ? `${result.emails.length} emails · ${result.elapsedMs.toFixed(1)} ms · ${result.scannedChunks} chunks searched`
+                ? `${result.emails.length} ${result.emails.length === 1 ? "email" : "emails"} · ${result.elapsedMs.toFixed(1)} ms · ${result.scannedChunks} chunks searched`
                 : "Ready for a local query.")}
       </p>
       {result?.accountId && (

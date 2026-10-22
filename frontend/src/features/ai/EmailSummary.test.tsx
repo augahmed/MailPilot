@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { summarizeEmail, summarySchema } from "../../lib/ipc/ai";
 import fixture from "../../../../contracts/email-summary-v1.json";
 import { EmailSummary } from "./EmailSummary";
@@ -116,4 +122,27 @@ it("drops consent and clears pending payload on reader exit", async () => {
     accountId: "fixture-account",
     emailId: "selected",
   });
+});
+
+afterEach(() => vi.useRealTimers());
+
+it("clears an old status error after polling recovers without requesting generation", async () => {
+  vi.useFakeTimers();
+  vi.mocked(summarizeEmail).mockRejectedValueOnce(
+    new Error("synthetic failure"),
+  );
+  render(<EmailSummary accountId="a" emailId="e" />);
+  await act(async () => {});
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Cannot read summary status.",
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000);
+  });
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(
+    vi
+      .mocked(summarizeEmail)
+      .mock.calls.every(([request]) => request.operation === "status"),
+  ).toBe(true);
 });

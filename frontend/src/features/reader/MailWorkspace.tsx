@@ -27,12 +27,14 @@ export function MailWorkspace({
   } | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const list = useRef<HTMLDivElement | null>(null);
+  const scroll = useRef(0);
   const open = (
     source: string,
     accountId: string,
     emailId: string,
     button: HTMLButtonElement,
   ) => {
+    scroll.current = window.scrollY;
     trigger.current = button;
     setSelection({ accountId, emailId, source, page });
   };
@@ -87,8 +89,10 @@ export function MailWorkspace({
             onBack={() => {
               setSelection(null);
               requestAnimationFrame(() => {
-                if (trigger.current?.isConnected) trigger.current.focus();
-                else list.current?.focus();
+                if (trigger.current?.isConnected)
+                  trigger.current.focus({ preventScroll: true });
+                else list.current?.focus({ preventScroll: true });
+                window.scrollTo(0, scroll.current);
               });
             }}
           />

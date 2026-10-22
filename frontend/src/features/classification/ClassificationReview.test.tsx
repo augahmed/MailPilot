@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ClassificationReview } from "./ClassificationReview";
 import {
@@ -24,6 +30,47 @@ const before: ClassificationPage = {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(reviewClassifications).mockResolvedValue(before);
+});
+it("disables Reset To Default without a label and clears a chosen category after reset", async () => {
+  const fixture =
+    await import("../../../../contracts/classification-local-v1.json");
+  const row = fixture.default.response.rows[0]!;
+  vi.mocked(reviewClassifications).mockResolvedValue({
+    ...fixture.default.response,
+    rows: [
+      {
+        ...row,
+        state: "unclassified",
+        predictions: [],
+        semantic: { ...row.semantic, assigned: [], scores: [] },
+      },
+    ],
+  } as ClassificationPage);
+  render(<ClassificationReview />);
+  const group = await screen.findByRole("group", {
+    name: `Local category override for ${row.subject}`,
+  });
+  const reset = within(group).getByRole("button", { name: "Reset To Default" });
+  expect(reset).toBeDisabled();
+  fireEvent.change(within(group).getByRole("combobox"), {
+    target: { value: "personal" },
+  });
+  expect(reset).toBeEnabled();
+  fireEvent.click(reset);
+  await waitFor(() =>
+    expect(reviewClassifications).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        operation: "auto",
+        emailId: row.email_id,
+        categoryId: "",
+        revision: row.readerRevision,
+      }),
+    ),
+  );
+  await waitFor(() =>
+    expect(within(group).getByRole("combobox")).toHaveValue(""),
+  );
+  expect(reset).toBeDisabled();
 });
 it("loads saved reviews without classifying and runs only the requested cached page", async () => {
   render(<ClassificationReview />);
@@ -72,7 +119,7 @@ it("shows partial failure counts and preserves successful suggestions", async ()
   fireEvent.click(screen.getByRole("button", { name: "Classify this page" }));
   await screen.findByText("Rule strength 0.60");
   expect(screen.getByRole("status")).toHaveTextContent(
-    "1 cached emails. 1 errors.",
+    "1 cached email. 1 error.",
   );
   expect(
     screen.getByText("Could not load or save a local assessment. Try again."),

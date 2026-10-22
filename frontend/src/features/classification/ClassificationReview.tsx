@@ -115,9 +115,11 @@ export function ClassificationReview() {
         setPage(null);
       } else {
         setPage(result);
+        if (operation === "auto" && row)
+          setChoices((current) => ({ ...current, [row.email_id]: "" }));
         if (operation === "run")
           setMessage(
-            `Saved assessments for ${result.processed} cached emails. ${result.errors} errors.`,
+            `Saved assessments for ${result.processed} cached ${result.processed === 1 ? "email" : "emails"}. ${result.errors} ${result.errors === 1 ? "error" : "errors"}.`,
           );
       }
     } catch {
@@ -171,11 +173,17 @@ export function ClassificationReview() {
           Leave unclassified
         </button>
         <button
-          className="secondary-button"
-          disabled={busy}
+          className="secondary-button classification-reset"
+          title="Clear the local category override and use automatic suggestions."
+          disabled={
+            busy ||
+            (!choices[row.email_id] &&
+              row.state !== "assigned" &&
+              !row.semantic?.assigned.length)
+          }
           onClick={() => void act("auto", row)}
         >
-          Use automatic suggestions
+          Reset To Default
         </button>
         <small>
           Local only. This does not confirm a training example or change Gmail.

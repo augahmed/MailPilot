@@ -169,7 +169,7 @@ export function EmailQuestion({
       aria-labelledby="email-question-heading"
       aria-busy={busy || running}
     >
-      <h2 id="email-question-heading">Ask about email</h2>
+      <h2 id="email-question-heading">Question & evidence</h2>
       <p>
         Retrieve source excerpts locally, inspect the exact material, then
         separately approve one AI request. The provider can answer from selected
@@ -206,44 +206,46 @@ export function EmailQuestion({
             disabled={busy}
           />
         </label>
-        <fieldset className="filter-grid">
+        <fieldset className="filter-group">
           <legend>Narrow the evidence (optional)</legend>
-          <label>
-            Evidence sender contains
-            <input
-              value={sender}
-              maxLength={200}
-              onChange={(e) => {
-                invalidate();
-                setSender(e.target.value);
-              }}
-              disabled={busy}
-            />
-          </label>
-          <label>
-            Evidence received on or after (UTC)
-            <input
-              type="date"
-              value={after}
-              onChange={(e) => {
-                invalidate();
-                setAfter(e.target.value);
-              }}
-              disabled={busy}
-            />
-          </label>
-          <label>
-            Evidence received before (UTC)
-            <input
-              type="date"
-              value={before}
-              onChange={(e) => {
-                invalidate();
-                setBefore(e.target.value);
-              }}
-              disabled={busy}
-            />
-          </label>
+          <div className="filter-grid">
+            <label>
+              Evidence sender contains
+              <input
+                value={sender}
+                maxLength={200}
+                onChange={(e) => {
+                  invalidate();
+                  setSender(e.target.value);
+                }}
+                disabled={busy}
+              />
+            </label>
+            <label>
+              Evidence received on or after (UTC)
+              <input
+                type="date"
+                value={after}
+                onChange={(e) => {
+                  invalidate();
+                  setAfter(e.target.value);
+                }}
+                disabled={busy}
+              />
+            </label>
+            <label>
+              Evidence received before (UTC)
+              <input
+                type="date"
+                value={before}
+                onChange={(e) => {
+                  invalidate();
+                  setBefore(e.target.value);
+                }}
+                disabled={busy}
+              />
+            </label>
+          </div>
         </fieldset>
         <button disabled={busy || running || !account || !question.trim()}>
           Retrieve evidence locally
