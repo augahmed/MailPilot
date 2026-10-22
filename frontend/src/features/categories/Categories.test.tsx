@@ -29,8 +29,8 @@ beforeEach(() => {
 });
 it("creates and edits descriptions and toggles enabled state", async () => {
   render(<Categories />);
-  await screen.findByRole("button", { name: "Edit School" });
-  fireEvent.click(screen.getByRole("button", { name: "Create category" }));
+  fireEvent.click(await screen.findByText("School"));
+  fireEvent.click(screen.getByRole("button", { name: "Add Category" }));
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Travel" },
   });
@@ -79,7 +79,7 @@ it("creates and edits descriptions and toggles enabled state", async () => {
 });
 it("confirms deletion and explains reference conflicts without hiding the category", async () => {
   render(<Categories />);
-  await screen.findByRole("button", { name: "Delete School" });
+  fireEvent.click(await screen.findByText("School"));
   fireEvent.click(screen.getByRole("button", { name: "Delete School" }));
   expect(manageCategories).toHaveBeenCalledTimes(1);
   vi.mocked(manageCategories).mockResolvedValue({ ...page, code: "conflict" });
@@ -94,7 +94,7 @@ it("confirms deletion and explains reference conflicts without hiding the catego
 });
 it("clears categories when the account is no longer authorized", async () => {
   render(<Categories />);
-  await screen.findByRole("button", { name: "Edit School" });
+  fireEvent.click(await screen.findByText("School"));
   vi.mocked(manageCategories).mockResolvedValue({
     accountId: "",
     rows: [],
@@ -150,4 +150,24 @@ it("ignores a late initial list after a newer request denies account access", as
   expect(
     screen.queryByRole("button", { name: "Edit School" }),
   ).not.toBeInTheDocument();
+});
+
+it("starts collapsed and reveals category editing and example controls only when expanded", async () => {
+  render(<Categories />);
+  const summary = await screen.findByText("School");
+  expect(screen.getByText("Classes and academic deadlines.")).not.toBeVisible();
+  expect(screen.getByRole("button", { name: "Edit School" })).not.toBeVisible();
+  fireEvent.click(summary);
+  expect(screen.getByText("Classes and academic deadlines.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Edit School" })).toBeVisible();
+  expect(
+    screen.getByRole("button", {
+      name: "Show examples & local profile for School",
+    }),
+  ).toBeVisible();
+  fireEvent.click(summary);
+  expect(
+    screen.getByRole("button", { name: "Delete School" }),
+  ).not.toBeVisible();
+  expect(manageCategories).toHaveBeenCalledTimes(1);
 });

@@ -71,8 +71,13 @@ feature cards open the existing index, search, evidence questions, categories/re
 and organization workflows in a shared shell. Visited pages retain local state;
 unvisited feature pages do not poll. The account dropdown provides connection
 checks, confirmed disconnect, optional AI settings and historical recovery. The
-reader remains shared across dashboard, search and evidence questions. No new
-backend authorization or IPC boundary is introduced.
+reader remains shared across dashboard, search and evidence questions. Categories
+and classification share a page with collapsed category editors and per-email
+review cards. Search loads the complete paginated category source on entry, and
+Ask shows the existing provider settings above its independently approved question
+workflow. Organization presents selection, read-only/fresh previews, confirmed
+application and recorded outcomes/undo in four steps; unresolved outcomes remain
+visible. No new backend authorization or IPC boundary is introduced.
 
 Introduce only the small embedding/retrieval components required by an implemented
 slice. Transport/adapters depend on application/domain contracts; no service locator,

@@ -103,18 +103,19 @@ export function LocalEmailIndex() {
   const disabled = busy || !status?.accountId;
   return (
     <section
-      className="status-card local-email-index"
+      className="status-card feature-panel local-email-index"
       aria-labelledby="local-index-heading"
       aria-busy={busy}
     >
       <h2 id="local-index-heading">Local Email Index</h2>
       <p>
-        Index all eligible cached messages, enabled category definitions and
-        local assessments on this device using the bundled CPU model (90 MB on
-        disk; several hundred MB of memory once loaded). No email is sent to an
-        AI provider, and no Gmail fetch is performed.
+        Indexing divides cached emails into searchable text chunks and generates
+        local embeddings — numerical representations that help search match
+        meaning. It also prepares enabled categories and local classification
+        suggestions. All processing happens on this device. Indexing does not
+        fetch Gmail or send email to an external AI provider.
       </p>
-      <p role="status" aria-live="polite">
+      <p className="feature-status" role="status" aria-live="polite">
         {error
           ? "Could not read local index status."
           : status
@@ -125,24 +126,24 @@ export function LocalEmailIndex() {
         <>
           <dl className="index-counts">
             <div>
-              <dt>Eligible messages</dt>
+              <dt>Cached emails eligible for indexing</dt>
               <dd>{status.eligibleMessages}</dd>
             </div>
             <div>
-              <dt>Indexed messages</dt>
+              <dt>Indexed emails</dt>
               <dd>{status.indexedMessages}</dd>
             </div>
             <div>
-              <dt>Chunks created</dt>
+              <dt>Searchable text chunks</dt>
               <dd>{status.chunksCreated}</dd>
             </div>
             <div>
-              <dt>Embeddings generated</dt>
+              <dt>Local embeddings</dt>
               <dd>{status.embeddingsGenerated}</dd>
             </div>
           </dl>
           <progress
-            aria-label="Messages with all available chunks embedded"
+            aria-label="Emails with all available text indexed"
             value={status.indexedMessages}
             max={Math.max(1, status.eligibleMessages)}
           />
@@ -151,16 +152,24 @@ export function LocalEmailIndex() {
             partial · {status.failedMessages} failed · {status.pendingMessages}{" "}
             pending · {status.unavailableMessages} unavailable
           </p>
-          <p>
-            Category representations: {status.readyCategories} ready ·{" "}
-            {status.partialCategories} partial · {status.pendingCategories}{" "}
-            pending of {status.eligibleCategories} enabled.
+          <p className="help">
+            {status.indexedMessages} of {status.eligibleMessages} eligible
+            cached emails have all available text indexed. Cached mail is
+            readable before indexing finishes.
           </p>
-          <p>
-            Classification: {status.assessedMessages} assessed ·{" "}
-            {status.pendingAssessments} pending. Suggestions stay local until
-            separately reviewed.
-          </p>
+          <details className="technical-details">
+            <summary>Category and classification progress</summary>
+            <p>
+              Category search profiles: {status.readyCategories} ready ·{" "}
+              {status.partialCategories} partial · {status.pendingCategories}{" "}
+              pending of {status.eligibleCategories} enabled.
+            </p>
+            <p>
+              Classification: {status.assessedMessages} assessed ·{" "}
+              {status.pendingAssessments} pending. Suggestions stay local until
+              separately reviewed.
+            </p>
+          </details>
           {status.code && <p className="help">{messages[status.code]}</p>}
         </>
       )}
@@ -172,18 +181,21 @@ export function LocalEmailIndex() {
           {canResume ? "Resume indexing" : "Start indexing"}
         </button>
         <button
+          className="secondary-button"
           disabled={disabled || !running}
           onClick={() => void act("pause")}
         >
           Pause indexing
         </button>
         <button
+          className="secondary-button"
           disabled={disabled || (!running && !canResume)}
           onClick={() => void act("cancel")}
         >
           Cancel indexing
         </button>
         <button
+          className="secondary-button"
           disabled={disabled || running}
           onClick={() => void act("rebuild")}
         >
@@ -191,11 +203,19 @@ export function LocalEmailIndex() {
         </button>
       </div>
       <p className="help">
-        Saved progress survives pause, cancellation and restart. Rebuild
-        rechecks every cached message and reuses unchanged vectors. Counts
-        describe the current compatible index; partial bodies do not imply
-        complete email coverage.
+        Start indexes eligible cached mail. Pause stops after saving completed
+        work; Resume continues from saved progress. Cancel also retains
+        completed work. Rebuild rechecks every cached email and reuses unchanged
+        embeddings. Partial cached bodies cannot provide complete email
+        coverage.
       </p>
+      <details className="technical-details">
+        <summary>Local model resources</summary>
+        <p>
+          The bundled CPU model uses about 90 MB on disk and several hundred MB
+          of memory when loaded. No provider key is required.
+        </p>
+      </details>
     </section>
   );
 }

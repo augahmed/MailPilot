@@ -29,6 +29,7 @@ const idle: SearchResponse = {
 beforeEach(() => {
   vi.mocked(vectorSearch).mockReset();
   vi.mocked(vectorSearch).mockResolvedValue(idle);
+  vi.mocked(manageCategories).mockReset();
   vi.mocked(manageCategories).mockResolvedValue({
     accountId: idle.accountId,
     rows: [
@@ -55,14 +56,14 @@ it("only searches on submit and opens original revision-bound evidence", async (
     ).toBeDisabled(),
   );
   expect(vectorSearch).toHaveBeenCalledExactlyOnceWith(searchControl("status"));
-  fireEvent.change(screen.getByLabelText("Search query"), {
+  fireEvent.change(screen.getByLabelText("Search"), {
     target: { value: "meeting paraphrase" },
   });
   fireEvent.change(screen.getByLabelText("Sender contains"), {
     target: { value: "Alex" },
   });
   await screen.findByRole("option", { name: "Finance" });
-  fireEvent.change(screen.getByLabelText("Assigned category"), {
+  fireEvent.change(screen.getByLabelText("Assigned categories"), {
     target: { value: "finance" },
   });
   vi.mocked(vectorSearch).mockResolvedValue(complete);
@@ -152,7 +153,7 @@ it("selects keyword mode and discloses fallback and partial index coverage", asy
   fireEvent.change(screen.getByLabelText("Search mode"), {
     target: { value: "keyword" },
   });
-  fireEvent.change(screen.getByLabelText("Search query"), {
+  fireEvent.change(screen.getByLabelText("Search"), {
     target: { value: "Q7M4ZP" },
   });
   vi.mocked(vectorSearch).mockResolvedValue({
@@ -171,4 +172,130 @@ it("selects keyword mode and discloses fallback and partial index coverage", asy
   );
   expect(screen.getByText(/Semantic index is partial/)).toBeVisible();
   expect(screen.getByText(/Keyword coverage: 7 of 8/)).toBeVisible();
+});
+
+const allCategories = Array.from({ length: 12 }, (_, index) => ({
+  id: `category-${index}`,
+  name: `Category ${index + 1}`,
+  description: "Synthetic category",
+  enabled: index !== 11,
+  created_at: 0,
+  updated_at: 0,
+}));
+
+it("loads every category page, including disabled categories that may still have assignments", async () => {
+  vi.mocked(manageCategories).mockImplementation(async (request) => ({
+    accountId: idle.accountId,
+    rows: allCategories.slice(request.offset ?? 0, (request.offset ?? 0) + 5),
+    hasMore: (request.offset ?? 0) + 5 < allCategories.length,
+  }));
+  render(<SemanticSearch onOpen={vi.fn()} onEvidence={vi.fn()} />);
+  await screen.findByRole("option", { name: "Category 12 (disabled)" });
+  expect(
+    screen.getByLabelText("Assigned categories").querySelectorAll("option"),
+  ).toHaveLength(13);
+  expect(
+    vi.mocked(manageCategories).mock.calls.map(([request]) => request.offset),
+  ).toEqual([0, 5, 10]);
+  expect(vectorSearch).toHaveBeenCalledExactlyOnceWith(searchControl("status"));
+  fireEvent.change(screen.getByLabelText("Assigned categories"), {
+    target: { value: "category-11" },
+  });
+  fireEvent.change(screen.getByLabelText("Search"), {
+    target: { value: "invoice" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
+  await waitFor(() =>
+    expect(vectorSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "start",
+        filter: expect.objectContaining({ categoryId: "category-11" }),
+      }),
+    ),
+  );
+});
+
+it("discards partial category menus on a later-page error and lets the user retry", async () => {
+  vi.mocked(manageCategories).mockImplementation(async (request) => {
+    if (request.offset === 5) throw new Error("Synthetic storage failure");
+    return {
+      accountId: idle.accountId,
+      rows: allCategories.slice(0, 5),
+      hasMore: true,
+    };
+  });
+  render(<SemanticSearch onOpen={vi.fn()} onEvidence={vi.fn()} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Could not load all categories",
+  );
+  expect(screen.getByLabelText("Assigned categories")).toBeDisabled();
+  expect(screen.queryByRole("option", { name: "Category 1" })).toBeNull();
+  vi.mocked(manageCategories).mockResolvedValue({
+    accountId: idle.accountId,
+    rows: allCategories.slice(0, 1),
+    hasMore: false,
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Refresh category options" }),
+  );
+  expect(
+    await screen.findByRole("option", { name: "Category 1" }),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Assigned categories")).toBeEnabled();
+});
+
+it("ignores category results from a revoked session", async () => {
+  vi.useFakeTimers();
+  let finish!: (value: Awaited<ReturnType<typeof manageCategories>>) => void;
+  vi.mocked(manageCategories).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  render(<SemanticSearch onOpen={vi.fn()} onEvidence={vi.fn()} />);
+  await act(async () => {});
+  vi.mocked(vectorSearch).mockResolvedValue({
+    ...idle,
+    accountId: "",
+    code: "unauthorized",
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  await act(async () => {
+    finish({
+      accountId: idle.accountId,
+      rows: allCategories.slice(0, 5),
+      hasMore: true,
+    });
+  });
+  expect(screen.queryByRole("option", { name: "Category 1" })).toBeNull();
+  expect(manageCategories).toHaveBeenCalledTimes(1);
+});
+
+it("refreshes categories on return from category editing while preserving the search input", async () => {
+  const view = render(
+    <SemanticSearch onOpen={vi.fn()} onEvidence={vi.fn()} active />,
+  );
+  await screen.findByRole("option", { name: "Finance" });
+  fireEvent.change(screen.getByLabelText("Search"), {
+    target: { value: "saved search" },
+  });
+  view.rerender(
+    <SemanticSearch onOpen={vi.fn()} onEvidence={vi.fn()} active={false} />,
+  );
+  vi.mocked(manageCategories).mockResolvedValue({
+    accountId: idle.accountId,
+    rows: allCategories.slice(0, 1),
+    hasMore: false,
+  });
+  view.rerender(
+    <SemanticSearch onOpen={vi.fn()} onEvidence={vi.fn()} active />,
+  );
+  expect(
+    await screen.findByRole("option", { name: "Category 1" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Finance" })).toBeNull();
+  expect(screen.getByLabelText("Search")).toHaveValue("saved search");
+  expect(vectorSearch).toHaveBeenCalledExactlyOnceWith(searchControl("status"));
 });

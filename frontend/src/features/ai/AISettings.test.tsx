@@ -59,3 +59,23 @@ it("uses the selected registered provider and never puts keys in response state"
     }),
   );
 });
+
+it("keeps provider disabling functional and clears any unsubmitted key", async () => {
+  render(<AISettings />);
+  const key = await screen.findByLabelText("Provider API key");
+  fireEvent.change(key, { target: { value: "unsubmitted-synthetic-secret" } });
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Disable AI and remove selected provider key",
+    }),
+  );
+  expect(key).toHaveValue("");
+  expect(key).toHaveAttribute("type", "password");
+  await waitFor(() =>
+    expect(manageAISettings).toHaveBeenCalledWith({
+      operation: "disable",
+      accountId: "fixture-account",
+    }),
+  );
+  expect(screen.queryByText("unsubmitted-synthetic-secret")).toBeNull();
+});

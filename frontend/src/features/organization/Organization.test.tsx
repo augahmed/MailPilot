@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { Organization } from "./Organization";
@@ -53,7 +54,9 @@ it("requires selection, defaults to dry run, and never applies a dry run", async
   render(<Organization />);
   await screen.findByText("Your receipt");
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Run Dry Run" })).toBeDisabled(),
+    expect(
+      screen.getByRole("button", { name: "Preview label changes (Dry Run)" }),
+    ).toBeDisabled(),
   );
   fireEvent.click(
     screen.getByRole("checkbox", { name: "Select Your receipt" }),
@@ -65,7 +68,9 @@ it("requires selection, defaults to dry run, and never applies a dry run", async
     state: "dry_run",
     dryRun: true,
   });
-  fireEvent.click(screen.getByRole("button", { name: "Run Dry Run" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Preview label changes (Dry Run)" }),
+  );
   await screen.findByText(/Dry Run complete/);
   expect(
     screen.queryByRole("button", { name: "Apply selected labels" }),
@@ -83,8 +88,8 @@ it("requires selection, defaults to dry run, and never applies a dry run", async
   ).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Back to selection" }));
   expect(
-    screen.getByRole("checkbox", { name: "Dry Run (read only)" }),
-  ).toBeChecked();
+    screen.getByRole("button", { name: "Preview label changes (Dry Run)" }),
+  ).toBeEnabled();
 });
 it("shows exact operations and requires explicit confirmation for application", async () => {
   render(<Organization />);
@@ -92,15 +97,12 @@ it("shows exact operations and requires explicit confirmation for application", 
   fireEvent.click(
     screen.getByRole("checkbox", { name: "Select Your receipt" }),
   );
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "Dry Run (read only)" }),
-  );
   vi.mocked(organize).mockResolvedValue({
     ...preview,
     expiresAt: Date.now() + 300000,
   });
   fireEvent.click(
-    screen.getByRole("button", { name: "Generate apply preview" }),
+    screen.getByRole("button", { name: "Prepare apply preview" }),
   );
   const apply = await screen.findByRole("button", {
     name: "Apply selected labels",
@@ -121,7 +123,11 @@ it("shows exact operations and requires explicit confirmation for application", 
   expect(apply).toBeEnabled();
   vi.mocked(organize).mockResolvedValue({ ...preview, state: "applied" });
   fireEvent.click(apply);
-  await screen.findByText("Batch: applied");
+  expect(organize).not.toHaveBeenCalledWith(
+    expect.objectContaining({ operation: "apply" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and apply" }));
+  await screen.findByText("Changes applied");
   expect(organize).toHaveBeenLastCalledWith(
     expect.objectContaining({
       operation: "apply",
@@ -243,10 +249,7 @@ it("ignores an older initial status after the user reviews a newer preview", asy
     screen.getByRole("checkbox", { name: "Select Your receipt" }),
   );
   fireEvent.click(
-    screen.getByRole("checkbox", { name: "Dry Run (read only)" }),
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Generate apply preview" }),
+    screen.getByRole("button", { name: "Prepare apply preview" }),
   );
   await screen.findByText("New reviewed preview");
   fireEvent.click(
@@ -262,6 +265,7 @@ it("ignores an older initial status after the user reviews a newer preview", asy
   fireEvent.click(
     screen.getByRole("button", { name: "Apply selected labels" }),
   );
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and apply" }));
   await waitFor(() =>
     expect(organize).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -293,7 +297,9 @@ it("reports cancellation transport failures instead of rejecting silently", asyn
   fireEvent.click(
     screen.getByRole("checkbox", { name: "Select Your receipt" }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Run Dry Run" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Preview label changes (Dry Run)" }),
+  );
   fireEvent.click(
     await screen.findByRole("button", { name: "Stop organization" }),
   );
@@ -370,17 +376,13 @@ it("reviews phishing scores before a confirmed label-only action and defaults to
     screen.getByText("+25 Reply-To and sender use different sites"),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("checkbox", { name: "Dry Run (read only)" }),
-  ).toBeChecked();
-  expect(screen.getByRole("button", { name: "Run Dry Run" })).toBeDisabled();
+    screen.getByRole("button", { name: "Preview label changes (Dry Run)" }),
+  ).toBeDisabled();
   fireEvent.click(
     screen.getByRole("checkbox", { name: "Select Your receipt" }),
   );
   fireEvent.click(
-    screen.getByRole("checkbox", { name: "Dry Run (read only)" }),
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Generate apply preview" }),
+    screen.getByRole("button", { name: "Prepare apply preview" }),
   );
   const apply = await screen.findByRole("button", {
     name: "Apply selected labels",
@@ -401,7 +403,11 @@ it("reviews phishing scores before a confirmed label-only action and defaults to
     }),
   );
   fireEvent.click(apply);
-  await screen.findByText("Batch: applied");
+  expect(organize).not.toHaveBeenCalledWith(
+    expect.objectContaining({ operation: "apply" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and apply" }));
+  await screen.findByText("Changes applied");
   expect(organize).toHaveBeenLastCalledWith(
     expect.objectContaining({
       operation: "apply",
@@ -409,4 +415,245 @@ it("reviews phishing scores before a confirmed label-only action and defaults to
       digest: riskPreview.digest,
     }),
   );
+});
+
+it("moves from selection through read-only preview, fresh approval, results, and a separately confirmed undo", async () => {
+  const fresh = { ...preview, expiresAt: Date.now() + 300000 };
+  const undo = {
+    ...fresh,
+    id: "undo-action",
+    digest: "f".repeat(64),
+    kind: "undo" as const,
+    steps: [{ ...preview.steps[1]!, kind: "remove" as const }],
+    rows: preview.rows.map((row) => ({ ...row, change: "remove" as const })),
+  };
+  vi.mocked(organize).mockImplementation(async (request) => {
+    if (request.operation === "list") return page;
+    if (request.operation === "dry_run")
+      return { ...fresh, state: "dry_run", id: "", digest: "", dryRun: true };
+    if (request.operation === "preview") return fresh;
+    if (request.operation === "undo_preview") return undo;
+    if (request.operation === "apply")
+      return {
+        ...(request.actionId === undo.id ? undo : fresh),
+        state: "applied",
+      };
+    return idle;
+  });
+  render(<Organization />);
+  await screen.findByText("Your receipt");
+  const progress = screen.getByRole("list", { name: "Organization progress" });
+  const activeStep = (name: string) =>
+    expect(within(progress).getByText(name).closest("li")).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
+  activeStep("Select emails");
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "Select Your receipt" }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Preview label changes (Dry Run)" }),
+  );
+  await screen.findByText(/Dry Run complete/);
+  activeStep("Preview labels");
+  expect(
+    screen.queryByRole("button", { name: "Apply selected labels" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Prepare apply preview" }),
+  );
+  await screen.findByRole("button", { name: "Apply selected labels" });
+  activeStep("Confirm changes");
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "I confirm these Gmail label changes.",
+    }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Apply selected labels" }),
+  );
+  const dialog = screen.getByRole("dialog", {
+    name: "Apply these Gmail label changes?",
+  });
+  expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(organize).not.toHaveBeenCalledWith(
+    expect.objectContaining({ operation: "apply" }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Apply selected labels" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and apply" }));
+  await screen.findByText("Changes applied");
+  activeStep("Results & undo");
+  expect(screen.getByRole("list", { name: "Recorded outcomes" })).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Preview undo last batch" }),
+  );
+  await screen.findByRole("button", { name: "Confirm undo" });
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "I confirm these undo changes." }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Confirm undo" }));
+  expect(
+    screen.getByRole("dialog", { name: "Undo these Gmail label additions?" }),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and undo" }));
+  await waitFor(() =>
+    expect(organize).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        operation: "apply",
+        actionId: "undo-action",
+        digest: undo.digest,
+        emailIds: [],
+      }),
+    ),
+  );
+});
+
+it("closes a confirmation dialog when its preview expires without dispatching changes", async () => {
+  vi.useFakeTimers();
+  try {
+    const fresh = { ...preview, expiresAt: Date.now() + 1500 };
+    vi.mocked(organize).mockImplementation(async (request) =>
+      request.operation === "list"
+        ? page
+        : request.operation === "preview"
+          ? fresh
+          : idle,
+    );
+    render(<Organization />);
+    await act(async () => {});
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select Your receipt" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Prepare apply preview" }),
+    );
+    await act(async () => {});
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "I confirm these Gmail label changes.",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply selected labels" }),
+    );
+    expect(screen.getByRole("dialog")).toBeVisible();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Apply selected labels" }),
+    ).toBeDisabled();
+    expect(screen.getByText(/This preview has expired/)).toBeVisible();
+    expect(organize).not.toHaveBeenCalledWith(
+      expect.objectContaining({ operation: "apply" }),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("keeps uncertain outcomes visible and prevents selection resets from hiding them", async () => {
+  vi.mocked(organize).mockImplementation(async (request) =>
+    request.operation === "list"
+      ? page
+      : {
+          ...preview,
+          state: "partial",
+          steps: preview.steps.map((operation) => ({
+            ...operation,
+            state: "uncertain",
+          })),
+        },
+  );
+  render(<Organization />);
+  await screen.findByRole("heading", {
+    name: "Check interrupted changes before continuing",
+  });
+  expect(screen.getByRole("list", { name: "Recorded outcomes" })).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Refresh organization" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("combobox", { name: "Review suggestions" }),
+  ).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "Back to selection" }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Start another selection" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reconcile interrupted batch" }),
+  );
+  await waitFor(() =>
+    expect(organize).toHaveBeenLastCalledWith(
+      expect.objectContaining({ operation: "reconcile" }),
+    ),
+  );
+  expect(organize).not.toHaveBeenCalledWith(
+    expect.objectContaining({ operation: "apply" }),
+  );
+});
+
+it("revokes an open confirmation when outcomes become uncertain and requires opening a new dialog after recovery", async () => {
+  vi.useFakeTimers();
+  try {
+    const fresh = { ...preview, expiresAt: Date.now() + 300000 };
+    vi.mocked(organize).mockImplementation(async (request) =>
+      request.operation === "list"
+        ? page
+        : request.operation === "preview"
+          ? fresh
+          : idle,
+    );
+    render(<Organization />);
+    await act(async () => {});
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select Your receipt" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Prepare apply preview" }),
+    );
+    await act(async () => {});
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "I confirm these Gmail label changes.",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply selected labels" }),
+    );
+    expect(screen.getByRole("dialog")).toBeVisible();
+    vi.mocked(organize).mockResolvedValue({ ...fresh, state: "uncertain" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("heading", {
+        name: "Check interrupted changes before continuing",
+      }),
+    ).toBeVisible();
+    vi.mocked(organize).mockResolvedValue(fresh);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh batch status" }),
+    );
+    await act(async () => {});
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "I confirm these Gmail label changes.",
+      }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(organize).not.toHaveBeenCalledWith(
+      expect.objectContaining({ operation: "apply" }),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });

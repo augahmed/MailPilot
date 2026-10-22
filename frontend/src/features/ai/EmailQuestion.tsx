@@ -165,7 +165,7 @@ export function EmailQuestion({
   };
   return (
     <section
-      className="status-card email-question"
+      className="status-card feature-panel email-question"
       aria-labelledby="email-question-heading"
       aria-busy={busy || running}
     >
@@ -192,10 +192,11 @@ export function EmailQuestion({
             );
         }}
       >
-        <label>
+        <label className="question-field">
           Email question
           <textarea
             required
+            placeholder="What would you like to find out from your cached email?"
             maxLength={2048}
             value={question}
             onChange={(e) => {
@@ -205,47 +206,50 @@ export function EmailQuestion({
             disabled={busy}
           />
         </label>
-        <label>
-          Evidence sender contains
-          <input
-            value={sender}
-            maxLength={200}
-            onChange={(e) => {
-              invalidate();
-              setSender(e.target.value);
-            }}
-            disabled={busy}
-          />
-        </label>
-        <label>
-          Evidence received on or after (UTC)
-          <input
-            type="date"
-            value={after}
-            onChange={(e) => {
-              invalidate();
-              setAfter(e.target.value);
-            }}
-            disabled={busy}
-          />
-        </label>
-        <label>
-          Evidence received before (UTC)
-          <input
-            type="date"
-            value={before}
-            onChange={(e) => {
-              invalidate();
-              setBefore(e.target.value);
-            }}
-            disabled={busy}
-          />
-        </label>
+        <fieldset className="filter-grid">
+          <legend>Narrow the evidence (optional)</legend>
+          <label>
+            Evidence sender contains
+            <input
+              value={sender}
+              maxLength={200}
+              onChange={(e) => {
+                invalidate();
+                setSender(e.target.value);
+              }}
+              disabled={busy}
+            />
+          </label>
+          <label>
+            Evidence received on or after (UTC)
+            <input
+              type="date"
+              value={after}
+              onChange={(e) => {
+                invalidate();
+                setAfter(e.target.value);
+              }}
+              disabled={busy}
+            />
+          </label>
+          <label>
+            Evidence received before (UTC)
+            <input
+              type="date"
+              value={before}
+              onChange={(e) => {
+                invalidate();
+                setBefore(e.target.value);
+              }}
+              disabled={busy}
+            />
+          </label>
+        </fieldset>
         <button disabled={busy || running || !account || !question.trim()}>
           Retrieve evidence locally
         </button>
       </form>
-      <p role="status">
+      <p className="feature-status" role="status">
         {error ||
           (view?.code
             ? (codes[view.code] ??
@@ -299,7 +303,7 @@ export function EmailQuestion({
             </p>
           )}
           <h3>{preview ? "Choose source excerpts" : "Source excerpts"}</h3>
-          <ol>
+          <ol className="email-results source-results">
             {view.evidence.map((source) => (
               <li key={source.sourceId}>
                 {preview && (
@@ -403,7 +407,7 @@ export function EmailQuestion({
         </>
       )}
       {view?.state === "completed" && view.result && (
-        <div>
+        <div className="answer-card">
           <h3>
             {view.result.outcome === "insufficient"
               ? "Insufficient evidence"

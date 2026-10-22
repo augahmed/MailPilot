@@ -4,8 +4,7 @@ import { AISettings } from "../features/ai/AISettings";
 import { AIMaintenance } from "../features/replies/AIMaintenance";
 import { MailWorkspace } from "../features/reader/MailWorkspace";
 import { Organization } from "../features/organization/Organization";
-import { ClassificationReview } from "../features/classification/ClassificationReview";
-import { Categories } from "../features/categories/Categories";
+import { CategoriesAndClassification } from "../features/categories/CategoriesAndClassification";
 import { GmailConnection } from "../features/accounts/GmailConnection";
 import { AccountDropdown } from "../features/accounts/AccountDropdown";
 import { useGmailConnection } from "../features/accounts/useGmailConnection";
@@ -110,6 +109,11 @@ function AuthorizedApp({
             </button>
           ))}
         </nav>
+        {(visited.has("ask") || visited.has("settings")) && (
+          <div hidden={page !== "ask" && page !== "settings"}>
+            <AISettings />
+          </div>
+        )}
         <MailWorkspace connectionRevision={0} page={page} visited={visited} />
         {visited.has("index") && (
           <div hidden={page !== "index"}>
@@ -118,18 +122,12 @@ function AuthorizedApp({
         )}
         {visited.has("categories") && (
           <div hidden={page !== "categories"}>
-            <Categories />
-            <ClassificationReview />
+            <CategoriesAndClassification />
           </div>
         )}
         {visited.has("organization") && (
           <div hidden={page !== "organization"}>
             <Organization />
-          </div>
-        )}
-        {visited.has("settings") && (
-          <div hidden={page !== "settings"}>
-            <AISettings />
           </div>
         )}
         {visited.has("recovery") && (

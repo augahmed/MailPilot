@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   reviewClassifications,
   type ClassificationPage,
@@ -136,6 +136,7 @@ export function ClassificationReview() {
     if (!page?.categoryOptions || !row.readerRevision) return null;
     return (
       <div
+        className="review-actions"
         role="group"
         aria-label={`Local category override for ${row.subject || row.email_id}`}
       >
@@ -162,10 +163,18 @@ export function ClassificationReview() {
         >
           Assign primary category
         </button>
-        <button disabled={busy} onClick={() => void act("unclassified", row)}>
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => void act("unclassified", row)}
+        >
           Leave unclassified
         </button>
-        <button disabled={busy} onClick={() => void act("auto", row)}>
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => void act("auto", row)}
+        >
           Use automatic suggestions
         </button>
         <small>
@@ -208,7 +217,7 @@ export function ClassificationReview() {
     );
   return (
     <section
-      className="status-card classification-review"
+      className="status-card feature-panel classification-review"
       aria-labelledby="classification-heading"
     >
       <h2 ref={heading} tabIndex={-1} id="classification-heading">
@@ -220,16 +229,20 @@ export function ClassificationReview() {
         unclassified; closely scoring categories are suggested together.
       </p>
       <p className="help">
-        Cosine similarity and rule strength are evidence scores, not calibrated
-        probabilities. Reviewing saves suggestions locally and does not assign
-        categories or change Gmail.
+        Suggestions and corrections stay local. Similarity and rule strength are
+        evidence scores, not probabilities. Gmail labels require a separate
+        organization preview and confirmation.
       </p>
-      <div role="status" aria-live="polite">
+      <div className="feature-status" role="status" aria-live="polite">
         {busy ? "Reviewing cached mail…" : message}
       </div>
       {error && <p role="alert">{error}</p>}
       <div className="account-actions">
-        <button disabled={busy} onClick={() => void act("list")}>
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => void act("list")}
+        >
           Refresh reviews
         </button>
         <button
@@ -244,115 +257,105 @@ export function ClassificationReview() {
         <p>No cached emails on this page. Sync your Inbox to download mail.</p>
       )}
       {page && page.rows.length > 0 && (
-        <div className="mail-table">
-          <table>
-            <caption>Predictions for cached emails</caption>
-            <thead>
-              <tr>
-                <th scope="col">Email</th>
-                <th scope="col">Predicted category</th>
-                <th scope="col">Evidence score</th>
-                <th scope="col">Reasons</th>
-              </tr>
-            </thead>
-            <tbody>
-              {page.rows.map((row) => (
-                <Fragment key={row.email_id}>
-                  {row.predictions.length > 0 ? (
-                    row.predictions.map((prediction, predictionIndex) => (
-                      <tr key={prediction.category_id}>
-                        <td>
-                          <strong>{row.subject || "(No subject)"}</strong>
-                          <small>{row.sender || "Unknown sender"}</small>
-                        </td>
-                        <td>
+        <div className="review-cards">
+          {page.rows.map((row, index) => (
+            <article
+              className="review-card"
+              key={row.email_id}
+              aria-labelledby={`review-email-${index}`}
+            >
+              <div className="review-card-header">
+                <div>
+                  <h3 id={`review-email-${index}`}>
+                    {row.subject || "(No subject)"}
+                  </h3>
+                  <p className="email-meta">{row.sender || "Unknown sender"}</p>
+                </div>
+                <span className="neutral-badge">{states[row.state]}</span>
+              </div>
+              {row.bodyState !== "complete" && (
+                <p className="help">
+                  {row.bodyState === "unavailable"
+                    ? "Body unavailable"
+                    : "Body completeness unknown"}
+                </p>
+              )}
+              {row.semantic?.assigned.length ? (
+                <p className="existing-assignment">
+                  Existing assignment:{" "}
+                  {row.semantic.assigned
+                    .map((category) => category.name)
+                    .join(", ")}
+                </p>
+              ) : null}
+              {row.predictions.length > 0 ? (
+                <ul className="prediction-list">
+                  {row.predictions.map((prediction) => (
+                    <li key={prediction.category_id}>
+                      <div className="prediction-heading">
+                        <h4>
                           {row.state === "assigned"
                             ? "Assigned: "
                             : row.state === "suggested"
                               ? "Suggested: "
                               : ""}
                           {prediction.category_name}
-                          <small>
-                            {row.assessment?.used_classifier ||
-                              prediction.classifier_name}{" "}
-                            · {prediction.classifier_version}
-                          </small>
-                        </td>
-                        <td>
+                        </h4>
+                        <span className="evidence-score">
                           {prediction.score_kind === "user_assignment"
                             ? "User assigned"
                             : `${prediction.score_kind === "cosine_similarity" ? "Cosine score" : "Rule strength"} ${prediction.confidence.toFixed(2)}`}
-                        </td>
-                        <td>
-                          <ul>
-                            {prediction.reasons.map((reason, index) => (
-                              <li key={index}>{reason}</li>
-                            ))}
-                          </ul>
-                          {row.semantic && predictionIndex === 0 && (
-                            <p>{row.assessment?.reason}</p>
-                          )}
-                          {row.predictions.length > 1 &&
-                            predictionIndex === 0 && (
-                              <p>
-                                Several categories are suggested. Choose a
-                                primary category below to prepare a Gmail label
-                                preview.
-                              </p>
-                            )}
-                          {predictionIndex === 0 && semanticEvidence(row)}
-                          {predictionIndex === 0 && controls(row)}
-                          <small>
-                            Reviewed{" "}
-                            <time
-                              dateTime={new Date(
-                                prediction.timestamp,
-                              ).toISOString()}
-                            >
-                              {new Date(prediction.timestamp).toLocaleString()}
-                            </time>
-                          </small>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td>
-                        <strong>{row.subject || "(No subject)"}</strong>
-                        <small>{row.sender || "Unknown sender"}</small>
-                        {row.bodyState !== "complete" && (
-                          <small>
-                            {row.bodyState === "unavailable"
-                              ? "Body unavailable"
-                              : "Body completeness unknown"}
-                          </small>
-                        )}
-                      </td>
-                      <td>
-                        {states[row.state]}
-                        {row.state === "assigned" &&
-                          row.semantic?.assigned.map((c) => (
-                            <small key={c.id}>{c.name}</small>
-                          ))}
-                      </td>
-                      <td>—</td>
-                      <td>
-                        {row.code
-                          ? errors[row.code]
-                          : row.state === "unclassified"
-                            ? row.assessment?.reason ||
-                              "No supported category has enough evidence."
-                            : row.assessment?.reason ||
-                              "Use Classify this page to run the local classifier."}
-                        {semanticEvidence(row)}
-                        {controls(row)}
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                        </span>
+                      </div>
+                      <ul className="prediction-reasons">
+                        {prediction.reasons.map((reason, i) => (
+                          <li key={i}>{reason}</li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>
+                  {row.code
+                    ? errors[row.code]
+                    : row.state === "unclassified"
+                      ? row.assessment?.reason ||
+                        "No supported category has enough evidence."
+                      : row.assessment?.reason ||
+                        "Use Classify this page to run the local classifier."}
+                </p>
+              )}
+              {row.predictions.length > 0 && row.assessment?.reason && (
+                <p>{row.assessment.reason}</p>
+              )}
+              {row.predictions.length > 1 && (
+                <p className="help">
+                  Several categories are suggested. Choose a primary category
+                  below to prepare a Gmail label preview.
+                </p>
+              )}
+              {semanticEvidence(row)}
+              {controls(row)}
+              {row.predictions.length > 0 && (
+                <details className="technical-details">
+                  <summary>Review details</summary>
+                  {row.predictions.map((prediction) => (
+                    <p key={prediction.category_id}>
+                      {row.assessment?.used_classifier ||
+                        prediction.classifier_name}{" "}
+                      · {prediction.classifier_version} · Reviewed{" "}
+                      <time
+                        dateTime={new Date(prediction.timestamp).toISOString()}
+                      >
+                        {new Date(prediction.timestamp).toLocaleString()}
+                      </time>
+                    </p>
+                  ))}
+                </details>
+              )}
+            </article>
+          ))}
         </div>
       )}
       <div className="account-actions">

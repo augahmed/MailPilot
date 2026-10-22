@@ -10,12 +10,14 @@ export function AISettings() {
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [unauthorized, setUnauthorized] = useState(false);
   const key = useRef<HTMLInputElement>(null);
   const live = useRef(false);
   const sequence = useRef(0);
   const sending = useRef(false);
   const identity = useRef("");
   const accept = (next: Settings) => {
+    setUnauthorized(next.code === "unauthorized");
     if (next.code === "unauthorized") {
       setView(null);
       setProvider("");
@@ -105,7 +107,10 @@ export function AISettings() {
     }
   };
   return (
-    <section className="status-card" aria-labelledby="ai-settings-heading">
+    <section
+      className="status-card feature-panel ai-settings"
+      aria-labelledby="ai-settings-heading"
+    >
       <h2 id="ai-settings-heading">Optional AI settings</h2>
       <p>
         AI can summarize selected mail or answer from selected excerpts after
@@ -113,7 +118,13 @@ export function AISettings() {
         analysis work with AI disabled.
       </p>
       {!view?.accountId ? (
-        <p>Connect Gmail to manage AI settings.</p>
+        <p role="status">
+          {unauthorized
+            ? "Connect Gmail to manage AI settings."
+            : error
+              ? "AI provider settings are unavailable."
+              : "Checking AI provider settings…"}
+        </p>
       ) : (
         <form
           onSubmit={(e) => {
@@ -121,57 +132,60 @@ export function AISettings() {
             void save();
           }}
         >
-          <label>
-            AI provider{" "}
-            <select
-              value={provider}
-              onChange={(e) => {
-                setProvider(e.target.value);
-                setModel("");
-                if (key.current) key.current.value = "";
-              }}
-              disabled={busy}
-            >
-              {view.providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            AI model{" "}
-            <input
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              maxLength={128}
-              required
-              disabled={busy}
-            />
-          </label>
-          <label>
-            Provider API key{" "}
-            <input
-              ref={key}
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={2048}
-              disabled={busy}
-            />
-          </label>
-          <p>
+          <div className="settings-grid">
+            <label>
+              AI provider{" "}
+              <select
+                value={provider}
+                onChange={(e) => {
+                  setProvider(e.target.value);
+                  setModel("");
+                  if (key.current) key.current.value = "";
+                }}
+                disabled={busy}
+              >
+                {view.providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              AI model{" "}
+              <input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                maxLength={128}
+                required
+                disabled={busy}
+              />
+            </label>
+            <label>
+              Provider API key{" "}
+              <input
+                ref={key}
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={2048}
+                disabled={busy}
+              />
+            </label>
+          </div>
+          <p className="help">
             Keys use OS credential storage, separately for each provider and
             account. Leave blank to use that provider’s saved key. Saving
             settings never uploads email.
           </p>
-          <p>
+          <p className="feature-status" role="status">
             AI: {view.enabled ? `${view.provider} / ${view.model}` : "Disabled"}
           </p>
           <button type="submit" disabled={busy || !provider}>
             Save AI settings
           </button>
           <button
+            className="secondary-button"
             type="button"
             disabled={busy || !view.enabled}
             onClick={() => {

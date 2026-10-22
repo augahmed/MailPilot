@@ -50,6 +50,7 @@ export function MailWorkspace({
         {visited.has("search") && (
           <div hidden={page !== "search"}>
             <SemanticSearch
+              active={page === "search"}
               onEvidence={setEvidence}
               onOpen={(accountId, emailId, button) =>
                 open("search", accountId, emailId, button)

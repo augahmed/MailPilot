@@ -28,8 +28,10 @@ describe("Local Email Index", () => {
     const start = await screen.findByRole("button", { name: "Start indexing" });
     await waitFor(() => expect(start).toBeEnabled());
     expect(manageIndex).toHaveBeenCalledExactlyOnceWith("status");
-    expect(screen.getByText("Eligible messages")).toBeInTheDocument();
-    expect(screen.getByText("Embeddings generated")).toBeInTheDocument();
+    expect(
+      screen.getByText("Cached emails eligible for indexing"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Local embeddings")).toBeInTheDocument();
     fireEvent.click(start);
     await waitFor(() =>
       expect(manageIndex).toHaveBeenCalledWith("start", "account-a"),

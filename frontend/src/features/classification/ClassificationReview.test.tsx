@@ -35,8 +35,8 @@ it("loads saved reviews without classifying and runs only the requested cached p
   expect(screen.getAllByText("Not reviewed yet")).toHaveLength(2);
   vi.mocked(reviewClassifications).mockResolvedValue(saved);
   fireEvent.click(screen.getByRole("button", { name: "Classify this page" }));
-  await screen.findByRole("cell", { name: "Rule strength 0.60" });
-  expect(screen.getByRole("cell", { name: /Receipts/ })).toBeInTheDocument();
+  await screen.findByText("Rule strength 0.60");
+  expect(screen.getByText("Receipts")).toBeInTheDocument();
   expect(
     screen.getByText(saved.rows[0]!.predictions[0]!.reasons[0]!),
   ).toBeInTheDocument();
@@ -70,7 +70,7 @@ it("shows partial failure counts and preserves successful suggestions", async ()
     ],
   });
   fireEvent.click(screen.getByRole("button", { name: "Classify this page" }));
-  await screen.findByRole("cell", { name: "Rule strength 0.60" });
+  await screen.findByText("Rule strength 0.60");
   expect(screen.getByRole("status")).toHaveTextContent(
     "1 cached emails. 1 errors.",
   );
@@ -190,9 +190,7 @@ it("shows semantic evidence and requires explicit local override actions", async
   render(<ClassificationReview />);
   await screen.findByText("Suggested: Jobs");
   expect(screen.getByText("Assigned: Personal")).toBeInTheDocument();
-  expect(
-    screen.getByRole("cell", { name: "Cosine score 0.72" }),
-  ).toBeInTheDocument();
+  expect(screen.getByText("Cosine score 0.72")).toBeInTheDocument();
   expect(screen.queryByText(/72%/)).not.toBeInTheDocument();
   expect(
     screen.getByText("Please choose a time for your technical interview."),

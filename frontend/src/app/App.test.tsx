@@ -317,3 +317,22 @@ it.each([
   expect(screen.queryByText("Cached message")).toBeNull();
   expect(screen.getByRole("button", { name: /Connect Gmail/ })).toBeEnabled();
 });
+
+it("shows the shared provider settings above email questions and reuses them on the settings page", async () => {
+  connected();
+  render(<App />);
+  await screen.findByRole("heading", { name: "Your Emails" });
+  fireEvent.click(screen.getByRole("button", { name: /Ask About Email/ }));
+  const settings = screen.getByText("Existing AI settings");
+  const questions = screen.getByText("Existing evidence questions");
+  expect(settings).toBeVisible();
+  expect(
+    settings.compareDocumentPosition(questions) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  fireEvent.click(account());
+  fireEvent.click(screen.getByRole("button", { name: "Optional AI settings" }));
+  expect(screen.getAllByText("Existing AI settings")).toEqual([settings]);
+  expect(settings).toBeVisible();
+  expect(questions).not.toBeVisible();
+});

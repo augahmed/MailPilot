@@ -100,89 +100,213 @@ export function Categories() {
     setDescription(category === "new" ? "" : category.description);
     setEnabled(category === "new" ? true : category.enabled);
   }
+  const editor = editing && page && (
+    <form
+      className="category-editor"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void run({
+          operation: "save",
+          accountId: page.accountId,
+          id: editing === "new" ? "" : editing.id,
+          name,
+          description,
+          enabled,
+        });
+      }}
+    >
+      <h3>{editing === "new" ? "New category" : "Edit category"}</h3>
+      <label>
+        Name
+        <input
+          autoFocus
+          required
+          maxLength={100}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          disabled={busy}
+        />
+      </label>
+      <label>
+        Description
+        <textarea
+          required
+          maxLength={1000}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          disabled={busy}
+        />
+      </label>
+      <p>
+        Describe the topics and types of messages that belong here, including
+        useful distinctions from other categories.
+      </p>
+      <label>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(event) => setEnabled(event.target.checked)}
+          disabled={busy}
+        />
+        Enabled
+      </label>
+      <button disabled={busy} type="submit">
+        Save category
+      </button>
+      <button
+        disabled={busy}
+        type="button"
+        onClick={() => {
+          setEditing(null);
+          heading.current?.focus();
+        }}
+      >
+        Cancel
+      </button>
+    </form>
+  );
   return (
-    <section className="status-card" aria-labelledby="categories-heading">
+    <section
+      className="status-card feature-panel categories-panel"
+      aria-labelledby="categories-heading"
+    >
       <h2 id="categories-heading" tabIndex={-1} ref={heading}>
         Categories
       </h2>
       <p>
-        Local categories for this account. Descriptions define what belongs in
-        each category. The starter rules use recognized default category names.
-        Renamed and custom categories have no automatic rule mapping.
+        Define where your cached email belongs. Expand a category to edit its
+        description, enable or disable it, or manage confirmed examples. All
+        changes here stay local until you separately review Gmail label changes.
       </p>
-      <p role="status">{busy ? "Working…" : message}</p>
-      <button
-        disabled={busy}
-        onClick={() =>
-          void run({
-            operation: "list",
-            accountId: page?.accountId ?? "",
-            offset,
-          })
-        }
-      >
-        Refresh categories
-      </button>
+      <p role="status" className="feature-status">
+        {busy ? "Working…" : message || (!page ? "Loading categories…" : "")}
+      </p>
+      <div className="account-actions">
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() =>
+            void run({
+              operation: "list",
+              accountId: page?.accountId ?? "",
+              offset,
+            })
+          }
+        >
+          Refresh categories
+        </button>
+        {page && (
+          <button disabled={busy} onClick={() => edit("new")}>
+            Add Category
+          </button>
+        )}
+      </div>
+      {editing === "new" && editor}
       {page && (
         <>
-          <button disabled={busy} onClick={() => edit("new")}>
-            Create category
-          </button>
           <ul className="category-list">
             {page.rows.map((category) => (
               <li key={category.id}>
-                <h3>
-                  {category.name} {category.enabled ? "" : "(disabled)"}
-                </h3>
-                <p>{category.description}</p>
-                <button disabled={busy} onClick={() => edit(category)}>
-                  Edit {category.name}
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    void run({
-                      operation: "save",
-                      accountId: page.accountId,
-                      id: category.id,
-                      name: category.name,
-                      description: category.description,
-                      enabled: !category.enabled,
-                    })
-                  }
-                >
-                  {category.enabled ? "Disable" : "Enable"} {category.name}
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() => {
-                    setDeleting(category);
-                    setEditing(null);
-                  }}
-                >
-                  Delete {category.name}
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    setViewing(viewing === category.id ? "" : category.id)
-                  }
-                >
-                  {viewing === category.id ? "Hide" : "Show"} representation for{" "}
-                  {category.name}
-                </button>
-                {viewing === category.id && (
-                  <CategoryRepresentation
-                    key={`${page.accountId}:${category.id}:${category.updated_at}`}
-                    accountId={page.accountId}
-                    category={category}
-                  />
-                )}
+                <details className="category-accordion">
+                  <summary>
+                    {category.name}{" "}
+                    {!category.enabled && (
+                      <span className="neutral-badge">Disabled</span>
+                    )}
+                  </summary>
+                  <div className="category-content">
+                    <p>{category.description}</p>
+                    <div className="account-actions">
+                      <button
+                        className="secondary-button"
+                        disabled={busy}
+                        onClick={() => edit(category)}
+                      >
+                        Edit {category.name}
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={() =>
+                          void run({
+                            operation: "save",
+                            accountId: page.accountId,
+                            id: category.id,
+                            name: category.name,
+                            description: category.description,
+                            enabled: !category.enabled,
+                          })
+                        }
+                      >
+                        {category.enabled ? "Disable" : "Enable"}{" "}
+                        {category.name}
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={() => {
+                          setDeleting(category);
+                          setEditing(null);
+                        }}
+                      >
+                        Delete {category.name}
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={() =>
+                          setViewing(viewing === category.id ? "" : category.id)
+                        }
+                      >
+                        {viewing === category.id ? "Hide" : "Show"} examples &
+                        local profile for {category.name}
+                      </button>
+                    </div>
+                    {editing !== "new" && editing?.id === category.id && editor}
+                    {deleting?.id === category.id && (
+                      <div role="group" aria-label="Confirm category deletion">
+                        <p>
+                          Delete “{deleting.name}”? This removes its local
+                          definition. Referenced categories cannot be deleted;
+                          disable them instead.
+                        </p>
+                        <button
+                          autoFocus
+                          disabled={busy}
+                          onClick={() =>
+                            void run({
+                              operation: "delete",
+                              accountId: page.accountId,
+                              id: deleting.id,
+                            })
+                          }
+                        >
+                          Confirm deletion
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => {
+                            setDeleting(null);
+                            heading.current?.focus();
+                          }}
+                        >
+                          Cancel deletion
+                        </button>
+                      </div>
+                    )}
+
+                    {viewing === category.id && (
+                      <CategoryRepresentation
+                        key={`${page.accountId}:${category.id}:${category.updated_at}`}
+                        accountId={page.accountId}
+                        category={category}
+                      />
+                    )}
+                  </div>
+                </details>
               </li>
             ))}
           </ul>
           {page.rows.length === 0 && <p>No categories on this page.</p>}
           <button
+            className="secondary-button"
             disabled={busy || offset === 0}
             onClick={() =>
               void run({
@@ -195,6 +319,7 @@ export function Categories() {
             Previous categories
           </button>
           <button
+            className="secondary-button"
             disabled={busy || !page.hasMore}
             onClick={() =>
               void run({
@@ -206,102 +331,16 @@ export function Categories() {
           >
             Next categories
           </button>
-          {editing && (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run({
-                  operation: "save",
-                  accountId: page.accountId,
-                  id: editing === "new" ? "" : editing.id,
-                  name,
-                  description,
-                  enabled,
-                });
-              }}
-            >
-              <h3>{editing === "new" ? "New category" : "Edit category"}</h3>
-              <label>
-                Name
-                <input
-                  autoFocus
-                  required
-                  maxLength={100}
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  disabled={busy}
-                />
-              </label>
-              <label>
-                Description
-                <textarea
-                  required
-                  maxLength={1000}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  disabled={busy}
-                />
-              </label>
-              <p>
-                Describe the topics and types of messages that belong here,
-                including useful distinctions from other categories.
-              </p>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={enabled}
-                  onChange={(event) => setEnabled(event.target.checked)}
-                  disabled={busy}
-                />
-                Enabled
-              </label>
-              <button disabled={busy} type="submit">
-                Save category
-              </button>
-              <button
-                disabled={busy}
-                type="button"
-                onClick={() => {
-                  setEditing(null);
-                  heading.current?.focus();
-                }}
-              >
-                Cancel
-              </button>
-            </form>
-          )}
-          {deleting && (
-            <div role="group" aria-label="Confirm category deletion">
-              <p>
-                Delete “{deleting.name}”? This removes its local definition.
-                Referenced categories cannot be deleted; disable them instead.
-              </p>
-              <button
-                autoFocus
-                disabled={busy}
-                onClick={() =>
-                  void run({
-                    operation: "delete",
-                    accountId: page.accountId,
-                    id: deleting.id,
-                  })
-                }
-              >
-                Confirm deletion
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => {
-                  setDeleting(null);
-                  heading.current?.focus();
-                }}
-              >
-                Cancel deletion
-              </button>
-            </div>
-          )}
         </>
       )}
+      <details className="technical-details">
+        <summary>About category rules</summary>
+        <p>
+          Starter rules use recognized default category names. Renamed and
+          custom categories have no automatic rule mapping; their descriptions
+          and confirmed examples support local semantic suggestions.
+        </p>
+      </details>
     </section>
   );
 }

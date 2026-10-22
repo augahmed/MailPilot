@@ -25,8 +25,10 @@ const messages: Record<string, string> = {
 export function SemanticSearch({
   onOpen,
   onEvidence,
+  active: visible = true,
 }: {
   onOpen: OpenMail;
+  active?: boolean;
   onEvidence: (evidence: { text: string; revision: string }) => void;
 }) {
   const [result, setResult] = useState<SearchResponse | null>(null);
@@ -36,9 +38,12 @@ export function SemanticSearch({
   const [after, setAfter] = useState("");
   const [before, setBefore] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [categoryOffset, setCategoryOffset] = useState(0);
-  const [moreCategories, setMoreCategories] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<{
+    accountId: string;
+    rows: Category[];
+    failed: boolean;
+  } | null>(null);
+  const [categoryRefresh, setCategoryRefresh] = useState(0);
   const [limit, setLimit] = useState(10);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -95,25 +100,51 @@ export function SemanticSearch({
   }, []);
   useEffect(() => {
     let active = true;
-    if (result?.accountId)
-      void manageCategories({
-        operation: "list",
-        accountId: result.accountId,
-        offset: categoryOffset,
-      })
-        .then((page) => {
-          if (active && !page.code && page.accountId === result.accountId) {
-            setCategories(page.rows);
-            setMoreCategories(page.hasMore);
+    const accountId = result?.accountId;
+    if (!accountId || !visible) return;
+    const load = async () => {
+      setCategoryOptions(null);
+      const rows = new Map<string, Category>();
+      try {
+        // The existing category contract returns five rows per page. Publish
+        // only a complete account-scoped list, never a misleading partial menu.
+        for (let offset = 0; offset <= 1_000_000; offset += 5) {
+          const page = await manageCategories({
+            operation: "list",
+            accountId,
+            offset,
+          });
+          if (!active) return;
+          if (
+            page.code ||
+            page.accountId !== accountId ||
+            (page.hasMore && page.rows.length !== 5)
+          )
+            throw new Error("Category list unavailable");
+          for (const category of page.rows) {
+            if (rows.has(category.id)) throw new Error("Category list changed");
+            rows.set(category.id, category);
           }
-        })
-        .catch(() => {
-          if (active) setCategories([]);
-        });
+          if (!page.hasMore) {
+            setCategoryOptions({
+              accountId,
+              rows: [...rows.values()],
+              failed: false,
+            });
+            setCategoryId((selected) => (rows.has(selected) ? selected : ""));
+            return;
+          }
+        }
+        throw new Error("Category list exceeds supported pagination");
+      } catch {
+        if (active) setCategoryOptions({ accountId, rows: [], failed: true });
+      }
+    };
+    void load();
     return () => {
       active = false;
     };
-  }, [result?.accountId, categoryOffset]);
+  }, [result?.accountId, categoryRefresh, visible]);
   const act = async (cancel = false) => {
     if (!result?.accountId || pending.current) return;
     pending.current = true;
@@ -159,9 +190,11 @@ export function SemanticSearch({
     }
   };
   const running = result?.status === "running";
+  const loadedCategories =
+    categoryOptions?.accountId === result?.accountId ? categoryOptions : null;
   return (
     <section
-      className="status-card semantic-search"
+      className="status-card feature-panel semantic-search"
       aria-labelledby="semantic-search-heading"
       aria-busy={busy || running}
     >
@@ -176,109 +209,130 @@ export function SemanticSearch({
           void act();
         }}
       >
-        <label>
-          Search mode
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as typeof mode)}
-          >
-            <option value="hybrid">Hybrid</option>
-            <option value="keyword">Keyword only</option>
-            <option value="semantic">Semantic only</option>
-          </select>
-        </label>
-        <label>
-          Search query
+        <label className="search-field">
+          Search
           <input
+            type="search"
+            placeholder="Find an email, topic, or reference…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             required
             maxLength={2048}
           />
         </label>
-        <label>
-          Sender contains
-          <input
-            value={sender}
-            onChange={(e) => setSender(e.target.value)}
-            maxLength={200}
-          />
-        </label>
-        <label>
-          Received on or after (UTC)
-          <input
-            type="date"
-            value={after}
-            onChange={(e) => setAfter(e.target.value)}
-          />
-        </label>
-        <label>
-          Received before (UTC)
-          <input
-            type="date"
-            value={before}
-            onChange={(e) => setBefore(e.target.value)}
-          />
-        </label>
-        <label>
-          Assigned category
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
+        <fieldset className="filter-grid">
+          <legend>Search options</legend>
+          <label>
+            Search mode
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as typeof mode)}
+            >
+              <option value="hybrid">Hybrid</option>
+              <option value="keyword">Keyword only</option>
+              <option value="semantic">Semantic only</option>
+            </select>
+          </label>
+          <label>
+            Sender contains
+            <input
+              value={sender}
+              onChange={(e) => setSender(e.target.value)}
+              maxLength={200}
+            />
+          </label>
+          <label>
+            Received on or after (UTC)
+            <input
+              type="date"
+              value={after}
+              onChange={(e) => setAfter(e.target.value)}
+            />
+          </label>
+          <label>
+            Received before (UTC)
+            <input
+              type="date"
+              value={before}
+              onChange={(e) => setBefore(e.target.value)}
+            />
+          </label>
+          <label>
+            Assigned categories
+            <select
+              disabled={!loadedCategories || loadedCategories.failed}
+              value={loadedCategories ? categoryId : ""}
+              onChange={(e) => setCategoryId(e.target.value)}
+            >
+              <option value="">All categories</option>
+              {(loadedCategories?.rows ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {!c.enabled ? " (disabled)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Maximum emails
+            <select
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+            >
+              {[5, 10, 20].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
+        <div className="category-filter-status">
+          {result?.accountId && !loadedCategories && (
+            <span role="status">Loading all category options…</span>
+          )}
+          {loadedCategories?.failed && (
+            <span role="alert">
+              Could not load all categories. Refresh to retry; other filters
+              still work.
+            </span>
+          )}
+          <button
+            className="text-button"
+            type="button"
+            disabled={!result?.accountId || !loadedCategories}
+            onClick={() => {
+              setCategoryOptions(null);
+              setCategoryRefresh((value) => value + 1);
+            }}
           >
-            <option value="">All categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          disabled={categoryOffset === 0}
-          onClick={() => {
-            setCategoryId("");
-            setCategoryOffset(Math.max(0, categoryOffset - 5));
-          }}
-        >
-          Previous categories
-        </button>
-        <button
-          type="button"
-          disabled={!moreCategories}
-          onClick={() => {
-            setCategoryId("");
-            setCategoryOffset(categoryOffset + 5);
-          }}
-        >
-          More categories
-        </button>
-        <label>
-          Maximum emails
-          <select
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-          >
-            {[5, 10, 20].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          disabled={busy || running || !result?.accountId || !query.trim()}
-        >
-          Search locally
-        </button>
-        {running && (
-          <button type="button" disabled={busy} onClick={() => void act(true)}>
-            Cancel search
+            Refresh category options
           </button>
-        )}
+        </div>
+        <div className="account-actions">
+          <button
+            disabled={
+              busy ||
+              running ||
+              !result?.accountId ||
+              !query.trim() ||
+              (!!categoryId && (!loadedCategories || loadedCategories.failed))
+            }
+          >
+            Search locally
+          </button>
+          {running && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void act(true)}
+            >
+              Cancel search
+            </button>
+          )}
+        </div>
       </form>
-      <p role="status">
+      <p role="status" className="feature-status">
         {error ||
           (result?.code
             ? messages[result.code]
@@ -314,11 +368,21 @@ export function SemanticSearch({
         keyword and hybrid modes. Separate replies may disagree; read the
         original evidence.
       </p>
+      {result?.status === "complete" && result.emails.length === 0 && (
+        <div className="empty-state">
+          <h3>No matching cached emails</h3>
+          <p>
+            Try a different phrase, a broader date range, or another search
+            mode.
+          </p>
+        </div>
+      )}
       {result?.status === "complete" && (
-        <ol>
+        <ol className="email-results">
           {result.emails.map((email) => (
             <li key={email.emailId}>
               <button
+                className="result-subject"
                 onClick={(e) => {
                   onEvidence({
                     text: email.evidence.map((v) => v.excerpt).join("\n\n"),
@@ -332,16 +396,19 @@ export function SemanticSearch({
               <p>
                 {email.sender} · {new Date(email.receivedAt).toLocaleString()}
               </p>
-              <p>
-                {email.exactMatch && "Exact literal match · "}
-                {email.keywordRank > 0 &&
-                  `Keyword rank ${email.keywordRank} · `}
-                {email.semanticRank > 0 &&
-                  `Semantic rank ${email.semanticRank} · `}
-                {result.mode === "hybrid" &&
-                  `Fusion score ${email.rankScore.toFixed(4)} · `}
-                {email.partialContent && "Partial cached content"}
-              </p>
+              <details className="result-details">
+                <summary>Ranking details</summary>
+                <p>
+                  {email.exactMatch && "Exact literal match · "}
+                  {email.keywordRank > 0 &&
+                    `Keyword rank ${email.keywordRank} · `}
+                  {email.semanticRank > 0 &&
+                    `Semantic rank ${email.semanticRank} · `}
+                  {result.mode === "hybrid" &&
+                    `Fusion score ${email.rankScore.toFixed(4)} · `}
+                  {email.partialContent && "Partial cached content"}
+                </p>
+              </details>
               {email.evidence.map((v) => (
                 <div key={v.chunkId}>
                   <p>

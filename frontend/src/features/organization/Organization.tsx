@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
   organize,
   type OrganizationRequest,
@@ -29,7 +30,10 @@ export function Organization() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [dryRun, setDryRun] = useState(true);
+  const [confirmation, setConfirmation] = useState<{
+    id: string;
+    digest: string;
+  } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -45,6 +49,7 @@ export function Organization() {
     setBatch(null);
     setSelected([]);
     setConfirmed(false);
+    setConfirmation(null);
   }, []);
   useEffect(() => {
     let active = true;
@@ -62,6 +67,7 @@ export function Organization() {
           setBatch(null);
           setSelected([]);
           setConfirmed(false);
+          setConfirmation(null);
         }
         account.current = result.accountId;
         setPage(result);
@@ -128,6 +134,7 @@ export function Organization() {
         ) {
           setBatch(result);
           setConfirmed(false);
+          setConfirmation(null);
         }
       } catch {
         if (
@@ -161,6 +168,7 @@ export function Organization() {
     setBusy(true);
     setError("");
     setConfirmed(false);
+    setConfirmation(null);
     const expectedAccount = account.current;
     try {
       let result = await organize({
@@ -217,74 +225,46 @@ export function Organization() {
     }
   }
   const preview = batch?.state === "preview" && batch.id !== "" && !batch.code;
-  const canApply = preview && batch.expiresAt > now && confirmed && !busy;
   const rows = batch && batch.rows.length > 0 ? batch.rows : (page?.rows ?? []);
   const planned = batch?.state === "preview" || batch?.state === "dry_run";
-  return (
-    <section className="status-card" aria-labelledby="organization-heading">
-      <h2 id="organization-heading">Gmail organization</h2>
-      <p>
-        Select suggestions, then review live Gmail labels before applying.
-        Classification scores reflect deterministic rule strength. Phishing
-        scores are heuristics, not proof of phishing or a guarantee of safety.
-        Applying adds a label only; messages are never deleted, archived, or
-        moved to Spam.
-      </p>
-      <p className="help">
-        The selection table uses cached labels. Dry Run and previews read live
-        Gmail state. Undo removes verified additions from the last batch;
-        created labels remain in Gmail.
-      </p>
-      <label>
-        Review suggestions
-        <select
-          value={source}
-          disabled={busy}
-          onChange={(event) => {
-            revision.current++;
-            setSource(event.target.value === "phishing" ? "phishing" : "");
-            setOffset(0);
-            setSelected([]);
-            setPage(null);
-            setBatch(null);
-            setConfirmed(false);
-            setDryRun(true);
-          }}
-        >
-          <option value="">Classification labels</option>
-          <option value="phishing">Potential Phishing</option>
-        </select>
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <div role="status" aria-live="polite">
-        {busy
-          ? "Reading Gmail or applying confirmed changes…"
-          : batch?.state && batch.state !== "idle"
-            ? `Batch: ${batch.state}`
-            : ""}
-      </div>
-      <div className="account-actions">
-        <button disabled={busy} onClick={() => void act("list")}>
-          Refresh organization
-        </button>
-        <button
-          disabled={busy || !page?.accountId}
-          onClick={() => void act("undo_preview")}
-        >
-          Preview undo last batch
-        </button>
-        <button
-          disabled={busy || !page?.accountId}
-          onClick={() => void act("status")}
-        >
-          Refresh batch status
-        </button>
-        {(batch?.state === "uncertain" || batch?.state === "applying") && (
-          <button disabled={busy} onClick={() => void act("reconcile")}>
-            Reconcile interrupted batch
-          </button>
-        )}
-      </div>
+  const unresolved =
+    batch?.state === "uncertain" ||
+    batch?.state === "applying" ||
+    batch?.steps.some((step) => step.state === "uncertain") ||
+    batch?.code === "reconciliation_required";
+  const canApply =
+    preview && batch.expiresAt > now && confirmed && !busy && !unresolved;
+  const results =
+    !!batch &&
+    [
+      "applied",
+      "partial",
+      "failed",
+      "cancelled",
+      "uncertain",
+      "applying",
+      "error",
+    ].includes(batch.state);
+  const step = results ? 4 : preview ? 3 : batch?.state === "dry_run" ? 2 : 1;
+  const stateLabels: Record<string, string> = {
+    applied: "Changes applied",
+    partial: "Some changes need attention",
+    failed: "Label changes failed",
+    cancelled: "Stopped — review saved outcomes",
+    uncertain: "Some Gmail outcomes are uncertain",
+    applying: "Applying confirmed changes…",
+    preview: "Preview ready",
+    dry_run: "Read-only preview ready",
+    expired: "Preview expired",
+    error: "Organization needs attention",
+  };
+  const confirmationOpen =
+    !!confirmation &&
+    !!canApply &&
+    confirmation.id === batch?.id &&
+    confirmation.digest === batch.digest;
+  const emailTable = (
+    <>
       {rows.length > 0 && (
         <div className="mail-table">
           <table>
@@ -310,7 +290,7 @@ export function Organization() {
                         type="checkbox"
                         aria-label={`Select ${row.subject || "email"}`}
                         checked={selected.includes(row.emailId)}
-                        disabled={busy}
+                        disabled={busy || unresolved}
                         onChange={(event) => {
                           setSelected((current) =>
                             event.target.checked
@@ -318,6 +298,7 @@ export function Organization() {
                               : current.filter((id) => id !== row.emailId),
                           );
                           setConfirmed(false);
+                          setConfirmation(null);
                         }}
                       />
                     )}
@@ -370,7 +351,13 @@ export function Organization() {
                           ? "Below HIGH threshold"
                           : row.change === "risk_unavailable"
                             ? "Risk analysis unavailable; refresh to retry"
-                            : row.change}
+                            : row.change === "candidate"
+                              ? "Ready to preview"
+                              : row.change === "add"
+                                ? "Add label"
+                                : row.change === "remove"
+                                  ? "Remove label"
+                                  : row.change}
                   </td>
                 </tr>
               ))}
@@ -378,87 +365,348 @@ export function Organization() {
           </table>
         </div>
       )}
-      {!rows.length && (
+      {!rows.length && page && (
         <p>
           No cached suggestions available. Sync mail, then review phishing risk
           or classify messages.
         </p>
       )}
-      {!batch?.rows.length && (
-        <>
-          <label>
-            <input
-              type="checkbox"
-              checked={dryRun}
-              disabled={busy}
-              onChange={(event) => setDryRun(event.target.checked)}
-            />{" "}
-            Dry Run (read only)
-          </label>
-          <button
-            disabled={busy || selected.length === 0}
-            onClick={() => void act(dryRun ? "dry_run" : "preview")}
+    </>
+  );
+  return (
+    <section
+      className="status-card feature-panel organization-panel"
+      aria-labelledby="organization-heading"
+      aria-busy={busy}
+    >
+      <h2 id="organization-heading">Organize Gmail labels</h2>
+      <p>
+        Choose emails, inspect the proposed labels, then confirm before anything
+        changes in Gmail. Messages are never deleted, archived, or moved to
+        Spam.
+      </p>
+      <ol className="workflow-steps" aria-label="Organization progress">
+        {[
+          "Select emails",
+          "Preview labels",
+          "Confirm changes",
+          "Results & undo",
+        ].map((label, index) => (
+          <li
+            key={label}
+            aria-current={step === index + 1 ? "step" : undefined}
           >
-            {dryRun ? "Run Dry Run" : "Generate apply preview"}
-          </button>
-        </>
-      )}
-      {batch && batch.steps.length > 0 && (
-        <ul aria-label="Planned operations">
-          {batch.steps.map((step, index) => (
-            <li key={index}>
-              {step.kind === "create_label"
-                ? "Create label"
-                : step.kind === "add"
-                  ? "Add label to email"
-                  : "Remove label from email"}
-              : {step.name} — {step.state}
-              {step.code ? ` (${step.code.replaceAll("_", " ")})` : ""}
-            </li>
-          ))}
-        </ul>
-      )}
-      {batch?.rows.length ? (
-        <button
-          disabled={busy}
-          onClick={() => {
-            setBatch(null);
-            setConfirmed(false);
-          }}
-        >
-          Back to selection
-        </button>
-      ) : null}
-      {batch?.state === "dry_run" && (
-        <p>
-          Dry Run complete. No Gmail or action-journal changes were made. Local
-          risk assessments may be refreshed. Turn off Dry Run and generate a
-          fresh apply preview to continue.
-        </p>
-      )}
-      {preview && (
-        <>
+            <span>{index + 1}</span>
+            {label}
+          </li>
+        ))}
+      </ol>
+      {error && <p role="alert">{error}</p>}
+      <div className="feature-status" role="status" aria-live="polite">
+        {busy
+          ? "Reading Gmail or applying confirmed changes…"
+          : batch?.state && batch.state !== "idle"
+            ? (stateLabels[batch.state] ?? batch.state.replaceAll("_", " "))
+            : !page
+              ? "Loading suggested emails…"
+              : "Select up to five suggested emails to begin."}
+      </div>
+      {unresolved && (
+        <div className="attention-panel" role="alert">
+          <h3>Check interrupted changes before continuing</h3>
           <p>
-            Preview expires {new Date(batch.expiresAt).toLocaleTimeString()}.{" "}
-            {batch.kind === "undo"
-              ? "Only recorded additions will be removed."
-              : "Missing labels shown above will be created."}
+            Some Gmail outcomes are uncertain. Check recorded outcomes and
+            reconcile them before starting another selection. Changes will not
+            be retried automatically.
           </p>
-          <label>
-            <input
-              type="checkbox"
-              checked={confirmed}
-              disabled={busy}
-              onChange={(event) => setConfirmed(event.target.checked)}
-            />{" "}
-            I confirm these {batch.kind === "undo" ? "undo" : "Gmail label"}{" "}
-            changes.
-          </label>
-          <button disabled={!canApply} onClick={() => void act("apply")}>
-            {batch.kind === "undo" ? "Confirm undo" : "Apply selected labels"}
+          <button disabled={busy} onClick={() => void act("reconcile")}>
+            Reconcile interrupted batch
           </button>
-        </>
+        </div>
       )}
+      <div
+        className="workflow-section"
+        aria-labelledby="organization-select-heading"
+      >
+        <h3 id="organization-select-heading">1. Select suggested emails</h3>
+        <p className="help">
+          The list uses cached labels. Preview reads current labels from Gmail.
+          Classification and phishing scores describe evidence; they are not
+          probabilities or safety guarantees.
+        </p>
+        <label>
+          Review suggestions
+          <select
+            value={source}
+            disabled={busy || unresolved}
+            onChange={(event) => {
+              revision.current++;
+              setSource(event.target.value === "phishing" ? "phishing" : "");
+              setOffset(0);
+              setSelected([]);
+              setPage(null);
+              setBatch(null);
+              setConfirmed(false);
+              setConfirmation(null);
+            }}
+          >
+            <option value="">Classification labels</option>
+            <option value="phishing">Potential Phishing</option>
+          </select>
+        </label>
+
+        <button
+          className="secondary-button"
+          disabled={busy || unresolved}
+          onClick={() => void act("list")}
+        >
+          Refresh organization
+        </button>
+        {!planned && !results && (
+          <>
+            {emailTable}
+            <div className="account-actions">
+              <button
+                disabled={busy || unresolved || offset === 0}
+                onClick={() => {
+                  setBatch(null);
+                  setSelected([]);
+                  setOffset((value) => Math.max(0, value - 5));
+                }}
+              >
+                Previous organization page
+              </button>
+              <button
+                disabled={busy || unresolved || !page?.hasMore}
+                onClick={() => {
+                  setBatch(null);
+                  setSelected([]);
+                  setOffset((value) => value + 5);
+                }}
+              >
+                Next organization page
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+      <div
+        className="workflow-section"
+        aria-labelledby="organization-preview-heading"
+      >
+        <h3 id="organization-preview-heading">
+          2. Preview proposed Gmail label changes
+        </h3>
+        <p className="help">
+          Both previews check live Gmail labels. Neither applies label changes.
+          A Dry Run also avoids creating an action journal entry.
+        </p>
+        {!batch?.rows.length && (
+          <div className="account-actions">
+            <button
+              disabled={busy || unresolved || selected.length === 0}
+              onClick={() => void act("dry_run")}
+            >
+              Preview label changes (Dry Run)
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy || unresolved || selected.length === 0}
+              onClick={() => void act("preview")}
+            >
+              Prepare apply preview
+            </button>
+          </div>
+        )}
+        {batch?.rows.length && planned ? (
+          <>
+            {emailTable}
+
+            {batch.state === "dry_run" && (
+              <>
+                <p>
+                  Dry Run complete. No Gmail or action-journal changes were
+                  made. Local risk assessments may be refreshed. Prepare a fresh
+                  apply preview to continue.
+                </p>
+                <button
+                  disabled={busy || selected.length === 0}
+                  onClick={() => void act("preview")}
+                >
+                  Prepare apply preview
+                </button>
+              </>
+            )}
+          </>
+        ) : null}
+        {!!batch?.rows.length && !results && (
+          <button
+            className="secondary-button"
+            disabled={busy || unresolved}
+            onClick={() => {
+              setBatch(null);
+              setConfirmed(false);
+              setConfirmation(null);
+            }}
+          >
+            Back to selection
+          </button>
+        )}
+        {planned && batch?.steps.length ? (
+          <ul className="operation-list" aria-label="Planned operations">
+            {batch.steps.map((operation, index) => (
+              <li key={index}>
+                {operation.kind === "create_label"
+                  ? "Create label"
+                  : operation.kind === "add"
+                    ? "Add label to email"
+                    : "Remove label from email"}
+                : {operation.name} — {operation.state}
+                {operation.code
+                  ? ` (${operation.code.replaceAll("_", " ")})`
+                  : ""}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      <div
+        className="workflow-section"
+        aria-labelledby="organization-confirm-heading"
+      >
+        <h3 id="organization-confirm-heading">3. Confirm and apply changes</h3>
+        {preview ? (
+          <>
+            <p>
+              Preview expires {new Date(batch.expiresAt).toLocaleTimeString()}.{" "}
+              {batch.kind === "undo"
+                ? "Only recorded additions will be removed. Created labels remain in Gmail."
+                : "Missing labels shown above will be created."}
+            </p>
+            {batch.expiresAt <= now && (
+              <p role="alert">
+                This preview has expired. Prepare a fresh preview before
+                applying changes.
+              </p>
+            )}
+            <label className="approval-check">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                disabled={busy || batch.expiresAt <= now}
+                onChange={(event) => {
+                  setConfirmed(event.target.checked);
+                  setConfirmation(null);
+                }}
+              />{" "}
+              I confirm these {batch.kind === "undo" ? "undo" : "Gmail label"}{" "}
+              changes.
+            </label>
+            <button
+              disabled={!canApply}
+              onClick={() =>
+                setConfirmation({ id: batch.id, digest: batch.digest })
+              }
+            >
+              {batch.kind === "undo" ? "Confirm undo" : "Apply selected labels"}
+            </button>
+          </>
+        ) : (
+          <p className="help">
+            Prepare and review a fresh apply preview to enable confirmation.
+          </p>
+        )}
+      </div>
+      <div
+        className="workflow-section"
+        aria-labelledby="organization-results-heading"
+      >
+        <h3 id="organization-results-heading">
+          4. Review results and undo eligible changes
+        </h3>
+        {results && (
+          <>
+            <p>
+              {stateLabels[batch.state]}. Review each operation below; uncertain
+              changes must be reconciled.
+            </p>
+            {!!batch.rows.length && (
+              <ul className="result-email-list">
+                {batch.rows.map((row) => (
+                  <li key={row.emailId}>
+                    <strong>{row.subject || "(No subject)"}</strong> ·{" "}
+                    {row.sender}
+                    <p>
+                      Labels: {row.currentLabels.join(", ") || "No labels"} ·
+                      Proposed: {row.proposedLabel || "No change"}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <ul className="operation-list" aria-label="Recorded outcomes">
+              {batch.steps.map((operation, index) => (
+                <li key={index} className={`outcome-${operation.state}`}>
+                  <strong>
+                    {operation.kind === "create_label"
+                      ? "Create label"
+                      : operation.kind === "add"
+                        ? "Add label to email"
+                        : "Remove label from email"}
+                    : {operation.name}
+                  </strong>
+                  <span>
+                    {operation.state.replaceAll("_", " ")}
+                    {operation.code
+                      ? ` · ${operation.code.replaceAll("_", " ")}`
+                      : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <p className="help">
+          Undo checks ownership and removes only verified MailPilot additions
+          from the last batch. It preserves unrelated labels and does not delete
+          labels created by MailPilot.
+        </p>
+        <div className="account-actions">
+          <button
+            className="secondary-button"
+            disabled={busy || !page?.accountId || unresolved}
+            onClick={() => void act("undo_preview")}
+          >
+            Preview undo last batch
+          </button>
+          <button
+            className="secondary-button"
+            disabled={busy || !page?.accountId}
+            onClick={() => void act("status")}
+          >
+            Refresh batch status
+          </button>
+        </div>
+        {results && !unresolved && (
+          <button
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => void act("list")}
+          >
+            Start another selection
+          </button>
+        )}
+        <details className="technical-details">
+          <summary>Recovery details</summary>
+          <p>
+            Operations are recorded before dispatch. An interrupted or uncertain
+            request must be reconciled before it can be retried. Preview
+            validation, batch limits, and undo ownership are checked by
+            MailPilot.
+          </p>
+          {batch?.id && <p>Recorded action: {batch.id}</p>}
+        </details>
+      </div>
       {busy && (
         <button
           onClick={() => {
@@ -476,28 +724,42 @@ export function Organization() {
           Stop organization
         </button>
       )}
-      <div className="account-actions">
-        <button
-          disabled={busy || offset === 0}
-          onClick={() => {
-            setBatch(null);
-            setSelected([]);
-            setOffset((value) => Math.max(0, value - 5));
-          }}
-        >
-          Previous organization page
-        </button>
-        <button
-          disabled={busy || !page?.hasMore}
-          onClick={() => {
-            setBatch(null);
-            setSelected([]);
-            setOffset((value) => value + 5);
-          }}
-        >
-          Next organization page
-        </button>
-      </div>
+
+      <ConfirmDialog
+        open={confirmationOpen}
+        title={
+          batch?.kind === "undo"
+            ? "Undo these Gmail label additions?"
+            : "Apply these Gmail label changes?"
+        }
+        confirmLabel={
+          batch?.kind === "undo" ? "Confirm and undo" : "Confirm and apply"
+        }
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (!confirmationOpen) return;
+          setConfirmation(null);
+          void act("apply");
+        }}
+      >
+        <p>
+          {batch?.kind === "undo"
+            ? "Only verified MailPilot-owned label additions in this preview will be removed."
+            : "Only the label changes in your reviewed preview will be applied. No messages will be deleted or archived."}
+        </p>
+        <ul>
+          {batch?.steps.map((operation, index) => (
+            <li key={index}>
+              {operation.kind === "create_label"
+                ? "Create label"
+                : operation.kind === "add"
+                  ? "Add label to email"
+                  : "Remove label from email"}
+              : {operation.name}
+            </li>
+          ))}
+        </ul>
+      </ConfirmDialog>
     </section>
   );
 }

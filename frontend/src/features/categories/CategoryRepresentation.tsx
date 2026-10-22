@@ -172,7 +172,7 @@ export function CategoryRepresentation({
       aria-busy={busy}
     >
       <h4 ref={heading} tabIndex={-1}>
-        Local representation
+        Examples & local profile
       </h4>
       <p>
         Built on this device with the email embedding model. Start or resume
@@ -182,10 +182,13 @@ export function CategoryRepresentation({
       <p role="status">{message}</p>
       {representation && (
         <>
-          <p>
-            Status: {representation.status}. Model: {representation.modelId} (
-            {representation.modelVersion}).
-          </p>
+          <p>Local profile: {representation.status}.</p>
+          <details className="technical-details">
+            <summary>Model details</summary>
+            <p>
+              {representation.modelId} · {representation.modelVersion}
+            </p>
+          </details>
           <p>
             The definition and each included example email have equal weight.
             Each example uses up to three non-overlapping shared chunks. Changed
