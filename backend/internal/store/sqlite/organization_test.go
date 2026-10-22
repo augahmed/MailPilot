@@ -3,12 +3,49 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/repository"
 )
+
+func TestOrganizationJournal25EmailsAnd50Steps(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	a := account(t, store, "a")
+	categories, _ := store.Categories().List(ctx, a)
+	plan := domain.OrganizationPlan{AccountID: a, Kind: domain.ActionLabelDelta}
+	for i := 0; i < 25; i++ {
+		email := sampleEmail(a, fmt.Sprintf("remote-%d", i))
+		email.ID = saveEmail(t, store, email)
+		name := fmt.Sprintf("MailPilot/Category %d", i)
+		plan.Rows = append(plan.Rows, domain.OrganizationRow{EmailID: email.ID, ProviderID: email.ProviderID, CategoryID: categories[0].ID, ProposedLabel: name})
+		plan.Steps = append(plan.Steps, domain.OrganizationStep{Kind: "create_label", Name: name, State: domain.ItemPending}, domain.OrganizationStep{Kind: "add", Name: name, EmailID: email.ID, State: domain.ItemPending})
+	}
+	saved, err := store.Organization().Create(ctx, plan)
+	if err != nil || len(saved.Rows) != 25 || len(saved.Steps) != 50 {
+		t.Fatal("25-email plan rejected", err)
+	}
+	restored, err := store.Organization().Get(ctx, a, saved.ID)
+	if err != nil || restored.Digest != saved.Digest || len(restored.Steps) != 50 {
+		t.Fatal("large plan lost immutable evidence", err)
+	}
+	tooManySteps := plan
+	tooManySteps.Steps = append(append([]domain.OrganizationStep{}, plan.Steps...), plan.Steps[0])
+	if _, err = store.Organization().Create(ctx, tooManySteps); !errors.Is(err, repository.ErrInvalid) {
+		t.Fatal("51-step plan accepted", err)
+	}
+	plan.Rows = append(plan.Rows, plan.Rows[0])
+	if _, err = store.Organization().Create(ctx, plan); !errors.Is(err, repository.ErrInvalid) {
+		t.Fatal("26-email plan accepted", err)
+	}
+}
 
 func TestOrganizationJournalRestartCASAndReferenceProtection(t *testing.T) {
 	ctx := context.Background()

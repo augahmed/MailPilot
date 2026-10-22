@@ -20,7 +20,7 @@ type organizationRepository struct{ store *Store }
 
 func (s *Store) Organization() repository.OrganizationRepository { return &organizationRepository{s} }
 func (r *organizationRepository) Create(ctx context.Context, p domain.OrganizationPlan) (domain.OrganizationPlan, error) {
-	if p.AccountID == "" || len(p.Rows) == 0 || len(p.Rows) > 5 || len(p.Steps) > 10 || (p.Kind != domain.ActionLabelDelta && p.Kind != domain.ActionUndo) || (p.Kind == domain.ActionUndo) != (p.Reverses != "") {
+	if p.AccountID == "" || len(p.Rows) == 0 || len(p.Rows) > domain.MaxOrganizationEmails || len(p.Steps) > domain.MaxOrganizationSteps || (p.Kind != domain.ActionLabelDelta && p.Kind != domain.ActionUndo) || (p.Kind == domain.ActionUndo) != (p.Reverses != "") {
 		return p, repository.ErrInvalid
 	}
 	p.ID = domain.ActionID(newID())

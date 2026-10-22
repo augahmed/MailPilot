@@ -1,108 +1,311 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
   organize,
+  manageCategories,
+  type Category,
   type OrganizationRequest,
   type OrganizationResponse,
 } from "../../lib/ipc/client";
+import {
+  classificationLabel,
+  listOrganizationEmails,
+  organizationBatchSize,
+  type OrganizationPage,
+} from "./listEmails";
+import type { SuggestionChoice } from "./OrganizationSuggestionPicker";
+import { OrganizationEmailTable } from "./OrganizationEmailTable";
 
+type View = "select" | "review" | "applying" | "recovery";
 const messages: Record<string, string> = {
   unauthorized: "Connect Gmail to organize this account’s mail.",
   stale_preview:
-    "Mail, categories, predictions, or labels changed. Generate a new preview.",
+    "The selected mail or its classification changed while preparing or reviewing this preview. Go back and preview the current changes again. No new changes were authorized.",
   reconciliation_required:
-    "An interrupted batch needs reconciliation before another batch can run.",
-  not_found: "There is no eligible batch or prediction to review.",
-  cancelled: "Work stopped. Review recorded outcomes before continuing.",
+    "An interrupted batch needs its Gmail outcomes checked before another batch can run.",
+  not_found:
+    "A selected email has no current category suggestion. Refresh classifications or resume Local Email Index if its content changed, then preview again.",
+  cancelled: "Work stopped. Review any recorded outcomes before continuing.",
   reauth_required: "Reconnect Gmail before continuing.",
-  unsupported: "This provider does not support the required label operations.",
+  unsupported:
+    "This provider does not support the required Gmail label operations.",
   operation_failed:
-    "The operation failed. Refresh recorded outcomes before continuing.",
-  validation: "This selection exceeds supported limits or is invalid.",
+    "The operation failed. Review any recorded outcomes before continuing.",
+  validation:
+    "This preview is invalid or too large. Select up to 25 eligible emails; use a smaller selection if their label details exceed the supported size.",
   busy: "An earlier account operation is still stopping.",
 };
+function uncertain(result: OrganizationResponse | null) {
+  return (
+    result?.state === "uncertain" ||
+    result?.state === "applying" ||
+    result?.code === "reconciliation_required" ||
+    result?.steps.some(
+      (step) => step.state === "uncertain" || step.state === "in_flight",
+    )
+  );
+}
+function hasUndo(result: OrganizationResponse | null) {
+  return (
+    result?.kind === "label_delta" &&
+    result.steps.some((step) => step.kind === "add" && step.state === "applied")
+  );
+}
+function completion(result: OrganizationResponse) {
+  const count = new Set(
+    result.steps
+      .filter(
+        (step) =>
+          step.state === "applied" &&
+          step.kind === (result.kind === "undo" ? "remove" : "add"),
+      )
+      .map((step) => step.emailId),
+  ).size;
+  if (result.kind === "undo")
+    return `Undo confirmed in Gmail for ${count} ${count === 1 ? "email" : "emails"}.`;
+  return count
+    ? `Gmail label changes confirmed for ${count} ${count === 1 ? "email" : "emails"}.`
+    : "The selected emails already have the reviewed Gmail labels. No additions were needed.";
+}
 export function Organization() {
+  const [view, setView] = useState<View>("select");
+  const [suggestionMode, setSuggestionMode] = useState<"choose" | "highest">(
+    "choose",
+  );
+  const [choices, setChoices] = useState<Record<string, SuggestionChoice>>({});
   const [source, setSource] = useState<"" | "phishing">("");
-  const [page, setPage] = useState<OrganizationResponse | null>(null);
+  const [page, setPage] = useState<OrganizationPage | null>(null);
   const [batch, setBatch] = useState<OrganizationResponse | null>(null);
+  const [completed, setCompleted] = useState<OrganizationResponse | null>(null);
+  const [notice, setNotice] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [offset, setOffset] = useState(0);
+  const [history, setHistory] = useState<number[]>([]);
+  const [reload, setReload] = useState(0);
+  const [categoryId, setCategoryId] = useState("");
+  const [categoryReload, setCategoryReload] = useState(0);
+  const [categories, setCategories] = useState<{
+    accountId: string;
+    rows: Category[];
+    failed: boolean;
+  } | null>(null);
+  const categoryName = categories?.rows.find(
+    (category) => category.id === categoryId,
+  )?.name;
+  const [sort, setSort] = useState("category");
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
-  const [confirmation, setConfirmation] = useState<{
-    id: string;
-    digest: string;
-  } | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const [now, setNow] = useState(Date.now);
   const mounted = useRef(false);
   const pending = useRef(false);
   const revision = useRef(0);
   const account = useRef("");
+  const restored = useRef(false);
+  const stageHeading = useRef<HTMLHeadingElement>(null);
+  const focusStage = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (!mounted.current) return;
+      stageHeading.current?.focus({ preventScroll: true });
+      stageHeading.current?.scrollIntoView?.({ block: "start" });
+    });
+  }, []);
   const clearAccount = useCallback(() => {
     account.current = "";
+    restored.current = false;
     setPage(null);
     setBatch(null);
+    setCompleted(null);
+    setNotice("");
+    setCategories(null);
+    setCategoryId("");
+    setHistory([]);
+    setOffset(0);
     setSelected([]);
-    setConfirmed(false);
-    setConfirmation(null);
+    setChoices({});
+    setView("select");
+  }, []);
+  const receive = useCallback(
+    (result: OrganizationResponse, refresh = true) => {
+      if (
+        result.code === "unauthorized" ||
+        (result.accountId &&
+          account.current &&
+          result.accountId !== account.current)
+      ) {
+        clearAccount();
+        setError(messages.unauthorized!);
+        return;
+      }
+      setError(messages[result.code] ?? "");
+      if (result.state === "applied" && !result.code) {
+        setCompleted(result);
+        setNotice(completion(result));
+        setBatch(null);
+        setSelected([]);
+        setChoices({});
+        setView("select");
+        setOffset(0);
+        setHistory([]);
+        if (result.steps.some((step) => step.code === "cache_refresh_failed"))
+          setError(
+            "Gmail changed, but cached labels could not be refreshed. Sync Gmail to update MailPilot; do not blindly reapply this batch.",
+          );
+        if (refresh) {
+          setLoading(true);
+          setReload((value) => value + 1);
+        }
+      } else if (
+        uncertain(result) ||
+        (result.id &&
+          result.steps.length &&
+          ["partial", "failed", "cancelled", "error"].includes(result.state))
+      ) {
+        setBatch(result);
+        setView("recovery");
+      } else if (
+        result.state === "preview" &&
+        result.id &&
+        result.expiresAt > Date.now()
+      ) {
+        setBatch(result);
+        if (result.kind !== "undo")
+          setSelected(result.rows.map((row) => row.emailId));
+        setView("review");
+      } else {
+        // A failed preview made no Gmail writes. Keep the selection visible and
+        // retryable instead of disguising it as an empty results screen.
+        setBatch(null);
+        setView("select");
+        if (
+          result.state === "expired" ||
+          (result.state === "preview" && result.expiresAt <= Date.now())
+        )
+          setError(
+            "This preview expired. Select emails and preview their current labels again.",
+          );
+      }
+      focusStage();
+    },
+    [clearAccount, focusStage],
+  );
+  useEffect(() => {
+    mounted.current = true;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      mounted.current = false;
+      clearInterval(timer);
+    };
   }, []);
   useEffect(() => {
     let active = true;
+    const accountId = page?.accountId ?? "";
+    if (!accountId) return;
+    async function loadCategories() {
+      const rows = new Map<string, Category>();
+      try {
+        for (let offset = 0; offset <= 1_000_000; offset += 5) {
+          const result = await manageCategories({
+            operation: "list",
+            accountId,
+            offset,
+          });
+          if (!active) return;
+          if (
+            result.code ||
+            result.accountId !== accountId ||
+            (result.hasMore && result.rows.length !== 5)
+          )
+            throw new Error("Category source changed");
+          for (const row of result.rows) {
+            if (rows.has(row.id)) throw new Error("Duplicate category");
+            rows.set(row.id, row);
+          }
+          if (!result.hasMore) {
+            const available = [...rows.values()].filter((row) => row.enabled);
+            setCategories({ accountId, rows: available, failed: false });
+            setCategoryId((current) =>
+              current === "__unclassified__" ||
+              available.some((category) => category.id === current)
+                ? current
+                : "",
+            );
+            return;
+          }
+        }
+        throw new Error("Category source exceeds supported bounds");
+      } catch {
+        if (active) setCategories({ accountId, rows: [], failed: true });
+      }
+    }
+    void loadCategories();
+    return () => {
+      active = false;
+    };
+  }, [page?.accountId, categoryReload]);
+  useEffect(() => {
+    let active = true;
     const current = ++revision.current;
-    mounted.current = true;
     async function load() {
       try {
-        const result = await organize({
-          operation: "list",
-          offset,
-          source: source || undefined,
-        });
-        if (!active || pending.current || current !== revision.current) return;
-        if (account.current && account.current !== result.accountId) {
-          setBatch(null);
-          setSelected([]);
-          setConfirmed(false);
-          setConfirmation(null);
+        const result = await listOrganizationEmails(
+          {
+            accountId: account.current || undefined,
+            offset,
+            source: source || undefined,
+            suggestionMode: source ? undefined : suggestionMode,
+          },
+          () => active && !pending.current && current === revision.current,
+          { categoryName, unclassified: categoryId === "__unclassified__" },
+        );
+        if (!result) return;
+        if (
+          result.code === "unauthorized" ||
+          (account.current && account.current !== result.accountId)
+        ) {
+          clearAccount();
+          setError(messages.unauthorized!);
+          return;
         }
         account.current = result.accountId;
         setPage(result);
-        setError(messages[result.code] ?? "");
-        if (!result.code) {
+        setLoading(false);
+        if (result.code)
+          setError(messages[result.code] ?? "Could not load cached emails.");
+        if (!result.code && !restored.current) {
+          restored.current = true;
           const saved = await organize({
             operation: "status",
             accountId: result.accountId,
           });
           if (active && !pending.current && current === revision.current) {
-            if (
-              saved.code === "unauthorized" ||
-              (saved.accountId && saved.accountId !== result.accountId)
-            ) {
-              clearAccount();
-              setError(messages.unauthorized ?? "");
-            } else {
-              setBatch(saved);
-              setError(messages[saved.code] ?? "");
-            }
+            if (saved.state !== "idle" || saved.code) receive(saved, false);
           }
         }
       } catch {
-        if (active && !pending.current && current === revision.current)
+        if (active && !pending.current && current === revision.current) {
+          setPage(null);
           setError(
-            "Cannot reach Gmail organization. Retry or restart MailPilot.",
+            "Could not load cached emails. Refresh the list or restart MailPilot.",
           );
+        }
+      } finally {
+        if (active && current === revision.current) setLoading(false);
       }
     }
     void load();
     return () => {
       active = false;
-      mounted.current = false;
     };
-  }, [offset, source, clearAccount]);
+  }, [
+    offset,
+    source,
+    suggestionMode,
+    categoryId,
+    categoryName,
+    reload,
+    clearAccount,
+    receive,
+  ]);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -124,18 +327,10 @@ export function Organization() {
           return;
         if (
           result.code === "unauthorized" ||
-          (result.accountId && result.accountId !== expected)
-        ) {
-          clearAccount();
-          setError(messages.unauthorized ?? "");
-        } else if (
-          result.state === "uncertain" ||
-          result.state === "applying"
-        ) {
-          setBatch(result);
-          setConfirmed(false);
-          setConfirmation(null);
-        }
+          (result.accountId && result.accountId !== expected) ||
+          uncertain(result)
+        )
+          receive(result, false);
       } catch {
         if (
           active &&
@@ -144,7 +339,7 @@ export function Organization() {
           expected === account.current
         )
           setError(
-            "Cannot reach Gmail organization. Refresh recorded outcomes before continuing.",
+            "Could not check recorded Gmail outcomes. Refresh the list before continuing if the connection was interrupted.",
           );
       } finally {
         if (active)
@@ -160,606 +355,590 @@ export function Organization() {
       active = false;
       clearTimeout(timer);
     };
-  }, [clearAccount]);
+  }, [receive]);
   async function act(operation: OrganizationRequest["operation"]) {
-    if (pending.current) return;
+    if (pending.current || !account.current) return;
+    if (
+      operation === "apply" &&
+      (!batch ||
+        batch.state !== "preview" ||
+        batch.code ||
+        batch.expiresAt <= Date.now() ||
+        uncertain(batch))
+    )
+      return;
     revision.current++;
     pending.current = true;
     setBusy(true);
     setError("");
-    setConfirmed(false);
-    setConfirmation(null);
-    const expectedAccount = account.current;
+    if (operation === "apply") {
+      setView("applying");
+      focusStage();
+    }
+    const expected = account.current;
     try {
       let result = await organize({
         operation,
-        source:
-          operation === "list" ||
-          operation === "preview" ||
-          operation === "dry_run"
-            ? source || undefined
+        accountId: expected,
+        source: operation === "preview" ? source || undefined : undefined,
+        suggestionMode:
+          operation === "preview" && !source ? suggestionMode : undefined,
+        choices:
+          operation === "preview" && !source && suggestionMode === "choose"
+            ? selected.flatMap((emailId) =>
+                choices[emailId]
+                  ? [{ emailId, categoryId: choices[emailId]!.categoryId }]
+                  : [],
+              )
             : undefined,
-        accountId: expectedAccount,
-        offset,
-        emailIds:
-          operation === "preview" || operation === "dry_run" ? selected : [],
+        emailIds: operation === "preview" ? selected : [],
         actionId: operation === "apply" ? batch?.id : undefined,
         digest: operation === "apply" ? batch?.digest : undefined,
       });
       while (mounted.current && result.state === "running") {
         await new Promise((resolve) => setTimeout(resolve, 250));
-        if (!mounted.current) return;
-        result = await organize({
-          operation: "status",
-          accountId: expectedAccount,
-        });
+        if (!mounted.current || expected !== account.current) return;
+        result = await organize({ operation: "status", accountId: expected });
       }
-      if (!mounted.current || account.current !== expectedAccount) return;
-      if (
-        result.code === "unauthorized" ||
-        (expectedAccount &&
-          result.accountId &&
-          result.accountId !== expectedAccount)
-      ) {
-        clearAccount();
-        setError(
-          messages[result.code] ?? "Account changed. Refresh organization.",
-        );
-        return;
-      }
-      setError(messages[result.code] ?? "");
-      if (operation === "list") {
-        account.current = result.accountId;
-        setPage(result);
-        setSelected([]);
-        setBatch(null);
-      } else setBatch(result);
+      if (!mounted.current || expected !== account.current) return;
+      receive(result);
     } catch {
-      if (mounted.current)
-        setError(
-          "Cannot reach Gmail organization. Refresh recorded outcomes before continuing.",
-        );
+      if (mounted.current && expected === account.current) {
+        if (operation === "apply") {
+          // Dispatch may have reached Gmail. Keep the exact plan available and
+          // force a status check instead of allowing an unconfirmed retry.
+          setView("recovery");
+          setError(
+            "The connection was interrupted while applying changes. Check Gmail outcomes before continuing; changes may already have reached Gmail.",
+          );
+          if (batch)
+            setBatch({
+              ...batch,
+              state: "uncertain",
+              code: "reconciliation_required",
+            });
+        } else {
+          setError(
+            "Could not prepare or check Gmail label changes. No new apply was authorized. Try again or reconnect Gmail.",
+          );
+        }
+      }
     } finally {
       pending.current = false;
       if (mounted.current) setBusy(false);
     }
   }
-  const preview = batch?.state === "preview" && batch.id !== "" && !batch.code;
-  const rows = batch && batch.rows.length > 0 ? batch.rows : (page?.rows ?? []);
-  const planned = batch?.state === "preview" || batch?.state === "dry_run";
-  const unresolved =
-    batch?.state === "uncertain" ||
-    batch?.state === "applying" ||
-    batch?.steps.some((step) => step.state === "uncertain") ||
-    batch?.code === "reconciliation_required";
-  const canApply =
-    preview && batch.expiresAt > now && confirmed && !busy && !unresolved;
-  const results =
+  const unresolved = !!uncertain(batch);
+  const locked = busy || loading || unresolved;
+  const canConfirm =
     !!batch &&
-    [
-      "applied",
-      "partial",
-      "failed",
-      "cancelled",
-      "uncertain",
-      "applying",
-      "error",
-    ].includes(batch.state);
-  const step = results ? 4 : preview ? 3 : batch?.state === "dry_run" ? 2 : 1;
-  const stateLabels: Record<string, string> = {
-    applied: "Changes applied",
-    partial: "Some changes need attention",
-    failed: "Label changes failed",
-    cancelled: "Stopped — review saved outcomes",
-    uncertain: "Some Gmail outcomes are uncertain",
-    applying: "Applying confirmed changes…",
-    preview: "Preview ready",
-    dry_run: "Read-only preview ready",
-    expired: "Preview expired",
-    error: "Organization needs attention",
-  };
-  const confirmationOpen =
-    !!confirmation &&
-    !!canApply &&
-    confirmation.id === batch?.id &&
-    confirmation.digest === batch.digest;
-  const emailTable = (
-    <>
-      {rows.length > 0 && (
-        <div className="mail-table">
-          <table>
-            <caption>
-              {planned ? "Live change preview" : "Email label review"}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Select</th>
-                <th scope="col">Email</th>
-                <th scope="col">Current labels</th>
-                <th scope="col">Proposed label</th>
-                <th scope="col">Evidence</th>
-                <th scope="col">Change</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.emailId}>
-                  <td>
-                    {!batch?.rows.length && row.change === "candidate" && (
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${row.subject || "email"}`}
-                        checked={selected.includes(row.emailId)}
-                        disabled={busy || unresolved}
-                        onChange={(event) => {
-                          setSelected((current) =>
-                            event.target.checked
-                              ? [...current, row.emailId]
-                              : current.filter((id) => id !== row.emailId),
-                          );
-                          setConfirmed(false);
-                          setConfirmation(null);
-                        }}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    <strong>{row.subject || "(No subject)"}</strong>
-                    <small>{row.sender}</small>
-                  </td>
-                  <td>
-                    {row.currentLabels.length
-                      ? row.currentLabels.join(", ")
-                      : "No labels"}
-                  </td>
-                  <td>
-                    {row.proposedLabel ||
-                      (source === "phishing"
-                        ? "No HIGH-risk proposal"
-                        : "Unclassified")}
-                  </td>
-                  <td>
-                    {row.phishing ? (
-                      <>
-                        <strong>{row.phishing.score} HIGH</strong>
-                        <p>HIGH threshold: {row.phishing.threshold}</p>
-                        <ol aria-label="Phishing risk reasons">
-                          {row.phishing.reasons.map((reason) => (
-                            <li key={reason.code}>
-                              {reason.points > 0 ? "+" : ""}
-                              {reason.points} {reason.explanation}
-                            </li>
-                          ))}
-                        </ol>
-                      </>
-                    ) : row.confidence ? (
-                      row.scoreKind === "user_assignment" ? (
-                        "User assigned"
-                      ) : (
-                        `${row.scoreKind === "cosine_similarity" ? "Cosine score" : row.scoreKind === "rule_confidence" ? "Rule strength" : "Evidence score"} ${row.confidence.toFixed(3)}`
-                      )
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td>
-                    {row.change === "none"
-                      ? "No change"
-                      : row.change === "multiple_suggestions"
-                        ? "Multiple suggestions — choose a primary category in category review"
-                        : row.change === "below_threshold"
-                          ? "Below HIGH threshold"
-                          : row.change === "risk_unavailable"
-                            ? "Risk analysis unavailable; refresh to retry"
-                            : row.change === "candidate"
-                              ? "Ready to preview"
-                              : row.change === "add"
-                                ? "Add label"
-                                : row.change === "remove"
-                                  ? "Remove label"
-                                  : row.change}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {!rows.length && page && (
-        <p>
-          No cached suggestions available. Sync mail, then review phishing risk
-          or classify messages.
-        </p>
-      )}
-    </>
-  );
+    batch.state === "preview" &&
+    !batch.code &&
+    batch.expiresAt > now &&
+    !busy &&
+    !unresolved &&
+    batch.accountId === page?.accountId;
+  const rows = [...(page?.rows ?? [])].sort((a, b) => {
+    if (source || sort === "recent") return 0;
+    if (sort === "unclassified") {
+      const order =
+        Number(classificationLabel(b) === "Unclassified") -
+        Number(classificationLabel(a) === "Unclassified");
+      if (order) return order;
+    }
+    const order = classificationLabel(a).localeCompare(classificationLabel(b));
+    return sort === "category-desc" ? -order : order;
+  });
+  function choose(ids: string[]) {
+    setSelected(ids);
+    setError("");
+  }
+  function resetSelection(resetFilters = false) {
+    revision.current++;
+    setSelected([]);
+    setChoices({});
+    setError("");
+    if (resetFilters) {
+      const refresh = !!categoryId || offset !== 0;
+      setCategoryId("");
+      setSort("category");
+      setOffset(0);
+      setHistory([]);
+      setLoading(refresh);
+    }
+  }
+  function goBack() {
+    revision.current++;
+    setBatch(null);
+    setSelected((current) =>
+      current.filter((id) =>
+        page?.rows.some(
+          (row) =>
+            row.emailId === id && (row.change === "candidate" || !!choices[id]),
+        ),
+      ),
+    );
+    setView("select");
+    setError("");
+    focusStage();
+  }
+  const stage = view === "select" ? 1 : view === "review" ? 2 : 3;
+  const stageTitle =
+    view === "select"
+      ? "1. Select emails"
+      : view === "review"
+        ? batch?.kind === "undo"
+          ? "2. Review undo"
+          : "2. Review label changes"
+        : view === "applying"
+          ? "3. Updating Gmail"
+          : "3. Check Gmail outcomes";
   return (
     <section
       className="status-card feature-panel organization-panel"
       aria-labelledby="organization-heading"
-      aria-busy={busy}
+      aria-busy={busy || loading}
     >
       <h2 id="organization-heading">Organize Gmail labels</h2>
       <p>
-        Choose emails, inspect the proposed labels, then confirm before anything
-        changes in Gmail. Messages are never deleted, archived, or moved to
-        Spam.
+        Select emails, review their label changes, then confirm to update Gmail.
+        Emails remain in the Inbox; nothing is deleted or archived.
       </p>
       <ol className="workflow-steps" aria-label="Organization progress">
-        {[
-          "Select emails",
-          "Preview labels",
-          "Confirm changes",
-          "Results & undo",
-        ].map((label, index) => (
-          <li
-            key={label}
-            aria-current={step === index + 1 ? "step" : undefined}
-          >
-            <span>{index + 1}</span>
-            {label}
-          </li>
-        ))}
+        {["Select emails", "Review changes", "Update Gmail"].map(
+          (label, index) => (
+            <li
+              key={label}
+              aria-current={stage === index + 1 ? "step" : undefined}
+            >
+              <span>{index + 1}</span>
+              {label}
+            </li>
+          ),
+        )}
       </ol>
-      {error && <p role="alert">{error}</p>}
-      <div className="feature-status" role="status" aria-live="polite">
-        {busy
-          ? "Reading Gmail or applying confirmed changes…"
-          : batch?.state && batch.state !== "idle"
-            ? (stateLabels[batch.state] ?? batch.state.replaceAll("_", " "))
-            : !page
-              ? "Loading suggested emails…"
-              : "Select up to five suggested emails to begin."}
-      </div>
-      {unresolved && (
-        <div className="attention-panel" role="alert">
-          <h3>Check interrupted changes before continuing</h3>
-          <p>
-            Some Gmail outcomes are uncertain. Check recorded outcomes and
-            reconcile them before starting another selection. Changes will not
-            be retried automatically.
-          </p>
-          <button disabled={busy} onClick={() => void act("reconcile")}>
-            Reconcile interrupted batch
-          </button>
+      <h3 ref={stageHeading} tabIndex={-1} id="organization-stage-heading">
+        {stageTitle}
+      </h3>
+      {error && (
+        <p className="attention-panel" role="alert">
+          {error}
+        </p>
+      )}
+      {view === "select" && notice && (
+        <div className="organization-completion" role="status">
+          <strong>{notice}</strong>
+          {hasUndo(completed) && (
+            <button
+              className="secondary-button"
+              disabled={busy || loading}
+              onClick={() => void act("undo_preview")}
+            >
+              Undo
+            </button>
+          )}
         </div>
       )}
-      <div
-        className="workflow-section"
-        aria-labelledby="organization-select-heading"
-      >
-        <h3 id="organization-select-heading">1. Select suggested emails</h3>
-        <p className="help">
-          The list uses cached labels. Preview reads current labels from Gmail.
-          Classification and phishing scores describe evidence; they are not
-          probabilities or safety guarantees.
-        </p>
-        <label>
-          Review suggestions
-          <select
-            value={source}
-            disabled={busy || unresolved}
-            onChange={(event) => {
-              revision.current++;
-              setSource(event.target.value === "phishing" ? "phishing" : "");
-              setOffset(0);
-              setSelected([]);
-              setPage(null);
-              setBatch(null);
-              setConfirmed(false);
-              setConfirmation(null);
-            }}
-          >
-            <option value="">Classification labels</option>
-            <option value="phishing">Potential Phishing</option>
-          </select>
-        </label>
-
-        <button
-          className="secondary-button"
-          disabled={busy || unresolved}
-          onClick={() => void act("list")}
-        >
-          Refresh organization
-        </button>
-        {!planned && !results && (
-          <>
-            {emailTable}
-            <div className="account-actions">
-              <button
-                disabled={busy || unresolved || offset === 0}
-                onClick={() => {
-                  setBatch(null);
-                  setSelected([]);
-                  setOffset((value) => Math.max(0, value - 5));
-                }}
-              >
-                Previous organization page
-              </button>
-              <button
-                disabled={busy || unresolved || !page?.hasMore}
-                onClick={() => {
-                  setBatch(null);
-                  setSelected([]);
-                  setOffset((value) => value + 5);
-                }}
-              >
-                Next organization page
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-      <div
-        className="workflow-section"
-        aria-labelledby="organization-preview-heading"
-      >
-        <h3 id="organization-preview-heading">
-          2. Preview proposed Gmail label changes
-        </h3>
-        <p className="help">
-          Both previews check live Gmail labels. Neither applies label changes.
-          A Dry Run also avoids creating an action journal entry.
-        </p>
-        {!batch?.rows.length && (
-          <div className="account-actions">
-            <button
-              disabled={busy || unresolved || selected.length === 0}
-              onClick={() => void act("dry_run")}
+      {view === "select" && (
+        <>
+          <p className="help">
+            The list uses cached classifications and labels. Preview refreshes
+            your selected emails from Gmail and checks their current
+            classifications. Single automatic suggestions are ready to use.
+            Choose among multiple suggestions, or switch to the highest-ranked
+            mode. Manual categories take priority. Gmail uses labels such as
+            MailPilot/Receipts rather than moving messages into folders.
+          </p>
+          <label>
+            Review suggestions
+            <select
+              value={source}
+              disabled={busy || loading || unresolved}
+              onChange={(event) => {
+                revision.current++;
+                setSource(event.target.value === "phishing" ? "phishing" : "");
+                setOffset(0);
+                setHistory([]);
+                setCategoryId("");
+                setSelected([]);
+                setChoices({});
+                setPage(null);
+                setBatch(null);
+                setLoading(true);
+                setError("");
+              }}
             >
-              Preview label changes (Dry Run)
+              <option value="">Classification labels</option>
+              <option value="phishing">Potential Phishing</option>
+            </select>
+          </label>
+          {!source && (
+            <>
+              <label>
+                Automatic suggestions
+                <select
+                  value={suggestionMode}
+                  disabled={locked}
+                  onChange={(event) => {
+                    revision.current++;
+                    setSuggestionMode(
+                      event.target.value === "highest" ? "highest" : "choose",
+                    );
+                    setSelected([]);
+                    setChoices({});
+                    setBatch(null);
+                    setOffset(0);
+                    setHistory([]);
+                    setLoading(true);
+                    setError("");
+                  }}
+                >
+                  <option value="choose">
+                    Multiple suggestions (choose when needed)
+                  </option>
+                  <option value="highest">
+                    Highest-ranked suggestion only
+                  </option>
+                </select>
+              </label>
+              <div className="organization-filters">
+                <label>
+                  Filter by category
+                  <select
+                    value={categoryId}
+                    disabled={
+                      busy ||
+                      unresolved ||
+                      !categories ||
+                      categories.accountId !== page?.accountId ||
+                      categories.failed
+                    }
+                    onChange={(event) => {
+                      revision.current++;
+                      setCategoryId(event.target.value);
+                      setOffset(0);
+                      setHistory([]);
+                      setSelected([]);
+                      setChoices({});
+                      setLoading(true);
+                      setError("");
+                    }}
+                  >
+                    <option value="">All categories</option>
+                    <option value="__unclassified__">Unclassified</option>
+                    {categories &&
+                      categories.accountId === page?.accountId &&
+                      categories.rows.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Sort this page by
+                  <select
+                    value={sort}
+                    disabled={locked}
+                    onChange={(event) => setSort(event.target.value)}
+                  >
+                    <option value="category">Category (A–Z)</option>
+                    <option value="category-desc">Category (Z–A)</option>
+                    <option value="unclassified">Unclassified first</option>
+                    <option value="recent">Newest first</option>
+                  </select>
+                </label>
+              </div>
+            </>
+          )}
+          {!source && categories?.failed && (
+            <p role="alert">
+              Could not load category filters.{" "}
+              <button
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => setCategoryReload((value) => value + 1)}
+              >
+                Retry category filters
+              </button>
+            </p>
+          )}
+          <div className="organization-selection-tools">
+            <button
+              className="secondary-button"
+              title="Select eligible emails on this page"
+              disabled={
+                locked ||
+                !rows.some(
+                  (row) => row.change === "candidate" || !!choices[row.emailId],
+                )
+              }
+              onClick={() =>
+                choose(
+                  rows
+                    .filter(
+                      (row) =>
+                        row.change === "candidate" || !!choices[row.emailId],
+                    )
+                    .map((row) => row.emailId),
+                )
+              }
+            >
+              Select all
             </button>
             <button
               className="secondary-button"
-              disabled={busy || unresolved || selected.length === 0}
-              onClick={() => void act("preview")}
+              disabled={
+                busy ||
+                unresolved ||
+                (!selected.length &&
+                  !categoryId &&
+                  sort === "category" &&
+                  !history.length)
+              }
+              onClick={() => resetSelection(true)}
             >
-              Prepare apply preview
+              Reset
             </button>
           </div>
-        )}
-        {batch?.rows.length && planned ? (
-          <>
-            {emailTable}
-
-            {batch.state === "dry_run" && (
-              <>
-                <p>
-                  Dry Run complete. No Gmail or action-journal changes were
-                  made. Local risk assessments may be refreshed. Prepare a fresh
-                  apply preview to continue.
-                </p>
-                <button
-                  disabled={busy || selected.length === 0}
-                  onClick={() => void act("preview")}
-                >
-                  Prepare apply preview
-                </button>
-              </>
-            )}
-          </>
-        ) : null}
-        {!!batch?.rows.length && !results && (
-          <button
-            className="secondary-button"
-            disabled={busy || unresolved}
-            onClick={() => {
-              setBatch(null);
-              setConfirmed(false);
-              setConfirmation(null);
-            }}
-          >
-            Back to selection
-          </button>
-        )}
-        {planned && batch?.steps.length ? (
-          <ul className="operation-list" aria-label="Planned operations">
-            {batch.steps.map((operation, index) => (
-              <li key={index}>
-                {operation.kind === "create_label"
-                  ? "Create label"
-                  : operation.kind === "add"
-                    ? "Add label to email"
-                    : "Remove label from email"}
-                : {operation.name} — {operation.state}
-                {operation.code
-                  ? ` (${operation.code.replaceAll("_", " ")})`
-                  : ""}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-      <div
-        className="workflow-section"
-        aria-labelledby="organization-confirm-heading"
-      >
-        <h3 id="organization-confirm-heading">3. Confirm and apply changes</h3>
-        {preview ? (
-          <>
-            <p>
-              Preview expires {new Date(batch.expiresAt).toLocaleTimeString()}.{" "}
-              {batch.kind === "undo"
-                ? "Only recorded additions will be removed. Created labels remain in Gmail."
-                : "Missing labels shown above will be created."}
-            </p>
-            {batch.expiresAt <= now && (
-              <p role="alert">
-                This preview has expired. Prepare a fresh preview before
-                applying changes.
-              </p>
-            )}
-            <label className="approval-check">
-              <input
-                type="checkbox"
-                checked={confirmed}
-                disabled={busy || batch.expiresAt <= now}
-                onChange={(event) => {
-                  setConfirmed(event.target.checked);
-                  setConfirmation(null);
-                }}
-              />{" "}
-              I confirm these {batch.kind === "undo" ? "undo" : "Gmail label"}{" "}
-              changes.
-            </label>
+          <div className="organization-selection-actions">
+            <strong role="status">
+              {selected.length} of {organizationBatchSize} selected
+            </strong>
             <button
-              disabled={!canApply}
-              onClick={() =>
-                setConfirmation({ id: batch.id, digest: batch.digest })
-              }
+              disabled={locked || !selected.length}
+              onClick={() => void act("preview")}
             >
-              {batch.kind === "undo" ? "Confirm undo" : "Apply selected labels"}
+              Preview Label Changes
             </button>
-          </>
-        ) : (
-          <p className="help">
-            Prepare and review a fresh apply preview to enable confirmation.
-          </p>
-        )}
-      </div>
-      <div
-        className="workflow-section"
-        aria-labelledby="organization-results-heading"
-      >
-        <h3 id="organization-results-heading">
-          4. Review results and undo eligible changes
-        </h3>
-        {results && (
-          <>
-            <p>
-              {stateLabels[batch.state]}. Review each operation below; uncertain
-              changes must be reconciled.
+          </div>
+          {loading && <p role="status">Loading cached emails…</p>}
+          {busy && (
+            <p role="status">
+              Preparing your preview from current Gmail labels…
             </p>
-            {!!batch.rows.length && (
-              <ul className="result-email-list">
-                {batch.rows.map((row) => (
-                  <li key={row.emailId}>
-                    <strong>{row.subject || "(No subject)"}</strong> ·{" "}
-                    {row.sender}
-                    <p>
-                      Labels: {row.currentLabels.join(", ") || "No labels"} ·
-                      Proposed: {row.proposedLabel || "No change"}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
+          )}
+          {!!rows.length && (
+            <OrganizationEmailTable
+              key={`${page?.accountId}:${offset}:${categoryId}:${suggestionMode}:${reload}`}
+              accountId={page?.accountId ?? ""}
+              choices={choices}
+              onChoice={(emailId, value) => {
+                setChoices((current) => {
+                  const next = { ...current };
+                  if (value) next[emailId] = value;
+                  else delete next[emailId];
+                  return next;
+                });
+                if (!value)
+                  setSelected((current) =>
+                    current.filter((id) => id !== emailId),
+                  );
+              }}
+              onUnauthorized={() => {
+                clearAccount();
+                setError(messages.unauthorized!);
+              }}
+              rows={rows}
+              selected={selected}
+              disabled={locked}
+              onSelect={choose}
+            />
+          )}
+          {!rows.length && !loading && (
+            <p>
+              No matching cached emails. Sync Gmail and review classifications
+              if needed.
+            </p>
+          )}
+          <div className="account-actions">
+            <button
+              className="secondary-button"
+              disabled={locked || !history.length}
+              onClick={() => {
+                setOffset(history[history.length - 1] ?? 0);
+                setHistory((values) => values.slice(0, -1));
+                setSelected([]);
+                setChoices({});
+                setLoading(true);
+              }}
+            >
+              Previous page
+            </button>
+            <span>Page {history.length + 1} · up to 25 emails</span>
+            <button
+              className="secondary-button"
+              disabled={locked || !page?.hasMore}
+              onClick={() => {
+                setHistory((values) => [...values, offset]);
+                setOffset(page?.nextOffset ?? offset + 25);
+                setSelected([]);
+                setChoices({});
+                setLoading(true);
+              }}
+            >
+              Next page
+            </button>
+            <button
+              className="secondary-button"
+              disabled={locked}
+              onClick={() => {
+                setSelected([]);
+                setChoices({});
+                setError("");
+                setLoading(true);
+                setReload((value) => value + 1);
+                setCategoryReload((value) => value + 1);
+              }}
+            >
+              Refresh list
+            </button>
+          </div>
+        </>
+      )}
+      {view === "review" && batch && (
+        <>
+          <p>
+            {batch.kind === "undo"
+              ? "Review the verified MailPilot label additions to remove. Unrelated labels and created label definitions will remain."
+              : "Only the emails below will change. Nothing has been written to Gmail yet."}
+          </p>
+          <OrganizationEmailTable
+            rows={batch.rows}
+            undo={batch.kind === "undo"}
+          />
+          {batch.expiresAt <= now && (
+            <p role="alert">
+              This preview expired. Go back and preview the current changes
+              again.
+            </p>
+          )}
+          <p className="help">
+            Preview valid until {new Date(batch.expiresAt).toLocaleTimeString()}
+            . Confirming authorizes exactly these changes.
+          </p>
+          <div className="organization-confirm-actions">
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={goBack}
+            >
+              Go Back
+            </button>
+            <button disabled={!canConfirm} onClick={() => void act("apply")}>
+              Confirm Changes
+            </button>
+          </div>
+        </>
+      )}
+      {view === "applying" && (
+        <>
+          <p role="status">
+            Applying your confirmed label changes through Gmail… MailPilot
+            verifies each result before reporting success.
+          </p>
+          {batch && (
+            <OrganizationEmailTable
+              rows={batch.rows}
+              undo={batch.kind === "undo"}
+            />
+          )}
+        </>
+      )}
+      {view === "recovery" && batch && (
+        <>
+          <p>
+            {unresolved
+              ? "Some Gmail outcomes are uncertain. Check them before starting another batch. Nothing will be retried automatically."
+              : "This batch did not finish successfully. Review the recorded outcomes below."}
+          </p>
+          {!!batch.rows.length && (
+            <ul className="result-email-list">
+              {batch.rows.map((row) => (
+                <li key={row.emailId}>
+                  <strong>{row.subject || "(No subject)"}</strong>
+                  <p>
+                    {row.updatedLabels
+                      ? "Current cached Gmail labels: "
+                      : "Labels before this batch: "}
+                    {(row.updatedLabels ?? row.currentLabels).join(", ") ||
+                      "No labels"}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!!batch.steps.length && (
             <ul className="operation-list" aria-label="Recorded outcomes">
-              {batch.steps.map((operation, index) => (
-                <li key={index} className={`outcome-${operation.state}`}>
+              {batch.steps.map((step, index) => (
+                <li key={index}>
                   <strong>
-                    {operation.kind === "create_label"
+                    {step.kind === "create_label"
                       ? "Create label"
-                      : operation.kind === "add"
-                        ? "Add label to email"
-                        : "Remove label from email"}
-                    : {operation.name}
+                      : step.kind === "add"
+                        ? "Add label"
+                        : "Remove label"}
+                    : {step.name}
                   </strong>
                   <span>
-                    {operation.state.replaceAll("_", " ")}
-                    {operation.code
-                      ? ` · ${operation.code.replaceAll("_", " ")}`
-                      : ""}
+                    {step.state.replaceAll("_", " ")}
+                    {step.code ? ` · ${step.code.replaceAll("_", " ")}` : ""}
                   </span>
                 </li>
               ))}
             </ul>
-          </>
-        )}
-        <p className="help">
-          Undo checks ownership and removes only verified MailPilot additions
-          from the last batch. It preserves unrelated labels and does not delete
-          labels created by MailPilot.
-        </p>
-        <div className="account-actions">
-          <button
-            className="secondary-button"
-            disabled={busy || !page?.accountId || unresolved}
-            onClick={() => void act("undo_preview")}
-          >
-            Preview undo last batch
-          </button>
-          <button
-            className="secondary-button"
-            disabled={busy || !page?.accountId}
-            onClick={() => void act("status")}
-          >
-            Refresh batch status
-          </button>
-        </div>
-        {results && !unresolved && (
-          <button
-            className="secondary-button"
-            disabled={busy}
-            onClick={() => void act("list")}
-          >
-            Start another selection
-          </button>
-        )}
-        <details className="technical-details">
-          <summary>Recovery details</summary>
-          <p>
-            Operations are recorded before dispatch. An interrupted or uncertain
-            request must be reconciled before it can be retried. Preview
-            validation, batch limits, and undo ownership are checked by
-            MailPilot.
-          </p>
-          {batch?.id && <p>Recorded action: {batch.id}</p>}
-        </details>
-      </div>
+          )}
+          {unresolved ? (
+            <button disabled={busy} onClick={() => void act("reconcile")}>
+              Check Gmail outcomes
+            </button>
+          ) : (
+            <div className="account-actions">
+              {hasUndo(batch) && (
+                <button
+                  disabled={busy}
+                  onClick={() => void act("undo_preview")}
+                >
+                  Undo
+                </button>
+              )}
+              <button
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => {
+                  setNotice(
+                    "The previous batch needs attention; its recorded outcomes are retained.",
+                  );
+                  setCompleted(hasUndo(batch) ? batch : null);
+                  goBack();
+                  setLoading(true);
+                  setReload((value) => value + 1);
+                }}
+              >
+                Go Back
+              </button>
+            </div>
+          )}
+        </>
+      )}
       {busy && (
         <button
+          className="secondary-button"
           onClick={() => {
             const expected = account.current;
             void organize({ operation: "cancel", accountId: expected }).catch(
               () => {
                 if (mounted.current && expected === account.current)
                   setError(
-                    "Could not stop organization. Refresh batch status to check recorded outcomes.",
+                    "Could not stop the operation. Wait for the recorded Gmail outcomes before continuing.",
                   );
               },
             );
           }}
         >
-          Stop organization
+          Stop
         </button>
       )}
-
-      <ConfirmDialog
-        open={confirmationOpen}
-        title={
-          batch?.kind === "undo"
-            ? "Undo these Gmail label additions?"
-            : "Apply these Gmail label changes?"
-        }
-        confirmLabel={
-          batch?.kind === "undo" ? "Confirm and undo" : "Confirm and apply"
-        }
-        onCancel={() => setConfirmation(null)}
-        onConfirm={() => {
-          if (!confirmationOpen) return;
-          setConfirmation(null);
-          void act("apply");
-        }}
-      >
-        <p>
-          {batch?.kind === "undo"
-            ? "Only verified MailPilot-owned label additions in this preview will be removed."
-            : "Only the label changes in your reviewed preview will be applied. No messages will be deleted or archived."}
-        </p>
-        <ul>
-          {batch?.steps.map((operation, index) => (
-            <li key={index}>
-              {operation.kind === "create_label"
-                ? "Create label"
-                : operation.kind === "add"
-                  ? "Add label to email"
-                  : "Remove label from email"}
-              : {operation.name}
-            </li>
-          ))}
-        </ul>
-      </ConfirmDialog>
     </section>
   );
 }

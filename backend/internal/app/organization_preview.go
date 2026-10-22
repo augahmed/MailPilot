@@ -7,20 +7,21 @@ import (
 	"strings"
 	"unicode"
 
+	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/repository"
 )
 
-func (s *Organization) list(ctx context.Context, account domain.AccountID, offset int, source string) OrganizationResponse {
+func (s *Organization) list(ctx context.Context, account domain.AccountID, offset int, source string, highest bool) OrganizationResponse {
 	r := emptyOrganization()
 	r.AccountID = string(account)
-	emails, err := s.emails.List(ctx, account, repository.Page{Limit: 6, Offset: offset})
+	emails, err := s.emails.List(ctx, account, repository.Page{Limit: domain.MaxOrganizationEmails + 1, Offset: offset})
 	if err != nil {
 		r.Code = orgCode(err)
 		return r
 	}
-	r.HasMore = len(emails) > 5
+	r.HasMore = len(emails) > domain.MaxOrganizationEmails
 	categories, err := s.categories.List(ctx, account)
 	if err != nil {
 		r.Code = orgCode(err)
@@ -32,7 +33,7 @@ func (s *Organization) list(ctx context.Context, account domain.AccountID, offse
 			names[c.ID] = c.Name
 		}
 	}
-	for _, stored := range emails[:min(5, len(emails))] {
+	for _, stored := range emails[:min(domain.MaxOrganizationEmails, len(emails))] {
 		email := stored.Email
 		row := OrganizationRowDTO{EmailID: string(email.ID), Sender: shortText(email.Sender.Address, 100), Subject: shortText(email.Subject, 200), CurrentLabels: []string{}, Change: "unclassified"}
 		for _, label := range email.Labels[:min(len(email.Labels), 50)] {
@@ -57,8 +58,8 @@ func (s *Organization) list(ctx context.Context, account domain.AccountID, offse
 			r.Code = orgCode(err)
 			return boundedOrganization(r)
 		}
-		if err == nil && run.ClassifierName == s.engine.Name() && run.ClassifierVersion == s.engine.Version() && len(run.Results) == 1 {
-			prediction := run.Results[0]
+		prediction, eligible := organizationPrediction(run, "", highest)
+		if err == nil && run.ClassifierName == s.engine.Name() && run.ClassifierVersion == s.engine.Version() && eligible {
 			name, ok := names[prediction.CategoryID]
 			if ok {
 				row.ProposedLabel = "MailPilot/" + name
@@ -67,13 +68,48 @@ func (s *Organization) list(ctx context.Context, account domain.AccountID, offse
 				row.Change = "candidate"
 			}
 		}
-		if err == nil && run.ClassifierName == s.engine.Name() && run.ClassifierVersion == s.engine.Version() && len(run.Results) > 1 {
+		if err == nil && run.ClassifierName == s.engine.Name() && run.ClassifierVersion == s.engine.Version() && !eligible && (len(run.Results) > 1 || run.Semantic != nil && len(run.Semantic.Assigned) > 1) {
 			row.Change = "multiple_suggestions"
+			if run.Semantic != nil && run.Semantic.State == "suggested" {
+				row.SuggestionCount = len(run.Results)
+			}
 		}
 		r.Rows = append(r.Rows, row)
 	}
 	return boundedOrganization(r)
 }
+
+// Organization reviews one label per email. Automatic suggestions already have
+// an evaluated ranking: propose its leader (score, then category ID for ties),
+// without changing the classifier's complete results or any local preference.
+// Several existing manual assignments never become an arbitrary primary choice.
+func organizationPrediction(run domain.ClassificationRun, choice domain.CategoryID, highest bool) (domain.ClassificationResult, bool) {
+	if len(run.Results) == 1 {
+		return run.Results[0], choice == "" || run.Results[0].CategoryID == choice
+	}
+	if len(run.Results) == 0 || choice == "" && !highest || run.Semantic == nil || run.Semantic.State != "suggested" || len(run.Semantic.Assigned) != 0 || run.UsedClassifier != "semantic" {
+		return domain.ClassificationResult{}, false
+	}
+	best := run.Results[0]
+	for _, result := range run.Results {
+		if result.ScoreKind != "cosine_similarity" {
+			return domain.ClassificationResult{}, false
+		}
+		if result.Confidence > best.Confidence || result.Confidence == best.Confidence && result.CategoryID < best.CategoryID {
+			best = result
+		}
+	}
+	if choice != "" {
+		for _, result := range run.Results {
+			if result.CategoryID == choice {
+				return result, true
+			}
+		}
+		return domain.ClassificationResult{}, false
+	}
+	return best, true
+}
+
 func labelsSnapshot(account domain.AccountID, labels []domain.EmailLabel) ([]domain.ProviderLabelID, []string, error) {
 	if len(labels) > 50 {
 		return nil, nil, repository.ErrInvalid
@@ -125,15 +161,22 @@ func listOrganizationLabels(ctx context.Context, account domain.AccountID, p Org
 	}
 	return nil, repository.ErrInvalid
 }
-func (s *Organization) prediction(ctx context.Context, account domain.AccountID, id domain.EmailID) (domain.ClassificationRun, domain.EmailCategory, domain.Email, error) {
+func (s *Organization) prediction(ctx context.Context, account domain.AccountID, id domain.EmailID, choice domain.CategoryID, highest bool) (domain.ClassificationRun, domain.EmailCategory, domain.Email, error) {
 	run, err := s.results.Get(ctx, account, id)
 	if err != nil {
 		return run, domain.EmailCategory{}, domain.Email{}, err
 	}
-	if run.ClassifierName != s.engine.Name() || run.ClassifierVersion != s.engine.Version() || len(run.Results) != 1 {
+	if run.ClassifierName != s.engine.Name() || run.ClassifierVersion != s.engine.Version() {
 		return run, domain.EmailCategory{}, domain.Email{}, repository.ErrConflict
 	}
-	cat, err := s.categories.Get(ctx, account, run.Results[0].CategoryID)
+	prediction, eligible := organizationPrediction(run, choice, highest)
+	if !eligible {
+		return run, domain.EmailCategory{}, domain.Email{}, repository.ErrNotFound
+	}
+	// Keep the immutable assessment hash/evidence for the complete suggestion set;
+	// only the selected proposal is narrowed for the existing one-label plan.
+	run.Results = []domain.ClassificationResult{prediction}
+	cat, err := s.categories.Get(ctx, account, prediction.CategoryID)
 	if err != nil {
 		return run, cat, domain.Email{}, err
 	}
@@ -148,27 +191,95 @@ func (s *Organization) preview(ctx context.Context, account domain.AccountID, re
 	if err != nil {
 		return emptyOrganization(), err
 	}
+	// Sync may reuse complete cached bodies using the provider's content identity.
+	// Explicit preview instead prepares authoritative full snapshots for just the
+	// selected mail. Publish them together before reading classification evidence:
+	// source refresh can invalidate the shared assessment generation for the batch.
+	snapshots := make([]domain.Email, 0, len(req.EmailIDs))
+	for _, id := range req.EmailIDs {
+		stored, err := s.emails.Get(ctx, account, domain.EmailID(id))
+		if err != nil {
+			return emptyOrganization(), err
+		}
+		email := stored.Email
+		live, err := p.FetchMessage(ctx, email.ProviderID)
+		if err != nil {
+			return emptyOrganization(), err
+		}
+		if live.AccountID != account || live.ProviderID != email.ProviderID || live.ID != "" && live.ID != email.ID {
+			return emptyOrganization(), repository.ErrConflict
+		}
+		if live.Validate() != nil {
+			return emptyOrganization(), provider.ErrMalformed
+		}
+		if email.BodyState == "complete" && live.BodyState != "complete" {
+			return emptyOrganization(), provider.ErrUnavailable
+		}
+		if _, _, err := labelsSnapshot(account, live.Labels); err != nil {
+			return emptyOrganization(), err
+		}
+		live.ID = email.ID
+		snapshots = append(snapshots, live)
+	}
+	// Reuse source persistence and its transactional derived-data invalidation.
+	// This neither prepares new embeddings nor changes Gmail or sync checkpoints.
+	if _, err := s.emails.UpsertBatch(ctx, account, snapshots); err != nil {
+		return emptyOrganization(), err
+	}
+	if s.prepareChunks != nil {
+		for _, live := range snapshots {
+			if err := s.prepareChunks(ctx, account, live.ProviderID); err != nil {
+				return emptyOrganization(), err
+			}
+		}
+	}
 	categories, err := s.categories.List(ctx, account)
 	if err != nil {
 		return emptyOrganization(), err
 	}
 	plan := domain.OrganizationPlan{AccountID: account, Kind: domain.ActionLabelDelta, Rows: []domain.OrganizationRow{}, Steps: []domain.OrganizationStep{}}
 	creates := map[string]bool{}
-	for _, id := range req.EmailIDs {
-		row, email, err := s.proposal(ctx, account, domain.EmailID(id), req.Source)
+	choices := map[domain.EmailID]domain.CategoryID{}
+	for _, choice := range req.Choices {
+		choices[domain.EmailID(choice.EmailID)] = domain.CategoryID(choice.CategoryID)
+	}
+	for _, live := range snapshots {
+		liveHash, err := repository.EmailContentHash(live)
 		if err != nil {
 			return emptyOrganization(), err
-		}
-		live, err := p.FetchMessage(ctx, email.ProviderID)
-		if err != nil {
-			return emptyOrganization(), err
-		}
-		if live.AccountID != account || live.ProviderID != email.ProviderID || !matchesOrganizationInput(live, categories, row) {
-			return emptyOrganization(), repository.ErrConflict
 		}
 		before, names, err := labelsSnapshot(account, live.Labels)
 		if err != nil {
 			return emptyOrganization(), err
+		}
+		row, email, err := s.proposalChoice(ctx, account, live.ID, req.Source, choices[live.ID], req.SuggestionMode == "highest")
+		if req.Source == "" && (errors.Is(err, repository.ErrConflict) || errors.Is(err, repository.ErrNotFound)) {
+			// Explicit preview may refresh a stale assessment from the current
+			// shared snapshot. Classify reuses existing vectors; it never embeds.
+			current, readErr := s.emails.Get(ctx, account, live.ID)
+			if readErr != nil {
+				return emptyOrganization(), readErr
+			}
+			if current.ContentHash != liveHash {
+				return emptyOrganization(), repository.ErrConflict
+			}
+			run, classifyErr := s.engine.Classify(ctx, current.Email, categories)
+			if classifyErr != nil {
+				return emptyOrganization(), classifyErr
+			}
+			if run.AccountID != account || run.EmailID != current.Email.ID || run.ClassifierName != s.engine.Name() || run.ClassifierVersion != s.engine.Version() || !classification.FreshInput(run, current.Email, categories) {
+				return emptyOrganization(), repository.ErrConflict
+			}
+			if err := s.results.Replace(ctx, run); err != nil {
+				return emptyOrganization(), err
+			}
+			row, email, err = s.proposalChoice(ctx, account, current.Email.ID, req.Source, choices[live.ID], req.SuggestionMode == "highest")
+		}
+		if err != nil {
+			return emptyOrganization(), err
+		}
+		if !matchesOrganizationInput(live, categories, row) {
+			return emptyOrganization(), repository.ErrConflict
 		}
 		name := row.ProposedLabel
 		row.EmailID = email.ID

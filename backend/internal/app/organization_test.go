@@ -267,6 +267,68 @@ func TestOrganizationStalePredictionsAndUnsafeRequests(t *testing.T) {
 		t.Fatal("stale preview applied", r)
 	}
 }
+func TestOrganizationPreviewRejectsWrongSourceIdentityWithoutRefreshingOrWriting(t *testing.T) {
+	s, f, email := organizationFixture(t)
+	ctx := context.Background()
+	before, err := s.emails.Get(ctx, "a", email.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.email.Subject = "New remote source content"
+	f.email.ProviderID = "different-provider-message"
+	f.email.Labels = append(f.email.Labels, domain.EmailLabel{AccountID: "a", ProviderID: "external", Name: "External", Kind: domain.LabelKindUser})
+	r := awaitOrganization(t, s, OrganizationRequest{Operation: "preview", AccountID: "a", EmailIDs: []string{string(email.ID)}})
+	if r.Code != "stale_preview" || r.ID != "" || len(f.writes) != 0 {
+		t.Fatalf("wrong source identity was accepted: %+v", r)
+	}
+	after, err := s.emails.Get(ctx, "a", email.ID)
+	if err != nil || after.ContentHash != before.ContentHash || after.Email.Subject != before.Email.Subject || len(after.Email.Labels) != len(before.Email.Labels) {
+		t.Fatal("preview replaced an unrelated source or its labels", err)
+	}
+	if _, err := s.journal.Latest(ctx, "a", false); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatal("failed preview saved a plan", err)
+	}
+}
+func TestOrganizationPreviewDoesNotDowngradeCompleteCachedMail(t *testing.T) {
+	s, f, email := organizationFixture(t)
+	ctx := context.Background()
+	before, err := s.emails.Get(ctx, "a", email.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.email.BodyState = "unavailable"
+	f.email.BodyText = "Temporary incomplete provider response"
+	r := awaitOrganization(t, s, OrganizationRequest{Operation: "preview", AccountID: "a", EmailIDs: []string{string(email.ID)}})
+	if r.Code != "operation_failed" || r.ID != "" || len(f.writes) != 0 {
+		t.Fatalf("incomplete response accepted: %+v", r)
+	}
+	after, err := s.emails.Get(ctx, "a", email.ID)
+	if err != nil || after.ContentHash != before.ContentHash || after.Email.BodyState != before.Email.BodyState {
+		t.Fatal("preview discarded complete cached source", err)
+	}
+}
+func TestOrganizationPreviewReassessesChangedSourceAndPreservesAbstention(t *testing.T) {
+	s, f, email := organizationFixture(t)
+	ctx := context.Background()
+	f.email.Subject = "A general personal note"
+	f.email.BodyText = "Hello, I hope you are having a nice day."
+	f.email.Sender = domain.EmailAddress{Address: "friend@example.test"}
+	r := awaitOrganization(t, s, OrganizationRequest{Operation: "preview", AccountID: "a", EmailIDs: []string{string(email.ID)}})
+	if r.Code != "not_found" || r.ID != "" || len(f.writes) != 0 {
+		t.Fatalf("stale category reused or abstention misreported: %+v", r)
+	}
+	stored, err := s.emails.Get(ctx, "a", email.ID)
+	if err != nil || stored.Email.Subject != f.email.Subject {
+		t.Fatal("preview did not refresh selected source", err)
+	}
+	run, err := s.results.Get(ctx, "a", email.ID)
+	if err != nil || len(run.Results) != 0 {
+		t.Fatal("current abstention was not saved", err)
+	}
+	if _, err := s.journal.Latest(ctx, "a", false); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatal("ineligible preview saved a plan", err)
+	}
+}
 func TestOrganizationUncertainDispatchReconcilesWithoutRetryOrUnsafeUndo(t *testing.T) {
 	s, f, email := organizationFixture(t)
 	f.fail = "add"

@@ -1,0 +1,626 @@
+{
+  "request": {
+    "operation": "preview",
+    "accountId": "fixture-account",
+    "offset": 0,
+    "emailIds": [
+      "batch-email-0",
+      "batch-email-1",
+      "batch-email-2",
+      "batch-email-3",
+      "batch-email-4",
+      "batch-email-5",
+      "batch-email-6",
+      "batch-email-7",
+      "batch-email-8",
+      "batch-email-9",
+      "batch-email-10",
+      "batch-email-11",
+      "batch-email-12",
+      "batch-email-13",
+      "batch-email-14",
+      "batch-email-15",
+      "batch-email-16",
+      "batch-email-17",
+      "batch-email-18",
+      "batch-email-19",
+      "batch-email-20",
+      "batch-email-21",
+      "batch-email-22",
+      "batch-email-23",
+      "batch-email-24"
+    ],
+    "actionId": "",
+    "digest": ""
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "state": "preview",
+    "code": "",
+    "id": "fixture-action",
+    "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "label_delta",
+    "expiresAt": 1791741600000,
+    "dryRun": false,
+    "hasMore": false,
+    "rows": [
+      {
+        "emailId": "batch-email-0",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 0",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 0",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-1",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 1",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 1",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-2",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 2",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 2",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-3",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 3",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 3",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-4",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 4",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 4",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-5",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 5",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 5",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-6",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 6",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 6",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-7",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 7",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 7",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-8",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 8",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 8",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-9",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 9",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 9",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-10",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 10",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 10",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-11",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 11",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 11",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-12",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 12",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 12",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-13",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 13",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 13",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-14",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 14",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 14",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-15",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 15",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 15",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-16",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 16",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 16",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-17",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 17",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 17",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-18",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 18",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 18",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-19",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 19",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 19",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-20",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 20",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 20",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-21",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 21",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 21",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-22",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 22",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 22",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-23",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 23",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 23",
+        "confidence": 0.6,
+        "change": "add"
+      },
+      {
+        "emailId": "batch-email-24",
+        "sender": "sender@example.test",
+        "subject": "Synthetic message 24",
+        "currentLabels": ["INBOX"],
+        "proposedLabel": "MailPilot/Category 24",
+        "confidence": 0.6,
+        "change": "add"
+      }
+    ],
+    "steps": [
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 0",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 0",
+        "emailId": "batch-email-0",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 1",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 1",
+        "emailId": "batch-email-1",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 2",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 2",
+        "emailId": "batch-email-2",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 3",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 3",
+        "emailId": "batch-email-3",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 4",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 4",
+        "emailId": "batch-email-4",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 5",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 5",
+        "emailId": "batch-email-5",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 6",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 6",
+        "emailId": "batch-email-6",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 7",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 7",
+        "emailId": "batch-email-7",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 8",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 8",
+        "emailId": "batch-email-8",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 9",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 9",
+        "emailId": "batch-email-9",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 10",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 10",
+        "emailId": "batch-email-10",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 11",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 11",
+        "emailId": "batch-email-11",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 12",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 12",
+        "emailId": "batch-email-12",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 13",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 13",
+        "emailId": "batch-email-13",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 14",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 14",
+        "emailId": "batch-email-14",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 15",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 15",
+        "emailId": "batch-email-15",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 16",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 16",
+        "emailId": "batch-email-16",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 17",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 17",
+        "emailId": "batch-email-17",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 18",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 18",
+        "emailId": "batch-email-18",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 19",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 19",
+        "emailId": "batch-email-19",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 20",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 20",
+        "emailId": "batch-email-20",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 21",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 21",
+        "emailId": "batch-email-21",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 22",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 22",
+        "emailId": "batch-email-22",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 23",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 23",
+        "emailId": "batch-email-23",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "create_label",
+        "name": "MailPilot/Category 24",
+        "emailId": "",
+        "state": "pending",
+        "code": ""
+      },
+      {
+        "kind": "add",
+        "name": "MailPilot/Category 24",
+        "emailId": "batch-email-24",
+        "state": "pending",
+        "code": ""
+      }
+    ]
+  }
+}

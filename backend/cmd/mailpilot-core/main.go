@@ -164,6 +164,7 @@ func run() int {
 		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {
 			return gmail.NewProvider(account, authentication)
 		}, store.Emails(), store.Categories(), store.Classifications(), store.Organization(), engine)
+		organization.SetChunkProcessor(chunking.Prepare)
 		gate := make(chan struct{}, 1)
 		keys := func(account domain.AccountID) credentials.SecretStore {
 			return credentials.NewAPIKeyStore(cfg.DataDir+"\x00"+string(account), "openai")

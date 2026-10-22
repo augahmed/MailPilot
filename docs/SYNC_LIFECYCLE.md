@@ -22,6 +22,19 @@ include the history ID in that revision. Partial cached bodies always require a
 full GET when observed. No broader Inbox import, attachment download, background
 sync or new Gmail mutation path is introduced.
 
+An explicit organization preview fetches full snapshots for only its selected
+emails (at most 25). It validates their account/provider identity and publishes
+them together with the existing source repository. It runs the same shared text
+preparation used by sync before assessing classifications, retaining exact compatible
+chunk vectors when only source metadata changed.
+This repairs older complete cached representations that a metadata-only sync can
+retain. Changed source data uses the same transactional invalidation of derived
+data; preview starts no embedding inference and does not advance sync checkpoints.
+An incomplete read cannot downgrade a complete cached source. The journaled
+preview binds these refreshed inputs; changes after review still reject apply.
+See [organization contracts](../contracts/README.md#gmail-organization-protocol-v1-additive-extension)
+and [preview regression](../backend/internal/provider/gmail/organization_preview_refresh_test.go).
+
 After history has drained, manual sync spends only its remaining observation
 budget retrying incomplete cached bodies. This closes the gap where a temporary
 partial response recovered without producing a new Gmail history event. The

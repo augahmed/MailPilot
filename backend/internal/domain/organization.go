@@ -4,6 +4,9 @@ package domain
 // mailbox_actions. Steps contain the narrowly bounded remote write journal.
 const PotentialPhishingLabel = "Potential Phishing"
 
+const MaxOrganizationEmails = 25
+const MaxOrganizationSteps = 2 * MaxOrganizationEmails
+
 // OrganizationRisk is immutable review evidence; it grants no write authority.
 type OrganizationRisk struct {
 	Score     int               `json:"score"`

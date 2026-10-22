@@ -280,6 +280,10 @@ impl ClassificationPage {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrganizationRequest {
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub suggestion_mode: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<OrganizationChoice>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub source: String,
     pub operation: String,
     pub account_id: String,
@@ -290,6 +294,32 @@ pub struct OrganizationRequest {
 }
 impl OrganizationRequest {
     fn valid(&self) -> bool {
+        if !self.suggestion_mode.is_empty()
+            && (!self.source.is_empty()
+                || !["choose", "highest"].contains(&self.suggestion_mode.as_str())
+                || !["list", "preview", "dry_run"].contains(&self.operation.as_str()))
+        {
+            return false;
+        }
+        if self.choices.len() > 25
+            || (!self.choices.is_empty()
+                && (!self.source.is_empty()
+                    || self.suggestion_mode == "highest"
+                    || !["preview", "dry_run"].contains(&self.operation.as_str())))
+        {
+            return false;
+        }
+        for (i, choice) in self.choices.iter().enumerate() {
+            if !self.email_ids.contains(&choice.email_id)
+                || choice.category_id.is_empty()
+                || choice.category_id.len() > 100
+                || self.choices[..i]
+                    .iter()
+                    .any(|previous| previous.email_id == choice.email_id)
+            {
+                return false;
+            }
+        }
         if !self.source.is_empty()
             && (self.source != "phishing"
                 || !["list", "preview", "dry_run"].contains(&self.operation.as_str()))
@@ -298,7 +328,7 @@ impl OrganizationRequest {
         }
         if self.account_id.len() > 100
             || self.offset > 1_000_000
-            || self.email_ids.len() > 5
+            || self.email_ids.len() > 25
             || self.action_id.len() > 100
             || self.digest.len() > 64
         {
@@ -310,6 +340,14 @@ impl OrganizationRequest {
             }
         }
         match self.operation.as_str() {
+            "suggestions" => {
+                !self.account_id.is_empty()
+                    && self.email_ids.len() == 1
+                    && self.source.is_empty()
+                    && self.offset == 0
+                    && self.action_id.is_empty()
+                    && self.digest.is_empty()
+            }
             "list" | "status" => self.email_ids.is_empty() && self.digest.is_empty(),
             "preview" | "dry_run" => {
                 !self.account_id.is_empty()
@@ -338,6 +376,19 @@ impl OrganizationRequest {
 }
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrganizationChoice {
+    pub email_id: String,
+    pub category_id: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrganizationSuggestion {
+    pub category_id: String,
+    pub name: String,
+    pub confidence: f64,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrganizationRisk {
     pub score: u8,
     pub risk: String,
@@ -348,6 +399,12 @@ pub struct OrganizationRisk {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrganizationRow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggestion_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggestions: Option<Vec<OrganizationSuggestion>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_labels: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1117,6 +1174,49 @@ mod classification_tests {
 #[cfg(test)]
 mod organization_tests {
     use super::*;
+    #[test]
+    fn organization_accepts_25_and_rejects_26_selected_emails() {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../contracts/organization-batch-v1.json"))
+                .unwrap();
+        let mut request: OrganizationRequest =
+            serde_json::from_value(fixture["request"].clone()).unwrap();
+        let response: OrganizationResponse =
+            serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(response.rows.len(), 25);
+        assert_eq!(response.steps.len(), 50);
+        assert!(request.valid());
+        request.email_ids.push("batch-email-26".into());
+        assert!(!request.valid());
+    }
+    #[test]
+    fn organization_suggestion_modes_and_choices_are_narrow() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../contracts/organization-suggestions-v1.json"
+        ))
+        .unwrap();
+        for name in ["request", "choicesRequest", "highestRequest"] {
+            let request: OrganizationRequest =
+                serde_json::from_value(fixture[name].clone()).unwrap();
+            assert!(request.valid());
+        }
+        let response: OrganizationResponse =
+            serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(response.rows[0].suggestions.as_ref().unwrap().len(), 3);
+        let mut request: OrganizationRequest =
+            serde_json::from_value(fixture["choicesRequest"].clone()).unwrap();
+        request.suggestion_mode = "highest".into();
+        assert!(!request.valid());
+        request.suggestion_mode = "choose".into();
+        request.choices[0].email_id = "unselected".into();
+        assert!(!request.valid());
+        request.choices[0].email_id = "fixture-email".into();
+        request.operation = "apply".into();
+        assert!(!request.valid());
+        let mut unsafe_request = fixture["choicesRequest"].clone();
+        unsafe_request["choices"][0]["labelName"] = json!("arbitrary");
+        assert!(serde_json::from_value::<OrganizationRequest>(unsafe_request).is_err());
+    }
     #[test]
     fn strict_organization_contract() {
         let fixture: Value =

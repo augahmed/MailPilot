@@ -113,6 +113,45 @@ button:disabled {
 .classification-reset:disabled {
   filter: blur(0.45px);
 }
+.organization-selection-actions {
+  position: sticky;
+  top: 12px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+}
+.organization-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 760px;
+}
+.organization-selection-tools {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.organization-selection-tools button {
+  min-height: 32px;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .organization-filters {
+    grid-template-columns: 1fr;
+  }
+}
+.organization-panel .mail-table {
+  max-height: min(65vh, 660px);
+}
 button:focus-visible {
   outline: 3px solid #b37415;
   outline-offset: 3px;
@@ -1224,7 +1263,7 @@ summary {
 }
 .workflow-steps {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   list-style: none;
   gap: 10px;
   padding: 0;
@@ -1268,8 +1307,52 @@ summary {
   margin-top: 16px;
 }
 .organization-panel table {
-  min-width: 650px;
+  width: 100%;
+  min-width: 900px;
+  table-layout: fixed;
   font-size: 12px;
+}
+.organization-selection-table th:first-child {
+  width: 64px;
+}
+.organization-selection-table th:nth-child(2) {
+  width: 260px;
+}
+.organization-selection-table th:nth-child(3) {
+  width: 160px;
+}
+.organization-preview-table th:first-child {
+  width: 34%;
+}
+.organization-preview-table th:nth-child(2) {
+  width: 33%;
+}
+.organization-completion,
+.organization-confirm-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.organization-completion {
+  margin-bottom: 24px;
+  background: var(--soft);
+  color: var(--accent);
+  font-size: 13px;
+}
+.organization-confirm-actions {
+  position: sticky;
+  bottom: 12px;
+  margin-top: 24px;
+  box-shadow: 0 4px 18px #153a2c12;
+}
+.organization-panel #organization-stage-heading {
+  scroll-margin-top: 24px;
 }
 .organization-panel caption {
   text-align: left;

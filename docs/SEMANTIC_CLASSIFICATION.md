@@ -97,10 +97,20 @@ assessment. Edits revoke stale previews. The optional field is omitted from lega
 rows so old serialized plans/digests retain their meaning. Explicit preview, separate
 confirmation, journal-before-dispatch, reconciliation, and verified undo remain the
 same. Undo uses saved verified outcomes even if current classification is stale.
-Emails with multiple suggestions display `multiple_suggestions` in organization
-review and require an explicit primary choice before a label preview. Suggestions
-never silently choose the first tied category for Gmail. Existing preview/confirmation/
-journaling/undo remains unchanged. There are no automatic Gmail label writes.
+Gmail Organization defaults to showing **Multiple suggestions** with an on-demand
+selector containing the complete current suggestion set for that email. Choosing
+one affects only this batch, without saving a manual primary preference. A separate
+**Highest-ranked suggestion only** mode proposes the existing score leader, using
+category ID as the existing deterministic tie-break. Single automatic suggestions
+work directly in both modes. Existing manual primary preferences take priority;
+multiple legacy manual assignments still require an explicit primary choice.
+The full classifier suggestion set and algorithm remain unchanged. Preview binds
+the selected category and complete assessment hash; apply revalidates both.
+Shared text preparation runs after selected-source refresh and before assessment,
+reusing exact compatible cached vectors with no inference. Incompatible vectors
+remain unavailable and cannot be used merely to preserve an earlier suggestion.
+Existing preview/confirmation/journaling/undo stays in force. Gmail writes always
+require explicit confirmation.
 
 ## Evaluation and limitations
 
@@ -204,6 +214,7 @@ length/overlap invariance, account isolation, manual overrides, stale workers an
 previews, restart/purge, missing vectors and verified undo. Shared Go/Rust/TypeScript
 fixtures cover five simultaneous suggestions and score identities. UI tests verify
 all suggestions display with one set of evidence/override controls and that label
-selection requires an explicit primary preference for multiple suggestions. Review
+selection supports complete per-email options in the default mode and a separate
+highest-ranked mode without manufacturing manual preferences. Review
 pages remain bounded to five emails and 48 KiB; oversized evidence stays persisted
 and reports the existing display-limit error instead of silently dropping categories.

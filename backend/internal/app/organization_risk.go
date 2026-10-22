@@ -14,6 +14,9 @@ var errRiskBelowThreshold = errors.New("risk below configured threshold")
 // proposal supplies evidence to the existing label planning pipeline. The source
 // selects suggestions only; apply and undo use the immutable journaled evidence.
 func (s *Organization) proposal(ctx context.Context, account domain.AccountID, id domain.EmailID, source string) (domain.OrganizationRow, domain.Email, error) {
+	return s.proposalChoice(ctx, account, id, source, "", false)
+}
+func (s *Organization) proposalChoice(ctx context.Context, account domain.AccountID, id domain.EmailID, source string, choice domain.CategoryID, highest bool) (domain.OrganizationRow, domain.Email, error) {
 	if source == "phishing" {
 		p, err := assessRisk(ctx, s.emails, s.riskEngine, account, id)
 		if err != nil {
@@ -32,7 +35,7 @@ func (s *Organization) proposal(ctx context.Context, account domain.AccountID, i
 		row := domain.OrganizationRow{InputHash: p.InputHash, ProposedLabel: domain.PotentialPhishingLabel, Phishing: &domain.OrganizationRisk{Score: p.Score, Threshold: s.riskEngine.HighThreshold(), Version: p.AnalyzerVersion, Findings: p.Findings}}
 		return row, stored.Email, nil
 	}
-	run, cat, email, err := s.prediction(ctx, account, id)
+	run, cat, email, err := s.prediction(ctx, account, id, choice, highest)
 	if err != nil {
 		return domain.OrganizationRow{}, email, err
 	}
@@ -47,7 +50,7 @@ func (s *Organization) checkProposal(ctx context.Context, account domain.Account
 	if row.Phishing != nil {
 		source = "phishing"
 	}
-	current, email, err := s.proposal(ctx, account, row.EmailID, source)
+	current, email, err := s.proposalChoice(ctx, account, row.EmailID, source, row.CategoryID, false)
 	if err != nil {
 		return err
 	}

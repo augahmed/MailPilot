@@ -7,20 +7,39 @@ import (
 )
 
 type OrganizationRequest struct {
-	Source    string   `json:"source,omitempty"`
-	Operation string   `json:"operation"`
-	AccountID string   `json:"accountId"`
-	Offset    int      `json:"offset"`
-	EmailIDs  []string `json:"emailIds"`
-	ActionID  string   `json:"actionId"`
-	Digest    string   `json:"digest"`
+	SuggestionMode string               `json:"suggestionMode,omitempty"`
+	Choices        []OrganizationChoice `json:"choices,omitempty"`
+	Source         string               `json:"source,omitempty"`
+	Operation      string               `json:"operation"`
+	AccountID      string               `json:"accountId"`
+	Offset         int                  `json:"offset"`
+	EmailIDs       []string             `json:"emailIds"`
+	ActionID       string               `json:"actionId"`
+	Digest         string               `json:"digest"`
+}
+
+type OrganizationChoice struct {
+	EmailID    string `json:"emailId"`
+	CategoryID string `json:"categoryId"`
+}
+
+type OrganizationSuggestion struct {
+	CategoryID string  `json:"categoryId"`
+	Name       string  `json:"name"`
+	Confidence float64 `json:"confidence"`
 }
 
 func (p OrganizationRequest) Valid() bool {
+	if p.SuggestionMode != "" && (p.Source != "" || (p.SuggestionMode != "choose" && p.SuggestionMode != "highest") || (p.Operation != "list" && p.Operation != "preview" && p.Operation != "dry_run")) {
+		return false
+	}
+	if len(p.Choices) > domain.MaxOrganizationEmails || len(p.Choices) > 0 && (p.Source != "" || p.SuggestionMode == "highest" || (p.Operation != "preview" && p.Operation != "dry_run")) {
+		return false
+	}
 	if p.Source != "" && (p.Source != "phishing" || (p.Operation != "list" && p.Operation != "preview" && p.Operation != "dry_run")) {
 		return false
 	}
-	if len(p.AccountID) > 100 || p.Offset < 0 || p.Offset > 1000000 || len(p.EmailIDs) > 5 || len(p.ActionID) > 100 || len(p.Digest) > 64 {
+	if len(p.AccountID) > 100 || p.Offset < 0 || p.Offset > 1000000 || len(p.EmailIDs) > domain.MaxOrganizationEmails || len(p.ActionID) > 100 || len(p.Digest) > 64 {
 		return false
 	}
 	seen := map[string]bool{}
@@ -30,7 +49,16 @@ func (p OrganizationRequest) Valid() bool {
 		}
 		seen[id] = true
 	}
+	chosen := map[string]bool{}
+	for _, choice := range p.Choices {
+		if !seen[choice.EmailID] || chosen[choice.EmailID] || choice.CategoryID == "" || len(choice.CategoryID) > 100 {
+			return false
+		}
+		chosen[choice.EmailID] = true
+	}
 	switch p.Operation {
+	case "suggestions":
+		return p.AccountID != "" && len(p.EmailIDs) == 1 && p.Source == "" && p.Offset == 0 && p.ActionID == "" && p.Digest == ""
 	case "list", "status":
 		return len(p.EmailIDs) == 0 && p.Digest == ""
 	case "preview", "dry_run":
@@ -59,15 +87,18 @@ func organizationRiskDTO(p *domain.OrganizationRisk) *OrganizationRiskDTO {
 }
 
 type OrganizationRowDTO struct {
-	ScoreKind     string               `json:"scoreKind,omitempty"`
-	Phishing      *OrganizationRiskDTO `json:"phishing,omitempty"`
-	EmailID       string               `json:"emailId"`
-	Sender        string               `json:"sender"`
-	Subject       string               `json:"subject"`
-	CurrentLabels []string             `json:"currentLabels"`
-	ProposedLabel string               `json:"proposedLabel"`
-	Confidence    float64              `json:"confidence"`
-	Change        string               `json:"change"`
+	SuggestionCount int                      `json:"suggestionCount,omitempty"`
+	Suggestions     []OrganizationSuggestion `json:"suggestions,omitempty"`
+	ScoreKind       string                   `json:"scoreKind,omitempty"`
+	Phishing        *OrganizationRiskDTO     `json:"phishing,omitempty"`
+	EmailID         string                   `json:"emailId"`
+	Sender          string                   `json:"sender"`
+	Subject         string                   `json:"subject"`
+	UpdatedLabels   *[]string                `json:"updatedLabels,omitempty"`
+	CurrentLabels   []string                 `json:"currentLabels"`
+	ProposedLabel   string                   `json:"proposedLabel"`
+	Confidence      float64                  `json:"confidence"`
+	Change          string                   `json:"change"`
 }
 type OrganizationStepDTO struct {
 	Kind    string `json:"kind"`

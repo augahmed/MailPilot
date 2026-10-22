@@ -47,8 +47,22 @@ export const organizationResponseSchema = z
             sender: z.string(),
             subject: z.string(),
             currentLabels: z.array(z.string()).max(50),
+            updatedLabels: z.array(z.string()).max(50).optional(),
             proposedLabel: z.string().max(110),
             confidence: z.number().min(0).max(1),
+            suggestionCount: z.number().int().min(1).max(100).optional(),
+            suggestions: z
+              .array(
+                z
+                  .object({
+                    categoryId: z.string().min(1).max(100),
+                    name: z.string().min(1).max(100),
+                    confidence: z.number().min(0).max(1),
+                  })
+                  .strict(),
+              )
+              .max(100)
+              .optional(),
             scoreKind: z
               .enum(["rule_confidence", "cosine_similarity", "user_assignment"])
               .optional(),
@@ -87,7 +101,7 @@ export const organizationResponseSchema = z
           })
           .strict(),
       )
-      .max(5),
+      .max(25),
     steps: z
       .array(
         z
@@ -115,13 +129,16 @@ export const organizationResponseSchema = z
           })
           .strict(),
       )
-      .max(10),
+      .max(50),
   })
   .strict();
 export type OrganizationResponse = z.infer<typeof organizationResponseSchema>;
 export type OrganizationRequest = {
+  suggestionMode?: "choose" | "highest";
+  choices?: { emailId: string; categoryId: string }[];
   source?: "phishing";
   operation:
+    | "suggestions"
     | "list"
     | "status"
     | "preview"
@@ -143,12 +160,14 @@ export async function organize(
   return organizationResponseSchema.parse(
     await invoke<unknown>("organization_manage", {
       request: {
-        accountId: "",
-        offset: 0,
-        emailIds: [],
-        actionId: "",
-        digest: "",
         ...request,
+        // Tauri serializes undefined properties by omitting them. Required
+        // Rust fields must survive even when optional callers pass undefined.
+        accountId: request.accountId ?? "",
+        offset: request.offset ?? 0,
+        emailIds: request.emailIds ?? [],
+        actionId: request.actionId ?? "",
+        digest: request.digest ?? "",
       },
     }),
   );

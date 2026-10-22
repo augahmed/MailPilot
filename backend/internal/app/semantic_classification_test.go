@@ -126,7 +126,7 @@ func TestSemanticReviewScoresForwardedMailWithoutAuthoredNote(t *testing.T) {
 	}
 }
 
-func TestSemanticMultipleSuggestionsPersistAndRequirePrimaryForLabels(t *testing.T) {
+func TestSemanticMultipleSuggestionsSupportChoiceAndHighestModes(t *testing.T) {
 	ctx := context.Background()
 	s, db, f, engine, review := semanticAppFixture(t, 1)
 	f.invoke = func(_ context.Context, texts []string) ([][]float32, error) {
@@ -158,21 +158,67 @@ func TestSemanticMultipleSuggestionsPersistAndRequirePrimaryForLabels(t *testing
 	org := NewOrganization(ctx, s.session, func(domain.AccountID) OrganizationProvider { return fake }, db.Emails(), db.Categories(), db.Classifications(), db.Organization(), engine)
 	t.Cleanup(org.Close)
 	listed := org.Handle(ctx, OrganizationRequest{Operation: "list", AccountID: "a"})
-	if len(listed.Rows) != 1 || listed.Rows[0].Change != "multiple_suggestions" || listed.Rows[0].ProposedLabel != "" {
-		t.Fatal(listed)
+	leader, err := db.Categories().Get(ctx, "a", domain.CategoryID(row.Predictions[0].CategoryID))
+	if err != nil {
+		t.Fatal(err)
 	}
-	org.Handle(ctx, OrganizationRequest{Operation: "preview", AccountID: "a", EmailIDs: []string{row.EmailID}})
-	preview := awaitOrganization(t, org, OrganizationRequest{Operation: "status", AccountID: "a"})
-	if preview.Code == "" || len(fake.writes) != 0 {
-		t.Fatal("ambiguous suggestions prepared a label", preview, fake.writes)
+	if len(listed.Rows) != 1 || listed.Rows[0].Change != "multiple_suggestions" || listed.Rows[0].SuggestionCount != 6 || listed.Rows[0].ProposedLabel != "" {
+		t.Fatal("default must retain multiple suggestions", listed)
 	}
-	assigned := review.Review(ctx, ClassificationRequest{Operation: "assigned", AccountID: "a", EmailID: row.EmailID, CategoryID: row.Predictions[0].CategoryID, Revision: row.ReaderRevision})
+	defaultPreview := awaitOrganization(t, org, OrganizationRequest{Operation: "preview", AccountID: "a", EmailIDs: []string{row.EmailID}})
+	if defaultPreview.Code != "not_found" || len(fake.writes) != 0 {
+		t.Fatal("default silently chose a category", defaultPreview)
+	}
+	options := org.Handle(ctx, OrganizationRequest{Operation: "suggestions", AccountID: "a", EmailIDs: []string{row.EmailID}})
+	if options.Code != "" || len(options.Rows) != 1 || len(options.Rows[0].Suggestions) != 6 {
+		t.Fatal("incomplete suggestion options", options)
+	}
+	other := org.Handle(ctx, OrganizationRequest{Operation: "suggestions", AccountID: "b", EmailIDs: []string{row.EmailID}})
+	if other.Code != "unauthorized" || len(other.Rows) != 0 {
+		t.Fatal("cross-account options exposed", other)
+	}
+	highestList := org.Handle(ctx, OrganizationRequest{Operation: "list", AccountID: "a", SuggestionMode: "highest"})
+	if highestList.Rows[0].Change != "candidate" || highestList.Rows[0].ProposedLabel != "MailPilot/"+leader.Name {
+		t.Fatal("highest mode did not use the leader", highestList)
+	}
+	highest := awaitOrganization(t, org, OrganizationRequest{Operation: "preview", AccountID: "a", SuggestionMode: "highest", EmailIDs: []string{row.EmailID}})
+	if highest.Code != "" || highest.Rows[0].ProposedLabel != "MailPilot/"+leader.Name || len(fake.writes) != 0 {
+		t.Fatal("highest mode failed", highest)
+	}
+	forged := awaitOrganization(t, org, OrganizationRequest{Operation: "preview", AccountID: "a", EmailIDs: []string{row.EmailID}, Choices: []OrganizationChoice{{EmailID: row.EmailID, CategoryID: "not-suggested"}}})
+	if forged.Code != "not_found" || len(fake.writes) != 0 {
+		t.Fatal("unsuggested category accepted", forged)
+	}
+	choice := options.Rows[0].Suggestions[2]
+	preview := awaitOrganization(t, org, OrganizationRequest{Operation: "preview", AccountID: "a", EmailIDs: []string{row.EmailID}, Choices: []OrganizationChoice{{EmailID: row.EmailID, CategoryID: choice.CategoryID}}})
+	if preview.Code != "" || preview.State != "preview" || len(preview.Rows) != 1 || preview.Rows[0].ProposedLabel != "MailPilot/"+choice.Name || len(fake.writes) != 0 {
+		t.Fatal("chosen automatic suggestion could not be previewed", preview)
+	}
+
+	current, err := db.Classifications().Get(ctx, "a", domain.EmailID(row.EmailID))
+	if err != nil || len(current.Results) != 6 {
+		t.Fatal("organization discarded classification suggestions", err)
+	}
+	snapshot, err := db.Semantic().Snapshot(ctx, "a", domain.EmailID(row.EmailID), s.profile)
+	if err != nil || snapshot.Preference.Mode != "" {
+		t.Fatal("preview manufactured a manual assignment", err)
+	}
+	plan, err := db.Organization().Get(ctx, "a", domain.ActionID(preview.ID))
+	if err != nil || plan.Rows[0].Classification == nil || plan.Rows[0].InputHash != current.InputHash {
+		t.Fatal("preview did not bind the complete automatic assessment", err)
+	}
+	applied := applyOrganization(t, org, preview)
+	if applied.Code != "" || applied.State != "applied" || len(fake.writes) != 2 {
+		t.Fatal("automatic suggestion was not applied after confirmation", applied)
+	}
+	assigned := review.Review(ctx, ClassificationRequest{Operation: "assigned", AccountID: "a", EmailID: row.EmailID, CategoryID: row.Predictions[len(row.Predictions)-1].CategoryID, Revision: row.ReaderRevision})
 	if assigned.Errors != 0 || assigned.Rows[0].State != "assigned" || len(assigned.Rows[0].Predictions) != 1 || f.count() != calls {
 		t.Fatal("manual primary failed or re-embedded mail", assigned)
 	}
 	listed = org.Handle(ctx, OrganizationRequest{Operation: "list", AccountID: "a"})
-	if listed.Rows[0].Change != "candidate" || len(fake.writes) != 0 {
-		t.Fatal(listed)
+	override, err := db.Categories().Get(ctx, "a", domain.CategoryID(row.Predictions[len(row.Predictions)-1].CategoryID))
+	if err != nil || listed.Rows[0].Change != "candidate" || listed.Rows[0].ProposedLabel != "MailPilot/"+override.Name || len(fake.writes) != 2 {
+		t.Fatal("manual choice lost priority", listed, err)
 	}
 }
 
@@ -298,5 +344,99 @@ func TestSemanticReviewWithoutEmbeddingsAndModelProfileChange(t *testing.T) {
 	assessed := changed.Review(ctx, ClassificationRequest{Operation: "run", AccountID: "a"})
 	if assessed.Errors != 0 || assessed.Rows[0].State != "unclassified" || f.count() != calls {
 		t.Fatal("untuned model inferred or reused semantic thresholds", assessed)
+	}
+}
+
+func TestAutomaticOrganizationSuggestionSurvivesMetadataRefresh(t *testing.T) {
+	ctx := context.Background()
+	index, db, embedder, engine, _ := semanticAppFixture(t, 1)
+	indexCommand(index, "start")
+	if p := waitIndex(t, index); p.Status != "complete" {
+		t.Fatal(p)
+	}
+	stored, err := db.Emails().Get(ctx, "a", "mail-000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := db.Classifications().Get(ctx, "a", stored.Email.ID)
+	if err != nil || len(run.Results) != 1 || run.Results[0].ScoreKind != "cosine_similarity" {
+		t.Fatal("fixture lacks an automatic suggestion", err)
+	}
+	expected := run.Results[0].CategoryID
+	// An opaque source-header refresh changes the original source hash while all
+	// model inputs remain identical. No manual category preference is created.
+	live := stored.Email
+	live.Headers = append(append([]domain.EmailHeader{}, live.Headers...), domain.EmailHeader{Name: "X-Transport-Revision", Value: "new"})
+	fake := &organizationFake{email: live, labels: []domain.EmailLabel{}}
+	org := NewOrganization(ctx, index.session, func(domain.AccountID) OrganizationProvider { return fake }, db.Emails(), db.Categories(), db.Classifications(), db.Organization(), engine)
+	chunker, err := NewCachedChunker(db.Emails(), db.Chunks())
+	if err != nil {
+		t.Fatal(err)
+	}
+	org.SetChunkProcessor(chunker.Prepare)
+	t.Cleanup(org.Close)
+	calls := embedder.count()
+	preview := awaitOrganization(t, org, OrganizationRequest{Operation: "preview", AccountID: "a", EmailIDs: []string{string(stored.Email.ID)}})
+	if preview.Code != "" || preview.State != "preview" || len(preview.Rows) != 1 || preview.Rows[0].ScoreKind != "cosine_similarity" {
+		t.Fatalf("automatic suggestion rejected after metadata refresh: %+v", preview)
+	}
+	plan, err := db.Organization().Get(ctx, "a", domain.ActionID(preview.ID))
+	if err != nil || plan.Rows[0].CategoryID != expected {
+		t.Fatal("preview lost automatic category", err)
+	}
+	snapshot, err := db.Semantic().Snapshot(ctx, "a", stored.Email.ID, index.profile)
+	if err != nil || snapshot.Preference.Mode != "" || snapshot.Email.ContentHash == stored.ContentHash || snapshot.Availability != "ready" {
+		t.Fatal("automatic preview used a manual preference or stale vectors", err)
+	}
+	applied := applyOrganization(t, org, preview)
+	if applied.Code != "" || applied.State != "applied" || len(fake.writes) != 2 {
+		t.Fatal("automatic category could not be applied", applied)
+	}
+	if embedder.count() != calls {
+		t.Fatal("automatic organization started inference")
+	}
+}
+
+func TestOrganizationNeverCollapsesLegacyManualAssignments(t *testing.T) {
+	ctx := context.Background()
+	index, db, _, engine, _ := semanticAppFixture(t, 1)
+	indexCommand(index, "start")
+	waitIndex(t, index)
+	cats, err := db.Categories().List(ctx, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cat := range cats[:2] {
+		if err := db.Categories().Assign(ctx, "a", "mail-000000", cat.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stored, err := db.Emails().Get(ctx, "a", "mail-000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := engine.Classify(ctx, stored.Email, cats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Classifications().Replace(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	fake := &organizationFake{email: stored.Email, labels: []domain.EmailLabel{}}
+	org := NewOrganization(ctx, index.session, func(domain.AccountID) OrganizationProvider { return fake }, db.Emails(), db.Categories(), db.Classifications(), db.Organization(), engine)
+	t.Cleanup(org.Close)
+	for _, mode := range []string{"choose", "highest"} {
+		list := org.Handle(ctx, OrganizationRequest{Operation: "list", AccountID: "a", SuggestionMode: mode})
+		if len(list.Rows) != 1 || list.Rows[0].Change != "multiple_suggestions" || list.Rows[0].SuggestionCount != 0 {
+			t.Fatal("legacy assignments offered an automatic primary", list)
+		}
+		preview := awaitOrganization(t, org, OrganizationRequest{Operation: "preview", AccountID: "a", SuggestionMode: mode, EmailIDs: []string{string(stored.Email.ID)}})
+		if preview.Code != "not_found" || len(fake.writes) != 0 {
+			t.Fatal("legacy assignments were collapsed", preview)
+		}
+	}
+	current, err := db.Emails().Get(ctx, "a", stored.Email.ID)
+	if err != nil || len(current.Email.Categories) != 2 {
+		t.Fatal("legacy assignments changed", err)
 	}
 }

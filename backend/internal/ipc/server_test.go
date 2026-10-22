@@ -257,6 +257,24 @@ func TestOrganizationContractAndNarrowRequests(t *testing.T) {
 	}
 }
 
+func TestOrganization25EmailContract(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/organization-batch-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Request  app.OrganizationRequest  `json:"request"`
+		Response app.OrganizationResponse `json:"response"`
+	}
+	if strictDecode(data, &fixture) != nil || !fixture.Request.Valid() || len(fixture.Response.Rows) != 25 || len(fixture.Response.Steps) != 50 {
+		t.Fatal("25-email contract mismatch")
+	}
+	fixture.Request.EmailIDs = append(fixture.Request.EmailIDs, "batch-email-26")
+	if fixture.Request.Valid() {
+		t.Fatal("26-email preview accepted")
+	}
+}
+
 func TestRetiredSemanticOperationsAreUnknown(t *testing.T) {
 	for _, operation := range []string{"status", "query", "index", "cancel"} {
 		input := `{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":1}}` + "\n" + `{"jsonrpc":"2.0","id":"search","method":"search.semantic","params":{"accountId":"a","operation":"` + operation + `"}}` + "\n"

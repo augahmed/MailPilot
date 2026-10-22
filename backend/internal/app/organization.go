@@ -24,21 +24,22 @@ type OrganizationProvider interface {
 // Organization runs a single bounded job per desktop session. No remote write
 // is reachable from list, preview, dry run, status or reconciliation.
 type Organization struct {
-	riskEngine *risk.Engine
-	mu         sync.Mutex
-	gate       chan struct{}
-	root       context.Context
-	session    func() (domain.AccountID, context.Context, error)
-	factory    func(domain.AccountID) OrganizationProvider
-	emails     repository.EmailRepository
-	categories repository.CategoryRepository
-	results    repository.ClassificationRepository
-	journal    repository.OrganizationRepository
-	engine     classification.ClassificationEngine
-	response   OrganizationResponse
-	cancel     context.CancelFunc
-	busy       bool
-	wg         sync.WaitGroup
+	prepareChunks func(context.Context, domain.AccountID, domain.ProviderMessageID) error
+	riskEngine    *risk.Engine
+	mu            sync.Mutex
+	gate          chan struct{}
+	root          context.Context
+	session       func() (domain.AccountID, context.Context, error)
+	factory       func(domain.AccountID) OrganizationProvider
+	emails        repository.EmailRepository
+	categories    repository.CategoryRepository
+	results       repository.ClassificationRepository
+	journal       repository.OrganizationRepository
+	engine        classification.ClassificationEngine
+	response      OrganizationResponse
+	cancel        context.CancelFunc
+	busy          bool
+	wg            sync.WaitGroup
 }
 
 func NewOrganization(root context.Context, session func() (domain.AccountID, context.Context, error), factory func(domain.AccountID) OrganizationProvider, emails repository.EmailRepository, categories repository.CategoryRepository, results repository.ClassificationRepository, journal repository.OrganizationRepository, engine classification.ClassificationEngine) *Organization {
@@ -47,6 +48,12 @@ func NewOrganization(root context.Context, session func() (domain.AccountID, con
 
 // SetRiskEngine configures scoring once before any requests.
 func (s *Organization) SetRiskEngine(engine *risk.Engine) { s.riskEngine = engine }
+
+// SetChunkProcessor reuses local source preparation after a preview refresh. It
+// performs no inference and is configured once before requests begin.
+func (s *Organization) SetChunkProcessor(prepare func(context.Context, domain.AccountID, domain.ProviderMessageID) error) {
+	s.prepareChunks = prepare
+}
 
 // SetOperationGate is configured once before starting jobs; use a capacity-one channel.
 func (s *Organization) SetOperationGate(gate chan struct{}) { s.gate = gate }
@@ -97,8 +104,13 @@ func (s *Organization) Handle(ctx context.Context, p OrganizationRequest) Organi
 	defer cancel()
 	stop := context.AfterFunc(session, cancel)
 	defer stop()
-	if p.Operation == "list" {
-		result := s.list(ctx, account, p.Offset, p.Source)
+	if p.Operation == "list" || p.Operation == "suggestions" {
+		var result OrganizationResponse
+		if p.Operation == "suggestions" {
+			result = s.suggestions(ctx, account, domain.EmailID(p.EmailIDs[0]))
+		} else {
+			result = s.list(ctx, account, p.Offset, p.Source, p.SuggestionMode == "highest")
+		}
 		if session.Err() != nil {
 			return fail("unauthorized")
 		}
@@ -138,6 +150,7 @@ func (s *Organization) Handle(ctx context.Context, p OrganizationRequest) Organi
 			return fail(orgCode(err))
 		}
 		s.response = organizationDTO(plan)
+		s.response = s.withCachedLabels(ctx, s.response)
 		if s.response.State == "preview" && time.Now().UnixMilli() >= plan.ExpiresAt {
 			s.response.State = "expired"
 		}
@@ -171,6 +184,7 @@ func (s *Organization) Handle(ctx context.Context, p OrganizationRequest) Organi
 		} else {
 			result = emptyOrganization()
 		}
+		result = s.withCachedLabels(worker, result)
 
 		result.AccountID = string(account)
 		s.mu.Lock()

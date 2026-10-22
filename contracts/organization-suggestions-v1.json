@@ -1,0 +1,75 @@
+{
+  "request": {
+    "operation": "suggestions",
+    "accountId": "fixture-account",
+    "offset": 0,
+    "emailIds": ["fixture-email"],
+    "actionId": "",
+    "digest": ""
+  },
+  "choicesRequest": {
+    "operation": "preview",
+    "accountId": "fixture-account",
+    "offset": 0,
+    "emailIds": ["fixture-email"],
+    "actionId": "",
+    "digest": "",
+    "suggestionMode": "choose",
+    "choices": [
+      {
+        "emailId": "fixture-email",
+        "categoryId": "category-work"
+      }
+    ]
+  },
+  "highestRequest": {
+    "operation": "preview",
+    "accountId": "fixture-account",
+    "offset": 0,
+    "emailIds": ["fixture-email"],
+    "actionId": "",
+    "digest": "",
+    "suggestionMode": "highest"
+  },
+  "response": {
+    "accountId": "fixture-account",
+    "state": "idle",
+    "code": "",
+    "id": "",
+    "digest": "",
+    "kind": "",
+    "expiresAt": 0,
+    "dryRun": false,
+    "hasMore": false,
+    "rows": [
+      {
+        "emailId": "fixture-email",
+        "sender": "store@example.test",
+        "subject": "Your receipt",
+        "currentLabels": ["INBOX", "Keep"],
+        "proposedLabel": "",
+        "confidence": 0,
+        "change": "multiple_suggestions",
+        "suggestionCount": 3,
+        "suggestions": [
+          {
+            "categoryId": "category-finance",
+            "name": "Finance",
+            "confidence": 0.64
+          },
+          {
+            "categoryId": "category-work",
+            "name": "Work",
+            "confidence": 0.63
+          },
+          {
+            "categoryId": "category-personal",
+            "name": "Personal",
+            "confidence": 0.62
+          }
+        ]
+      }
+    ],
+    "steps": []
+  }
+}
