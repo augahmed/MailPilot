@@ -66,12 +66,18 @@ it("preserves mailbox state and focus without mounting retired entry points", as
   fireEvent.click(screen.getByText("Back to mailbox"));
   expect(screen.getByText("Mailbox page 1")).toBeVisible();
   await waitFor(() => expect(mailbox).toHaveFocus());
-  expect(screen.getByText("Open search result")).toBeVisible();
+  expect(screen.queryByText("Open search result")).toBeNull();
   expect(screen.queryByText("Open cited email")).toBeNull();
 });
 
 it("preserves search state and returns focus after reading its original email", async () => {
-  render(<MailWorkspace connectionRevision={0} />);
+  render(
+    <MailWorkspace
+      connectionRevision={0}
+      page="search"
+      visited={new Set(["dashboard", "search"])}
+    />,
+  );
   fireEvent.change(screen.getByLabelText("Saved search"), {
     target: { value: "paraphrased query" },
   });
@@ -86,7 +92,13 @@ it("preserves search state and returns focus after reading its original email", 
 });
 
 it("restores focus to the workspace when a stale result disappeared while reading", async () => {
-  render(<MailWorkspace connectionRevision={0} />);
+  render(
+    <MailWorkspace
+      connectionRevision={0}
+      page="search"
+      visited={new Set(["dashboard", "search"])}
+    />,
+  );
   fireEvent.click(screen.getByText("Open search result"));
   fireEvent.click(screen.getByText("Clear search results"));
   fireEvent.click(screen.getByText("Back to search"));

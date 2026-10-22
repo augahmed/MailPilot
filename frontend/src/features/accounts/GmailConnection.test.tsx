@@ -1,6 +1,16 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GmailConnection } from "./GmailConnection";
+import { useGmailConnection } from "./useGmailConnection";
+import { AccountDropdown } from "./AccountDropdown";
+function ConnectionHarness() {
+  const connection = useGmailConnection();
+  return connection.email ? (
+    <AccountDropdown connection={connection} navigate={() => {}} />
+  ) : (
+    <GmailConnection connection={connection} />
+  );
+}
 import { gmailCommand, type GmailStatus } from "../../lib/ipc/client";
 vi.mock("../../lib/ipc/client", () => ({ gmailCommand: vi.fn() }));
 afterEach(() => {
@@ -14,9 +24,9 @@ describe("Gmail connection", () => {
     vi.mocked(gmailCommand)
       .mockResolvedValueOnce({ state: "disconnected" })
       .mockResolvedValue({ state: "connecting" });
-    render(<GmailConnection />);
+    render(<ConnectionHarness />);
     await screen.findByText("Gmail disconnected");
-    fireEvent.click(screen.getByRole("button", { name: "Connect Gmail" }));
+    fireEvent.click(screen.getByRole("button", { name: /Connect Gmail/ }));
     expect(
       await screen.findByText("Waiting for Google sign-in in your browser…"),
     ).toBeInTheDocument();
@@ -30,9 +40,11 @@ describe("Gmail connection", () => {
         email: "reader@example.test",
       })
       .mockResolvedValue({ state: "disconnecting" });
-    render(<GmailConnection />);
+    render(<ConnectionHarness />);
     await screen.findByText("reader@example.test");
+    fireEvent.click(screen.getByRole("button", { name: /Gmail account/ }));
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm disconnect" }));
     expect(screen.queryByText("reader@example.test")).not.toBeInTheDocument();
     expect(await screen.findByText("Disconnecting Gmail…")).toBeInTheDocument();
     expect(gmailCommand).toHaveBeenCalledWith("gmail_disconnect");
@@ -42,28 +54,28 @@ describe("Gmail connection", () => {
       state: "error",
       code: "consent_denied",
     });
-    render(<GmailConnection />);
+    render(<ConnectionHarness />);
     expect(
       await screen.findByText(/Google consent was denied/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect Gmail" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Connect Gmail/ })).toBeEnabled();
   });
   it("shows setup instructions without fabricating an account", async () => {
     vi.mocked(gmailCommand).mockResolvedValue({
       state: "unconfigured",
       code: "oauth_not_configured",
     });
-    render(<GmailConnection />);
+    render(<ConnectionHarness />);
     expect(await screen.findByText("Gmail setup required")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Connect Gmail" }),
+      screen.getByRole("button", { name: /Connect Gmail/ }),
     ).toBeDisabled();
   });
   it("does not show connected after bridge failure", async () => {
     vi.mocked(gmailCommand).mockRejectedValue(
       new Error("synthetic-private-error"),
     );
-    render(<GmailConnection />);
+    render(<ConnectionHarness />);
     expect(
       await screen.findByText("Gmail status unavailable"),
     ).toBeInTheDocument();
@@ -85,12 +97,14 @@ it("ignores an old status response after disconnect", async () => {
     .mockResolvedValueOnce({ state: "connected", email: "reader@example.test" })
     .mockReturnValueOnce(stalePoll)
     .mockResolvedValue({ state: "disconnected" });
-  const view = render(<GmailConnection />);
+  const view = render(<ConnectionHarness />);
   await act(async () => {});
   await act(async () => {
     await vi.advanceTimersByTimeAsync(1500);
   });
+  fireEvent.click(screen.getByRole("button", { name: /Gmail account/ }));
   fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm disconnect" }));
   await act(async () => {});
   expect(screen.getByText("Gmail disconnected")).toBeInTheDocument();
   await act(async () => {

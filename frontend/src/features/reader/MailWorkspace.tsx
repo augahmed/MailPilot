@@ -1,17 +1,25 @@
 import { useRef, useState } from "react";
+import type { Page } from "../../app/navigation";
 import { Mailbox } from "../mailbox/Mailbox";
 import { SemanticSearch } from "../search/SemanticSearch";
 import { EmailQuestion } from "../ai/EmailQuestion";
 import { MailReader } from "./MailReader";
+const initialPages: ReadonlySet<Page> = new Set(["dashboard"]);
+
 export function MailWorkspace({
   connectionRevision,
+  page = "dashboard",
+  visited = initialPages,
 }: {
   connectionRevision: number;
+  page?: Page;
+  visited?: ReadonlySet<Page>;
 }) {
   const [selection, setSelection] = useState<{
     accountId: string;
     emailId: string;
     source: string;
+    page: Page;
   } | null>(null);
   const [evidence, setEvidence] = useState<{
     text: string;
@@ -26,7 +34,7 @@ export function MailWorkspace({
     button: HTMLButtonElement,
   ) => {
     trigger.current = button;
-    setSelection({ accountId, emailId, source });
+    setSelection({ accountId, emailId, source, page });
   };
   return (
     <>
@@ -34,41 +42,56 @@ export function MailWorkspace({
         ref={list}
         tabIndex={-1}
         aria-label="Cached email workspace"
-        hidden={selection !== null}
+        hidden={
+          !["dashboard", "search", "ask"].includes(page) ||
+          selection?.page === page
+        }
       >
-        <SemanticSearch
-          onEvidence={setEvidence}
-          onOpen={(accountId, emailId, button) =>
-            open("search", accountId, emailId, button)
-          }
-        />
-        <EmailQuestion
-          onEvidence={setEvidence}
-          onOpen={(accountId, emailId, button) =>
-            open("email questions", accountId, emailId, button)
-          }
-        />
-        <Mailbox
-          connectionRevision={connectionRevision}
-          onOpen={(accountId, emailId, button) => {
-            setEvidence(null);
-            open("mailbox", accountId, emailId, button);
-          }}
-        />
+        {visited.has("search") && (
+          <div hidden={page !== "search"}>
+            <SemanticSearch
+              onEvidence={setEvidence}
+              onOpen={(accountId, emailId, button) =>
+                open("search", accountId, emailId, button)
+              }
+            />
+          </div>
+        )}
+        {visited.has("ask") && (
+          <div hidden={page !== "ask"}>
+            <EmailQuestion
+              onEvidence={setEvidence}
+              onOpen={(accountId, emailId, button) =>
+                open("email questions", accountId, emailId, button)
+              }
+            />
+          </div>
+        )}
+        <div hidden={page !== "dashboard"}>
+          <Mailbox
+            connectionRevision={connectionRevision}
+            onOpen={(accountId, emailId, button) => {
+              setEvidence(null);
+              open("mailbox", accountId, emailId, button);
+            }}
+          />
+        </div>
       </div>
       {selection && (
-        <MailReader
-          key={`${selection.accountId}/${selection.emailId}`}
-          {...selection}
-          evidence={evidence ?? undefined}
-          onBack={() => {
-            setSelection(null);
-            requestAnimationFrame(() => {
-              if (trigger.current?.isConnected) trigger.current.focus();
-              else list.current?.focus();
-            });
-          }}
-        />
+        <div hidden={selection.page !== page}>
+          <MailReader
+            key={`${selection.accountId}/${selection.emailId}`}
+            {...selection}
+            evidence={evidence ?? undefined}
+            onBack={() => {
+              setSelection(null);
+              requestAnimationFrame(() => {
+                if (trigger.current?.isConnected) trigger.current.focus();
+                else list.current?.focus();
+              });
+            }}
+          />
+        </div>
       )}
     </>
   );

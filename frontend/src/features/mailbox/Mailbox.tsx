@@ -63,52 +63,41 @@ export function Mailbox({
   };
   return (
     <section className="status-card mailbox" aria-labelledby="sync-heading">
-      <h2 id="sync-heading">Inbox Sync</h2>
-      <p>
-        Imports a bounded Inbox snapshot, then checks mailbox changes. Up to{" "}
-        {progress?.limit ?? "…"} message changes per run.
+      <div className="mailbox-header">
+        <div>
+          <p className="eyebrow">CACHED GMAIL</p>
+          <h2 id="sync-heading">Your Emails</h2>
+        </div>
+        <div className="account-actions sync-actions">
+          <button
+            disabled={
+              starting || progress?.state === "running" || !page?.accountId
+            }
+            onClick={() => {
+              void start();
+            }}
+          >
+            {starting || progress?.state === "running"
+              ? "Syncing Gmail…"
+              : "Sync Gmail"}
+          </button>
+          {progress?.state === "running" && (
+            <button
+              className="secondary-button"
+              onClick={() => {
+                void syncCommand("cancel").catch(() => setError(true));
+              }}
+            >
+              Stop sync
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="mailbox-caption">
+        Your local cached subset. Sync to check for Gmail changes.
       </p>
-      <button
-        disabled={starting || progress?.state === "running" || !page?.accountId}
-        onClick={() => {
-          void start();
-        }}
-      >
-        Sync inbox
-      </button>
-      {progress?.state === "running" && (
-        <button
-          onClick={() => {
-            void syncCommand("cancel").catch(() => setError(true));
-          }}
-        >
-          Stop sync
-        </button>
-      )}
-      <div role="status" aria-live="polite">
-        {progress?.mode && (
-          <p>
-            Sync mode:{" "}
-            {progress.mode === "initial"
-              ? "Initial import"
-              : progress.mode === "recovery"
-                ? "Checkpoint recovery"
-                : "Incremental changes"}
-          </p>
-        )}
-        {progress?.more && (
-          <p>
-            More synchronization work remains. Run sync again to continue from
-            saved progress.
-          </p>
-        )}
-        {progress?.snapshotLimited && (
-          <p>
-            The initial snapshot is a limited Inbox subset; older uncached mail
-            has not been imported.
-          </p>
-        )}
-        <p>
+      <details className="sync-details" open={progress?.state === "running"}>
+        <summary aria-live="polite">
           {progress?.state === "running"
             ? "Syncing inbox…"
             : progress?.state === "completed"
@@ -117,31 +106,59 @@ export function Mailbox({
                 ? "Sync stopped"
                 : progress?.state === "error"
                   ? "Sync failed"
-                  : "Ready to sync"}
+                  : "Sync details"}
+        </summary>
+        <p>
+          Imports a bounded Inbox snapshot, then checks mailbox changes. Up to{" "}
+          {progress?.limit ?? "…"} message changes per run.
         </p>
-        <dl className="sync-counts">
-          <div>
-            <dt>Messages discovered</dt>
-            <dd>{progress?.discovered ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Messages imported</dt>
-            <dd>{progress?.imported ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Messages updated</dt>
-            <dd>{progress?.updated ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Removed from cache</dt>
-            <dd>{progress?.removed ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Errors</dt>
-            <dd>{progress?.errors ?? 0}</dd>
-          </div>
-        </dl>
-      </div>
+        <div role="status" aria-live="polite">
+          {progress?.mode && (
+            <p>
+              Sync mode:{" "}
+              {progress.mode === "initial"
+                ? "Initial import"
+                : progress.mode === "recovery"
+                  ? "Checkpoint recovery"
+                  : "Incremental changes"}
+            </p>
+          )}
+          {progress?.more && (
+            <p>
+              More synchronization work remains. Run sync again to continue from
+              saved progress.
+            </p>
+          )}
+          {progress?.snapshotLimited && (
+            <p>
+              The initial snapshot is a limited Inbox subset; older uncached
+              mail has not been imported.
+            </p>
+          )}
+          <dl className="sync-counts">
+            <div>
+              <dt>Messages discovered</dt>
+              <dd>{progress?.discovered ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Messages imported</dt>
+              <dd>{progress?.imported ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Messages updated</dt>
+              <dd>{progress?.updated ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Removed from cache</dt>
+              <dd>{progress?.removed ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Errors</dt>
+              <dd>{progress?.errors ?? 0}</dd>
+            </div>
+          </dl>
+        </div>
+      </details>
       {progress?.capped && (
         <p className="help">
           The configured limit was reached. More messages may remain in Gmail.
@@ -164,19 +181,30 @@ export function Mailbox({
         </p>
       )}
       {page?.code && <p role="alert">Could not read the local mailbox.</p>}
-      <h2>Cached mail</h2>
-      <p>
+      <p className="risk-note">
         Phishing risk is a local heuristic, not a probability or a guarantee of
         safety. Scores are limited to 0–100; missing content may hide risk.
       </p>
-      <p className="help">
-        Updated counts include refreshed cached messages. This list is a cached
-        subset, not a complete or live Inbox.
-      </p>
-      {!page?.accountId ? (
+      {!page ? (
+        <p role="status">
+          {error
+            ? "Cached emails are temporarily unavailable. MailPilot will retry automatically."
+            : "Loading cached emails…"}
+        </p>
+      ) : page.code ? (
+        <p>
+          Cached emails could not be loaded. MailPilot will retry automatically.
+        </p>
+      ) : !page.accountId ? (
         <p>Connect Gmail to view this account’s cache.</p>
       ) : page.rows.length === 0 ? (
-        <p>No cached messages on this page.</p>
+        <div className="mailbox-empty">
+          <h3>No cached messages on this page</h3>
+          <p>
+            Use Sync Gmail to import a bounded Inbox snapshot, or return to the
+            previous page.
+          </p>
+        </div>
       ) : (
         <div className="mail-table">
           <table>
@@ -194,6 +222,7 @@ export function Mailbox({
                   <td>{row.sender || "Unknown sender"}</td>
                   <td>
                     <button
+                      className="email-subject"
                       onClick={(event) =>
                         onOpen?.(page.accountId, row.id, event.currentTarget)
                       }
@@ -211,9 +240,18 @@ export function Mailbox({
                   </td>
                   <td>
                     {row.phishing ? (
-                      <details>
+                      <details
+                        className={`risk-assessment risk-${row.phishing.risk.toLowerCase()}`}
+                      >
                         <summary>
-                          {row.phishing.score} {row.phishing.risk}
+                          <span className="risk-badge">
+                            {row.phishing.risk === "LOW"
+                              ? "Low"
+                              : row.phishing.risk === "MEDIUM"
+                                ? "Medium"
+                                : "High"}{" "}
+                            · {row.phishing.score}/100
+                          </span>
                         </summary>
                         <ol>
                           {row.phishing.reasons.map((reason) => (
@@ -226,7 +264,13 @@ export function Mailbox({
                         <small>Analyzer: {row.phishing.version}</small>
                       </details>
                     ) : (
-                      <span>Risk analysis unavailable; refresh to retry.</span>
+                      <span className="risk-unassessed">
+                        Not assessed
+                        <span className="sr-only">
+                          {" "}
+                          · Risk analysis unavailable; refresh to retry.
+                        </span>
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -235,8 +279,10 @@ export function Mailbox({
           </table>
         </div>
       )}
-      <div className="account-actions">
+      <div className="account-actions mailbox-pagination">
+        <span className="page-number">Page {offset / 10 + 1}</span>
         <button
+          className="secondary-button"
           disabled={offset === 0}
           onClick={() => {
             setPage(null);
@@ -246,6 +292,7 @@ export function Mailbox({
           Previous
         </button>
         <button
+          className="secondary-button"
           disabled={!page?.hasMore}
           onClick={() => {
             setPage(null);

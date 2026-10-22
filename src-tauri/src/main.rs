@@ -263,6 +263,9 @@ async fn gmail_status(
         eprintln!(
             "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_auth_ok\"}}"
         );
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.eval(include_str!("smoke-navigation.js"));
+        }
         if smoke.complete() {
             app.exit(0);
         }

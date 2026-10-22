@@ -63,6 +63,17 @@ a crashed sidecar disables actions rather than replaying uncertain writes.
 | `backend/internal/ipc`, `src-tauri/src`, `frontend/src/lib/ipc` | Strict Go/native/TypeScript wire boundaries and response validation. |
 | `frontend/src/features`, `scripts` | Accessible presentation; existing build/native smoke preparation. |
 
+The frontend opens a dedicated Gmail landing page until the existing backend
+reports an authorized connection. A restored verified session opens the cached-mail
+dashboard; transient refresh/network failures retain an already authorized cache
+session, while definitive rejection or disconnect clears feature state. Five
+feature cards open the existing index, search, evidence questions, categories/review
+and organization workflows in a shared shell. Visited pages retain local state;
+unvisited feature pages do not poll. The account dropdown provides connection
+checks, confirmed disconnect, optional AI settings and historical recovery. The
+reader remains shared across dashboard, search and evidence questions. No new
+backend authorization or IPC boundary is introduced.
+
 Introduce only the small embedding/retrieval components required by an implemented
 slice. Transport/adapters depend on application/domain contracts; no service locator,
 generic CRUD framework, parallel processing framework, second SQLite owner or
@@ -409,8 +420,8 @@ service, Python worker/downloader, single-vector-per-email search cache, duplica
 index coordinator, older semantic classifier, draft editor or draft-creation API.
 The single installed native adapter and the shared pipeline above are the runtime.
 `ask.manage` and `search.semantic` remain rejected; rejection fixtures are retained.
-Every current frontend feature is mounted, including separately approved Summary
-and historical draft recovery. Every direct dependency has a current consumer;
+Every current frontend feature remains accessible, including separately approved
+Summary and historical draft recovery. Every direct dependency has a current consumer;
 there is no unused model path, interpreter, embedding endpoint or provider stub in
 configuration. No dependency was removed merely because it is platform-specific.
 

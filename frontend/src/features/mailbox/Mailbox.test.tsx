@@ -42,7 +42,7 @@ it("shows progress and escaped cached mail, starts sync and pages locally", asyn
   ).toBeInTheDocument();
   expect(container.querySelector("img")).toBeNull();
   expect(screen.getByText("Messages imported")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Sync inbox" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sync Gmail" }));
   await waitFor(() => expect(syncCommand).toHaveBeenCalledWith(true));
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await waitFor(() => expect(getMailbox).toHaveBeenCalledWith(10));
@@ -55,13 +55,16 @@ it("does not allow sync while disconnected", async () => {
   });
   render(<Mailbox connectionRevision={0} />);
   await screen.findByText("Connect Gmail to view this account’s cache.");
-  expect(screen.getByRole("button", { name: "Sync inbox" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Sync Gmail" })).toBeDisabled();
 });
 it("reports bridge failure without retaining mailbox content", async () => {
   vi.mocked(getMailbox).mockRejectedValue(new Error("offline"));
   render(<Mailbox connectionRevision={0} />);
   expect(await screen.findByRole("alert")).toHaveTextContent("Cannot reach");
   expect(screen.queryByText("Sender")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("Connect Gmail to view this account’s cache."),
+  ).toBeNull();
 });
 it("shows signed, ordered risk explanations and uncertainty", async () => {
   vi.mocked(getMailbox).mockResolvedValue({
@@ -96,8 +99,8 @@ it("shows signed, ordered risk explanations and uncertainty", async () => {
     ],
   });
   render(<Mailbox connectionRevision={0} />);
-  expect(await screen.findByText("7 LOW")).toBeInTheDocument();
-  fireEvent.click(screen.getByText("7 LOW"));
+  expect(await screen.findByText("Low · 7/100")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Low · 7/100"));
   expect(
     screen.getAllByRole("listitem").map((item) => item.textContent),
   ).toEqual([
@@ -155,4 +158,36 @@ it("keeps cached mail readable when local processing fails", async () => {
     await screen.findByText(/Their original content is saved/),
   ).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it.each([
+  ["LOW", 12, "Low"],
+  ["MEDIUM", 42, "Medium"],
+  ["HIGH", 83, "High"],
+] as const)(
+  "displays the supplied %s risk band and score",
+  async (risk, score, label) => {
+    vi.mocked(getMailbox).mockResolvedValue({
+      accountId: "a",
+      hasMore: false,
+      rows: [
+        {
+          id: "1",
+          sender: "Sender",
+          subject: "Example",
+          receivedAt: 1700000000000,
+          bodyState: "complete",
+          phishing: { score, risk, version: "risk-test", reasons: [] },
+        },
+      ],
+    });
+    render(<Mailbox connectionRevision={0} />);
+    expect(await screen.findByText(`${label} · ${score}/100`)).toBeVisible();
+    expect(getMailbox).toHaveBeenCalledTimes(1);
+  },
+);
+it("distinguishes missing risk assessments without inventing a safe score", async () => {
+  render(<Mailbox connectionRevision={0} />);
+  expect(await screen.findByText("Not assessed")).toBeVisible();
+  expect(screen.queryByText(/Low ·/)).toBeNull();
 });
