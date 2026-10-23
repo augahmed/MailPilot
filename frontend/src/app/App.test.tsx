@@ -22,10 +22,42 @@ vi.mock("../features/indexing/LocalEmailIndex", () => ({
   LocalEmailIndex: () => <section>Existing index controls</section>,
 }));
 vi.mock("../features/categories/Categories", () => ({
-  Categories: () => <section>Existing category editor</section>,
+  Categories: ({
+    onChanged,
+    onUpdateClassification,
+  }: {
+    onChanged: () => void;
+    onUpdateClassification: () => void;
+  }) => {
+    const [changed, setChanged] = useState(false);
+    return (
+      <section>
+        Existing category editor
+        <input aria-label="Category draft" />
+        <button
+          onClick={() => {
+            setChanged(true);
+            onChanged();
+          }}
+        >
+          Save synthetic category
+        </button>
+        {changed && (
+          <button onClick={onUpdateClassification}>
+            Update classification
+          </button>
+        )}
+      </section>
+    );
+  },
 }));
 vi.mock("../features/classification/ClassificationReview", () => ({
-  ClassificationReview: () => <section>Existing classification review</section>,
+  ClassificationReview: ({ refreshRevision }: { refreshRevision: number }) => (
+    <section>
+      Existing classification review{" "}
+      <span data-testid="review-revision">{refreshRevision}</span>
+    </section>
+  ),
 }));
 vi.mock("../features/organization/Organization", () => ({
   Organization: () => <section>Existing organization controls</section>,
@@ -240,6 +272,56 @@ it("opens all five existing workflows and returns focus to the originating card"
     await waitFor(() => expect(trigger).toHaveFocus());
   }
 });
+it("routes category updates through the index and returns to the preserved category interface", async () => {
+  connected();
+  render(<App />);
+  await screen.findByRole("heading", { name: "Your Emails" });
+  fireEvent.click(
+    screen.getByRole("button", { name: /Categories & Classification/ }),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Update classification" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Save synthetic category" }),
+  );
+  fireEvent.change(screen.getByLabelText("Category draft"), {
+    target: { value: "Another category" },
+  });
+  const revision = Number(screen.getByTestId("review-revision").textContent);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Update classification" }),
+  );
+  expect(screen.getByText("Existing index controls")).toBeVisible();
+  expect(screen.getByText(/Choose Rebuild index/)).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Back to Categories & Classification" }),
+  );
+  expect(screen.getByText("Existing category editor")).toBeVisible();
+  expect(screen.getByLabelText("Category draft")).toHaveValue(
+    "Another category",
+  );
+  expect(Number(screen.getByTestId("review-revision").textContent)).toBe(
+    revision + 1,
+  );
+  await waitFor(() =>
+    expect(
+      screen.getByRole("heading", { name: "Categories & Classification" }),
+    ).toHaveFocus(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Back to dashboard" }));
+  fireEvent.click(screen.getByRole("button", { name: /Local Email Index/ }));
+  expect(
+    screen.queryByRole("button", {
+      name: "Back to Categories & Classification",
+    }),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Back to dashboard" }));
+  expect(
+    screen.getByRole("heading", { name: "Your mail, in focus." }),
+  ).toBeVisible();
+});
+
 it("preserves search input, mailbox pagination and reader focus across navigation", async () => {
   connected();
   const rows = Array.from({ length: 30 }, (_, i) => ({

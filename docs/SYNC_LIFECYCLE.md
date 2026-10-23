@@ -7,6 +7,36 @@ It uses the real Gmail HTTP/history adapter with a GET-only local fixture server
 a temporary SQLite database and deterministic fake embeddings. It does not
 measure model quality or use a live mailbox.
 
+## Resumable Inbox imports
+
+The default manual sync imports/refreshes the newest 500 Inbox identities first.
+Each later manual run continues into older Inbox mail with another allowance of
+500. History, cache reconciliation and retries have a separate allowance of 500,
+so those updates do not consume the Inbox import allowance. The configured limit
+of 1–10,000 applies to each allowance. This does not expand scope to Sent, Spam,
+Trash, other accounts or attachment downloads, and starts no inference.
+
+The existing checkpoint JSON adds `InboxVersion: 1`, an opaque page token, exact
+remaining page IDs (at most 100), completion/cache-skip flags and `RetryIDs` (at
+most 500). A listed page is saved before reading its messages. Each successful
+source observation or failed-read retry identity commits with its exact position.
+Cancellation and source/checkpoint write failures cannot advance past unsaved work.
+Per-message read failures preserve the original cache and let later messages proceed;
+account access, quota, storage and cancellation failures stop the job.
+
+Legacy unfinished snapshots first repair the newest bounded batch. Legacy limited
+completed snapshots enumerate past cached IDs to import older mail immediately.
+Completed unlimited snapshots need no redundant Inbox scan. Expired page tokens
+restart enumeration and walk past cached IDs, with at most 1,000 listing pages per
+enumeration and one token reset per run. An expired history anchor resets the Inbox scan and uses
+authoritative cached-identity reconciliation; history recovery retries at most once
+per run. No absence from a bounded listing is interpreted as deletion.
+
+Synthetic regressions in [inbox_test.go](../backend/internal/sync/inbox_test.go)
+and [inbox_sync_test.go](../backend/internal/provider/gmail/inbox_sync_test.go)
+qualify 500 → 1,000 → 1,250 cached messages across fresh workers, legacy cached
+subsets, a failed middle message, cancellation within a page and token recovery.
+
 | Observation                                 | Transactional source effects                                                                | Derived effects                                                                                                                                                                                                                     |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | New cached message                          | Save original mail, relations and the sync checkpoint together.                             | Prepare current chunks after commit; embeddings wait for explicit indexing.                                                                                                                                                         |
@@ -19,8 +49,8 @@ measure model quality or use a live mailbox.
 Gmail received-message content is immutable under its provider ID. Minimal GETs
 reuse complete cached bodies when the adapter's content revision matches; drafts
 include the history ID in that revision. Partial cached bodies always require a
-full GET when observed. No broader Inbox import, attachment download, background
-sync or new Gmail mutation path is introduced.
+full GET when observed. Resumable Inbox imports use the same scoped listing;
+attachment downloads, background sync and new Gmail mutation paths are absent.
 
 Source hash recipe v2 excludes opaque attachment download handles, just as it
 excludes provider message/thread identities. Attachment part IDs, filenames, MIME
@@ -44,13 +74,14 @@ preview binds these refreshed inputs; changes after review still reject apply.
 See [organization contracts](../contracts/README.md#gmail-organization-protocol-v1-additive-extension)
 and [preview regression](../backend/internal/provider/gmail/organization_preview_refresh_test.go).
 
-After history has drained, manual sync spends only its remaining observation
-budget retrying incomplete cached bodies. This closes the gap where a temporary
+After history has drained, manual sync uses its remaining maintenance allowance
+to retry up to 50 saved failed-read IDs, then incomplete cached bodies.
+This closes the gap where a temporary
 partial response recovered without producing a new Gmail history event. The
 additive `SyncCheckpoint.RetryAfter` field rotates these retries across cached
 provider IDs and persists with each source observation. Old checkpoints decode
-with an empty retry cursor; no migration is needed. A failed/cancelled retry keeps
-its position. Successfully observed but still incomplete bodies advance the
+with an empty retry cursor; no migration is needed. A cancelled retry keeps its
+position; a failed read is saved in `RetryIDs` before advancing. Successfully observed but still incomplete bodies advance the
 rotation, so later identities receive attempts on later manual runs. The body-retry
 phase skips messages already observed through history in that run; distinct
 history records may still refresh the same message. History work has priority
@@ -107,7 +138,7 @@ suites additionally cover rollback, expired-history reconciliation, multiple
 changes within one history record, disabled/unavailable inference, model changes,
 purge, FTS invalidation and reviewed Gmail apply/reconcile/undo behavior.
 
-## Validation for this change
+## Earlier source lifecycle qualification
 
 Passed full Go tests, vet and race checks, plus strict-CGO real native embedding
 race tests. Frontend typecheck, lint, all 101 tests and production build passed;

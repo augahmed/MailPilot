@@ -249,7 +249,9 @@ export function Mailbox({
           {progress?.state === "running"
             ? "Syncing inbox…"
             : progress?.state === "completed"
-              ? "Sync finished"
+              ? progress.errors > 0
+                ? "Sync finished with some errors"
+                : "Sync finished"
               : progress?.state === "cancelled"
                 ? "Sync stopped"
                 : progress?.state === "error"
@@ -257,8 +259,10 @@ export function Mailbox({
                   : "Sync details"}
         </summary>
         <p>
-          Imports a bounded Inbox snapshot, then checks mailbox changes. Up to{" "}
-          {progress?.limit ?? "…"} message changes per run.
+          Imports the newest {progress?.limit ?? "…"} Inbox emails first. Later
+          syncs continue into older Inbox mail and check for changes. Each run
+          handles up to {progress?.limit ?? "…"} Inbox emails plus{" "}
+          {progress?.limit ?? "…"} mailbox updates or retries.
         </p>
         <div role="status" aria-live="polite">
           {progress?.mode && (
@@ -271,7 +275,7 @@ export function Mailbox({
                   : "Incremental changes"}
             </p>
           )}
-          {progress?.more && (
+          {progress?.more && !progress.snapshotLimited && (
             <p>
               More synchronization work remains. Run sync again to continue from
               saved progress.
@@ -279,8 +283,8 @@ export function Mailbox({
           )}
           {progress?.snapshotLimited && (
             <p>
-              The initial snapshot is a limited Inbox subset; older uncached
-              mail has not been imported.
+              Older Inbox emails remain. Run sync again to import the next batch
+              from saved progress.
             </p>
           )}
           <dl className="sync-counts">
@@ -309,7 +313,7 @@ export function Mailbox({
       </details>
       {progress?.capped && (
         <p className="help">
-          The configured limit was reached. More messages may remain in Gmail.
+          This sync reached its batch limit. Run sync again to continue.
         </p>
       )}
       {progress?.code && (
@@ -320,7 +324,11 @@ export function Mailbox({
               ? "Some bodies are stored separately by Gmail and were not downloaded. Their metadata is cached."
               : progress.code === "chunking_failed"
                 ? "Some cached messages could not be processed. Their original content is saved. Sync again to retry."
-                : "Some changes could not be synchronized. Successful changes are saved; run sync again to retry unfinished work."}
+                : progress.state === "completed" && progress.errors > 0
+                  ? "Some emails could not be downloaded. Successful downloads are saved. Sync again to retry failed emails and continue older Inbox mail."
+                  : progress.code === "rate_limited"
+                    ? "Gmail temporarily limited requests. Saved progress is kept; wait a little and run sync again."
+                    : "Some changes could not be synchronized. Successful changes are saved; run sync again to retry unfinished work."}
         </p>
       )}
       {error && (

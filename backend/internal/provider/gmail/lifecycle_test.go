@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -343,7 +344,7 @@ func TestGmailLifecyclePartialImportRetryLabelsAndIdempotency(t *testing.T) {
 	h := newLifecycle(t, first, partial)
 	h.remote.fail = "partial"
 	h.sync.Start()
-	if p := awaitSync(t, h.sync); p.State != "error" || p.Imported != 1 {
+	if p := awaitSync(t, h.sync); p.State != "completed" || p.Imported != 1 || p.Errors != 1 {
 		t.Fatal(p)
 	}
 	e := h.stored("first")
@@ -352,7 +353,7 @@ func TestGmailLifecyclePartialImportRetryLabelsAndIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkpoint, err := h.db.SyncCheckpoints().Load(ctx, "a")
-	if err != nil || checkpoint.Phase != "snapshot" || checkpoint.Cursor != "100" {
+	if err != nil || checkpoint.Phase != "history" || checkpoint.Cursor != "100" || len(checkpoint.RetryIDs) != 1 {
 		t.Fatal(checkpoint, err)
 	}
 	if h.embedder.count() != 0 {
@@ -608,7 +609,7 @@ func TestGmailLifecycleCancelledHistoryAndInterruptedIndexRestart(t *testing.T) 
 	// Let the HTTP handler finish even if the client cancelled before sending FIN.
 	close(releaseHTTP)
 	next, err := h.db.SyncCheckpoints().Load(ctx, "a")
-	if err != nil || next != checkpoint {
+	if err != nil || !reflect.DeepEqual(next, checkpoint) {
 		t.Fatal("cancel advanced history", err)
 	}
 	h.remote.mu.Lock()

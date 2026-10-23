@@ -199,17 +199,42 @@ The architecture's dependency recommendations are adopted only as needed: SQLite
 
 ## Inbox synchronization
 
-Connect Gmail, then select **Sync inbox**. The screen reports messages discovered, imported, updated and errors, and lists cached sender, subject and received time. Configure the per-run maximum before launching:
+Connect Gmail, then select **Sync Gmail**. The screen reports messages discovered, imported, updated and errors, and lists cached sender, subject and received time. Configure the per-run maximum before launching:
 
 ```sh
 MAILPILOT_SYNC_LIMIT=1000 npm run dev
 ```
 
-The default is 500; accepted values are 1–10,000. The first run imports a bounded Inbox snapshot and stores a history baseline captured before enumeration. Later runs use Gmail history to fetch only changed messages, including label changes and deletions of cached mail. Metadata-only reads preserve valid cached bodies; a no-change run fetches no complete messages. Remaining observation budget retries
-incomplete cached bodies without requiring another history event, rotating across
-manual runs; bodies requiring unsupported fetching can remain unavailable. Updated counts include replayed observations. Run again when the UI reports more work; large history records and recovery scans resume from saved progress. Expired/invalid history triggers individual reconciliation of cached messages and a fresh bounded Inbox snapshot, never deletion inferred from an incomplete listing. Stop sync cancels pending work; completed transactions remain saved. Older mail outside the initial subset is not backfilled automatically. Sync does not modify labels, classify mail or send messages. Manual classification is available separately below. Attachments are not downloaded; separately stored or unsupported/oversized bodies are reported rather than silently treated as complete. The cache is sensitive, unencrypted local data and persists after disconnect. A disconnected account's cache is hidden until that account reconnects.
+The default is 500; accepted values are 1–10,000. The first run imports the newest
+Inbox messages up to that limit and captures a history baseline before listing.
+Each later manual sync continues into older Inbox mail from its durable page
+position. A separate allowance of the same size handles mailbox history, recovery
+and retries, so label changes do not consume the older-mail import allowance.
+New messages use a full read; unchanged cached bodies use metadata-only reads.
+Once Inbox enumeration and pending work are complete, a no-change run downloads
+no complete messages. This is Inbox coverage, not a full mailbox/Sent/Spam/Trash import.
 
-Automated sync tests use synthetic JSON fixtures and local HTTP servers with temporary databases; they never access a live Gmail account. To test manually with a dedicated account, connect, sync twice, verify a no-change second run imports nothing, then change a test message’s labels and verify a metadata update without duplicate imports, and disconnect during a run. Native smoke tests run without Google configuration.
+Page IDs, remaining messages and failed-read identities are stored in the existing
+checkpoint transaction. A per-message read failure leaves the original cache intact,
+records a bounded retry, and lets later messages proceed. Partial results stay visible.
+Account access, rate-limit, storage and cancellation failures stop safely without
+skipping unfinished work. Later runs retry failed reads and incomplete cached bodies.
+Expired history reconciles cached identities through authoritative reads; missing
+items in a listing never imply deletion. Expired Inbox page tokens restart a bounded
+scan that walks past cached IDs to continue older imports.
+
+**Stop sync** cancels pending work; completed transactions remain saved. Sync does
+not modify Gmail labels, classify mail, generate embeddings or send messages.
+Attachments are not downloaded; separately stored or unsupported/oversized bodies
+remain explicitly incomplete. The local cache is sensitive and unencrypted, persists
+after disconnect, and stays hidden until the same account reconnects.
+
+Automated tests use synthetic mail and GET-only local HTTP servers with temporary
+databases. They qualify 500 → 1,000 → 1,250 cached Inbox messages across service
+restarts, a failed message in the middle of a batch, durable retry, cancellation,
+legacy checkpoints, page-token recovery, history replay and verified deletions.
+No live Gmail account is used by these tests. Native smoke tests use no Google
+configuration.
 
 ## User-defined categories
 

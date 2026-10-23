@@ -7,6 +7,7 @@ import (
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/repository"
 	"mailpilot.local/core/internal/store/sqlite"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -21,11 +22,16 @@ type deltaStub struct {
 	expired               bool
 	lists, full, metadata int
 	block                 func(context.Context)
+	expiredToken          string
 }
 
 func (r *deltaStub) CurrentCheckpoint(context.Context) (string, error) { return r.cursor, nil }
 func (r *deltaStub) ListMessages(_ context.Context, o provider.ListMessagesOptions) (provider.MessagePage, error) {
 	r.lists++
+	if r.expiredToken != "" && o.Page.PageToken == r.expiredToken {
+		r.expiredToken = ""
+		return provider.MessagePage{}, provider.ErrInvalidArgument
+	}
 	offset, _ := strconv.Atoi(o.Page.PageToken)
 	end := min(offset+o.Page.Limit, len(r.refs))
 	next := ""
@@ -36,6 +42,9 @@ func (r *deltaStub) ListMessages(_ context.Context, o provider.ListMessagesOptio
 }
 func (r *deltaStub) FetchMessage(_ context.Context, id domain.ProviderMessageID) (domain.Email, error) {
 	r.full++
+	if id == r.fail {
+		return domain.Email{}, provider.ErrUnavailable
+	}
 	m, ok := r.messages[id]
 	if !ok {
 		return m, provider.ErrNotFound
@@ -168,12 +177,12 @@ func TestPartialHistoryRecordResumesAndFailureDoesNotSkip(t *testing.T) {
 	r.fail = "two"
 	s.Start()
 	p = finished(t, s)
-	if p.State != "error" || p.Errors != 1 {
-		t.Fatal("failure not reported")
+	if p.State != "completed" || p.Errors != 1 {
+		t.Fatal("partial failure not reported")
 	}
 	unchanged, _ := db.SyncCheckpoints().Load(ctx, "a")
-	if unchanged != state {
-		t.Fatal("skipped failure")
+	if unchanged.Cursor != "200" || len(unchanged.RetryIDs) != 1 || unchanged.RetryIDs[0] != "two" {
+		t.Fatal("failed read was not durably queued")
 	}
 	r.fail = ""
 	runDelta(t, s)
@@ -228,7 +237,7 @@ func TestExpiredCheckpointRecoveryAndCancellation(t *testing.T) {
 		t.Fatal("cancellation not reported")
 	}
 	after, _ := db.SyncCheckpoints().Load(ctx, "a")
-	if after != state {
+	if !reflect.DeepEqual(after, state) {
 		t.Fatal("cancelled read advanced checkpoint")
 	}
 }
@@ -241,16 +250,17 @@ func TestInitialPartialFailureRetainsAnchorAndRestartsIdempotently(t *testing.T)
 	r.fail = "two"
 	s.Start()
 	p := finished(t, s)
-	if p.State != "error" || p.Imported != 1 || p.Errors != 1 {
+	if p.State != "completed" || p.Imported != 1 || p.Errors != 1 {
 		t.Fatalf("partial initial: %+v", p)
 	}
 	state, _ := db.SyncCheckpoints().Load(ctx, "a")
-	if state.Cursor != "100" || state.Phase != "snapshot" {
-		t.Fatal("partial initial advanced baseline")
+	if state.Cursor != "100" || state.Phase != "history" || len(state.RetryIDs) != 1 {
+		t.Fatal("partial initial lost its anchor or retry")
 	}
 	first, _ := db.Emails().GetByProviderID(ctx, "a", "one")
 	r.fail = ""
 	r.cursor = "200"
+	r.records = []provider.ChangeRecord{{Cursor: "150", Changes: []provider.MessageChange{{ProviderID: "two"}}}}
 	// A new Service simulates restart; durable state, not the old worker, resumes.
 	restarted := New(ctx, s.session, s.factory, db.Emails(), 10)
 	restarted.SetCheckpoints(db.SyncCheckpoints())
@@ -261,8 +271,8 @@ func TestInitialPartialFailureRetainsAnchorAndRestartsIdempotently(t *testing.T)
 		t.Fatal("reimport duplicated message")
 	}
 	state, _ = db.SyncCheckpoints().Load(ctx, "a")
-	if state.Cursor != "100" || state.Phase != "history" {
-		t.Fatal("lost pre-import anchor")
+	if state.Cursor != "200" || state.Phase != "history" || len(state.RetryIDs) != 0 {
+		t.Fatal("did not replay from the pre-import anchor and finish the retry")
 	}
 	r.records = []provider.ChangeRecord{{Cursor: "150", Changes: []provider.MessageChange{{ProviderID: "two"}}}}
 	runDelta(t, restarted)
@@ -381,11 +391,11 @@ func TestHistoryPrioritizesChangesAndDoesNotRetrySameIncompleteBodyTwice(t *test
 	r.messages["one"] = m
 	r.fail = "one"
 	s.Start()
-	if p := finished(t, s); p.State != "error" {
+	if p := finished(t, s); p.State != "completed" || p.Errors != 1 {
 		t.Fatal(p)
 	}
 	state, err := db.SyncCheckpoints().Load(ctx, "a")
-	if err != nil || state.Cursor != "200" || state.RetryAfter != "" {
+	if err != nil || state.Cursor != "200" || len(state.RetryIDs) != 1 {
 		t.Fatal("failed body retry skipped source", state, err)
 	}
 	r.fail = ""
@@ -423,8 +433,8 @@ func TestCancellationDuringChunkPreparationReportsCommittedSource(t *testing.T) 
 		t.Fatal("lost restart anchor", checkpoint, err)
 	}
 	s.SetChunkProcessor(nil)
-	if p := runDelta(t, s); p.Updated != 1 || p.Imported != 0 {
-		t.Fatal("restart duplicated source", p)
+	if p := runDelta(t, s); p.Updated != 0 || p.Imported != 0 {
+		t.Fatal("restart re-read an already committed source", p)
 	}
 }
 

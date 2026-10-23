@@ -16,6 +16,13 @@ fetch missing bodies or attachments, or infer that the cache is the whole mailbo
 Changes arriving during a run are picked up before completion; later changes show
 pending coverage and require another Start. Resume after app restart is explicit.
 
+After a category is added, edited, enabled/disabled or deleted successfully,
+Categories & Classification offers **Update classification**. It opens Local Email
+Index with guidance to **Rebuild index**, reusing unchanged email embeddings.
+Opening that page starts no work. **Back to Categories & Classification** returns
+to the preserved category interface and reloads current saved review results.
+Opening Local Email Index directly from the dashboard retains its dashboard return.
+
 Eligible means every non-tombstoned cached message. Indexed counts messages whose
 available, compatible chunks all have valid saved vectors, including partial-body
 messages. Message coverage is separately reported as mutually exclusive complete,

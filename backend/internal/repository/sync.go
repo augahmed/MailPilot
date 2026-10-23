@@ -13,6 +13,16 @@ type SyncCheckpoint struct {
 	RetryAfter string
 	Offset     int
 	Limited    bool
+	// Inbox paging is independent of history. Pending holds the exact remaining
+	// IDs of an already-listed page, so a restart cannot skip a shifting page.
+	InboxVersion           int
+	InboxPageToken         string
+	InboxPending           []domain.ProviderMessageID
+	InboxComplete          bool
+	InboxSkipCached        bool
+	ReconcileAfterSnapshot bool
+	// Failed reads remain durable even when later messages can be synchronized.
+	RetryIDs []domain.ProviderMessageID
 }
 type SyncRepository interface {
 	Load(context.Context, domain.AccountID) (SyncCheckpoint, error)

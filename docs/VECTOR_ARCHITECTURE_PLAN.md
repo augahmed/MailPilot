@@ -200,7 +200,7 @@ cancellation is checked during parsing/tokenization/chunking and persistence.
 its derived chunks; concurrent source changes reject publication. Manual sync also
 calls `PrepareCached` to scan at most 10,000 summaries and attempt at most its sync
 limit of missing/stale recipes; current recipes skip body reads/tokenization. No
-background scheduler or wider Gmail fetch is added. Source/checkpoints commit first;
+background scheduler or Gmail fetch is added by cached text preparation. Source/checkpoints commit first;
 chunking failures leave cached mail readable, report `chunking_failed`, and are
 retried in later manual cache passes. New source/model/preprocessing revisions
 invalidate old work through the existing shared store. The separately authorized

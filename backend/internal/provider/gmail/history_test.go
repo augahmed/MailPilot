@@ -141,7 +141,7 @@ func TestGmailIncrementalIntegrationKeepsBodyAndDoesNotRelist(t *testing.T) {
 	if err != nil || after.Email.ID != before.Email.ID || after.Email.BodyText != before.Email.BodyText || len(after.Email.Labels) != 1 || after.Email.Labels[0].ProviderID != "STARRED" {
 		t.Fatal("cache reconciliation failed")
 	}
-	if lists != 1 || full != 1 || minimal != 2 || history != 2 {
+	if lists != 1 || full != 1 || minimal != 1 || history != 2 {
 		t.Fatalf("unnecessary requests: lists=%d full=%d metadata=%d history=%d", lists, full, minimal, history)
 	}
 }

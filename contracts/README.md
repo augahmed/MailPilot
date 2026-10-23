@@ -371,15 +371,24 @@ account session owns the job.
 
 Optional additive status fields are `mode` (initial, incremental, recovery),
 `removed` (nonnegative confirmed cache removals), `more` (another manual run is
-needed), and `snapshotLimited` (older uncached Inbox mail was outside the bounded
-snapshot). Omitted counts/flags mean zero/false. `discovered` now counts change
-observations, which may refresh one message multiple times across history records.
-`capped` retains its initial snapshot meaning. Body-unavailable warnings can coexist
-with a successfully advanced checkpoint; failed reads/writes leave unfinished work.
-Manual sync also uses its remaining observation budget after history to retry
-incomplete cached bodies, rotating across runs. Still-incomplete bodies report
-`body_unavailable` and `more`; retries perform no inference. A message observed
-through history is not retried again in that run. See the [source lifecycle](../docs/SYNC_LIFECYCLE.md).
+needed), and `snapshotLimited` (older Inbox mail remains in the durable scan).
+Omitted counts/flags mean zero/false. Each run can import/refresh up to `limit`
+Inbox identities plus a separate `limit` history/recovery/retry observations.
+`discovered` counts attempted observations, including failures and repeated history
+changes. `capped` means the bounded Inbox scan has more work; another manual run
+continues older mail. A completed run with nonzero errors is shown as partial success.
+
+The private checkpoint adds versioned Inbox pagination, exact pending page IDs and
+at most 500 failed-read IDs. Existing JSON checkpoints decode without a migration;
+a legacy limited snapshot restarts enumeration and skips already cached IDs, while
+an interrupted legacy snapshot first repairs its newest bounded batch. Successful
+observations and failed-read retry identities commit atomically with their position.
+Per-message read failures continue the batch; account access, rate-limit, storage
+and cancellation failures stop. Failed source/checkpoint writes roll back together.
+After history drains, the maintenance allowance retries at most 50 failed-read IDs,
+then rotates remaining work across incomplete cached bodies. Same-run repeated
+incomplete retries are suppressed. These operations perform no inference.
+See the [source lifecycle](../docs/SYNC_LIFECYCLE.md).
 No history cursor, provider IDs or email content is exposed by status.
 
 [sync-incremental-v1.json](sync-incremental-v1.json) is a shared synthetic example

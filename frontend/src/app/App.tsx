@@ -17,6 +17,10 @@ function AuthorizedApp({
   connection: ReturnType<typeof useGmailConnection>;
 }) {
   const [page, setPage] = useState<Page>("dashboard");
+  const [indexReturn, setIndexReturn] = useState<"dashboard" | "categories">(
+    "dashboard",
+  );
+  const [categoryReviewRevision, setCategoryReviewRevision] = useState(0);
   const [visited, setVisited] = useState<Set<Page>>(
     () => new Set(["dashboard"]),
   );
@@ -26,7 +30,13 @@ function AuthorizedApp({
   useEffect(() => {
     heading.current?.focus();
   }, []);
-  const navigate = (next: Page) => {
+  const navigate = (
+    next: Page,
+    from: "dashboard" | "categories" = "dashboard",
+  ) => {
+    if (next === "index") setIndexReturn(from);
+    if (next === "categories" && page === "index")
+      setCategoryReviewRevision((value) => value + 1);
     scroll.current[page] = window.scrollY;
     setVisited((prior) => new Set([...prior, next]));
     setPage(next);
@@ -40,6 +50,7 @@ function AuthorizedApp({
   const title =
     features.find((feature) => feature.id === page)?.title ??
     (page === "settings" ? "Optional AI settings" : "Historical recovery");
+  const backPage = page === "index" ? indexReturn : "dashboard";
   return (
     <>
       <header className="app-header">
@@ -75,9 +86,12 @@ function AuthorizedApp({
           <div className="page-heading">
             <button
               className="back-button secondary-button"
-              onClick={() => navigate("dashboard")}
+              onClick={() => navigate(backPage)}
             >
-              <span aria-hidden="true">←</span> Back to dashboard
+              <span aria-hidden="true">←</span>{" "}
+              {backPage === "categories"
+                ? "Back to Categories & Classification"
+                : "Back to dashboard"}
             </button>
             <h1 ref={heading} tabIndex={-1}>
               {title}
@@ -117,12 +131,29 @@ function AuthorizedApp({
         <MailWorkspace connectionRevision={0} page={page} visited={visited} />
         {visited.has("index") && (
           <div hidden={page !== "index"}>
+            {indexReturn === "categories" && (
+              <aside
+                className="attention-panel"
+                aria-label="Refresh category classifications"
+              >
+                <h2>Apply your category changes</h2>
+                <p>
+                  Choose Rebuild index to refresh category profiles and
+                  classification suggestions. When indexing finishes, use Back
+                  to Categories &amp; Classification to review the updated
+                  results.
+                </p>
+              </aside>
+            )}
             <LocalEmailIndex />
           </div>
         )}
         {visited.has("categories") && (
           <div hidden={page !== "categories"}>
-            <CategoriesAndClassification />
+            <CategoriesAndClassification
+              onUpdateClassification={() => navigate("index", "categories")}
+              reviewRevision={categoryReviewRevision}
+            />
           </div>
         )}
         {visited.has("organization") && (

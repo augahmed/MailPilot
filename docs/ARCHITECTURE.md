@@ -76,7 +76,9 @@ review combines five bounded IPC pages into a 25-email display page. The account
 checks, confirmed disconnect, optional AI settings and historical recovery. The
 reader remains shared across dashboard, search and evidence questions. Categories
 and classification share a page with collapsed category editors and per-email
-review cards. Search loads the complete paginated category source on entry, and
+review cards. Successful category changes offer an explicit route to Local Email
+Index; Back returns to the preserved category page and reloads saved reviews.
+Navigation starts no indexing or classification work. Search loads the complete paginated category source on entry, and
 Ask shows the existing provider settings above its independently approved question
 workflow. Organization presents selection, read-only/fresh previews, confirmed
 application and recorded outcomes/undo in four steps; unresolved outcomes remain
@@ -363,6 +365,11 @@ Developer desktop OAuth client configuration is distinct from user tokens; see
 Gmail profile before establishing a session. Local cache reads in an existing session
 are network-free; cold-start offline unlock is a separate design/test gap.
 
+Manual sync imports the newest configured Inbox batch (500 by default), then
+continues older Inbox pages on later manual runs. A separate allowance of the same
+size handles history/recovery/retry observations. The existing private checkpoint
+stores exact pending page IDs and bounded failed-read IDs, so an isolated failed
+read cannot restart or block the entire Inbox scan. Partial outcomes stay visible.
 Sync checkpoints and source visibility remain atomic; missing/incomplete listings
 never establish deletion. Keep provider pagination opaque, bounded network calls,
 cancellation and safe errors. Reading/search/classification never authorize Gmail

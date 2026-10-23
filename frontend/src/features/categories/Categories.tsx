@@ -17,7 +17,13 @@ const messages = {
   not_found: "This category no longer exists. Refresh the list.",
   storage_error: "Categories could not be saved or loaded. Try again.",
 };
-export function Categories() {
+export function Categories({
+  onChanged,
+  onUpdateClassification,
+}: {
+  onChanged?: () => void;
+  onUpdateClassification?: () => void;
+}) {
   const [page, setPage] = useState<CategoryPage | null>(null);
   const [offset, setOffset] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -28,6 +34,7 @@ export function Categories() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [enabled, setEnabled] = useState(true);
+  const [hasChanges, setHasChanges] = useState(false);
   const active = useRef(true);
   const pending = useRef(false);
   const revision = useRef(0);
@@ -64,6 +71,8 @@ export function Categories() {
           setEditing(null);
           setDeleting(null);
           setMessage("Category changes saved locally.");
+          setHasChanges(true);
+          onChanged?.();
           heading.current?.focus();
         }
       }
@@ -181,6 +190,19 @@ export function Categories() {
       <p role="status" className="feature-status">
         {busy ? "Working…" : message || (!page ? "Loading categories…" : "")}
       </p>
+      {hasChanges && page && onUpdateClassification && (
+        <aside className="attention-panel" aria-label="Update classification">
+          <h3>Update classification after category changes</h3>
+          <p>
+            After editing categories, rebuild the Local Email Index to update
+            classification suggestions, then return here to review the results.
+            Unchanged email embeddings are reused.
+          </p>
+          <button disabled={busy} onClick={onUpdateClassification}>
+            Update classification
+          </button>
+        </aside>
+      )}
       <div className="account-actions">
         <button
           className="secondary-button"

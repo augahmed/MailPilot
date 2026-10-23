@@ -7,6 +7,7 @@ import (
 	"errors"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/repository"
+	"reflect"
 )
 
 type syncRepository struct{ store *Store }
@@ -28,6 +29,18 @@ func (r *syncRepository) Load(ctx context.Context, a domain.AccountID) (reposito
 	return state, nil
 }
 func (r *syncRepository) Commit(ctx context.Context, a domain.AccountID, expected, next repository.SyncCheckpoint, email *domain.Email, deleted domain.ProviderMessageID) error {
+	if next.InboxVersion < 0 || next.InboxVersion > 1 || len(next.InboxPageToken) > 4096 || len(next.InboxPending) > 100 || len(next.RetryIDs) > 500 {
+		return repository.ErrInvalid
+	}
+	for _, ids := range [][]domain.ProviderMessageID{next.InboxPending, next.RetryIDs} {
+		seen := map[domain.ProviderMessageID]bool{}
+		for _, id := range ids {
+			if id == "" || len(id) > 1024 || seen[id] {
+				return repository.ErrInvalid
+			}
+			seen[id] = true
+		}
+	}
 	if a == "" || len(next.Cursor) > 4096 || len(next.After) > 1024 || len(next.RetryAfter) > 1024 || len(next.Record) > 4096 || next.Offset < 0 || next.Offset > 10000 || (next.Phase != "snapshot" && next.Phase != "reconcile" && next.Phase != "history") || (email != nil && (email.AccountID != a || email.Validate() != nil || deleted != "")) {
 		return repository.ErrInvalid
 	}
@@ -41,7 +54,7 @@ func (r *syncRepository) Commit(ctx context.Context, a domain.AccountID, expecte
 		if err == nil && json.Unmarshal([]byte(raw), &current) != nil {
 			return repository.ErrStorage
 		}
-		if current != expected {
+		if !reflect.DeepEqual(current, expected) {
 			return repository.ErrConflict
 		}
 		if email != nil {

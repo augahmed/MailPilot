@@ -99,6 +99,21 @@ it("loads saved reviews without classifying and runs only the requested cached p
     "Saved assessments for 2 cached emails. 0 errors.",
   );
 });
+it("reloads current saved assessments immediately when returning from the index", async () => {
+  const { rerender } = render(<ClassificationReview refreshRevision={0} />);
+  await screen.findByText("Your receipt");
+  expect(screen.getAllByText("Not reviewed yet")).toHaveLength(2);
+  vi.mocked(reviewClassifications).mockResolvedValue(saved);
+  rerender(<ClassificationReview refreshRevision={1} />);
+  await screen.findByText("Rule strength 0.60");
+  expect(screen.queryByText("Not reviewed yet")).toBeNull();
+  expect(
+    vi
+      .mocked(reviewClassifications)
+      .mock.calls.every(([request]) => request.operation === "list"),
+  ).toBe(true);
+});
+
 it("shows partial failure counts and preserves successful suggestions", async () => {
   render(<ClassificationReview />);
   await screen.findByText("Your receipt");

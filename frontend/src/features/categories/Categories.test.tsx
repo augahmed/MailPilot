@@ -28,8 +28,10 @@ beforeEach(() => {
   vi.mocked(manageCategories).mockResolvedValue(page);
 });
 it("creates and edits descriptions and toggles enabled state", async () => {
-  render(<Categories />);
+  const onChanged = vi.fn();
+  render(<Categories onChanged={onChanged} />);
   fireEvent.click(await screen.findByText("School"));
+  expect(onChanged).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Add Category" }));
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Travel" },
@@ -51,6 +53,7 @@ it("creates and edits descriptions and toggles enabled state", async () => {
     ),
   );
   await screen.findByText("Category changes saved locally.");
+  expect(onChanged).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("button", { name: "Edit School" }));
   expect(screen.getByLabelText("Description")).toHaveValue(
     "Classes and academic deadlines.",

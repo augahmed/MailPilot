@@ -450,7 +450,7 @@ func TestChunksSyncDeletionAndPhysicalCascade(t *testing.T) {
 	_, err = s.Chunks().State(ctx, a, e.ID)
 	requireError(t, err, repository.ErrNotFound)
 	checkpoint, err := s.SyncCheckpoints().Load(ctx, a)
-	if err != nil || checkpoint != next {
+	if err != nil || !reflect.DeepEqual(checkpoint, next) {
 		t.Fatal("checkpoint lost", err)
 	}
 	journal, err := s.Replies().Get(ctx, a, plan.ID)

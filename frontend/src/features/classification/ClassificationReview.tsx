@@ -27,7 +27,11 @@ const states = {
   stale: "Review needed — inputs or classifier changed",
   error: "Could not review",
 };
-export function ClassificationReview() {
+export function ClassificationReview({
+  refreshRevision = 0,
+}: {
+  refreshRevision?: number;
+}) {
   const [opened, setOpened] = useState<{
     emailId: string;
     revision: string;
@@ -89,7 +93,7 @@ export function ClassificationReview() {
       mounted.current = false;
       clearTimeout(timer);
     };
-  }, [offset]);
+  }, [offset, refreshRevision]);
   async function act(
     operation: "list" | "run" | "assigned" | "unclassified" | "auto",
     row?: ClassificationPage["rows"][number],

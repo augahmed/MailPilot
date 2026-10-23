@@ -155,7 +155,7 @@ it("shows recovery, durable continuation and removed counts, and allows cancella
   expect(
     await screen.findByText("Sync mode: Checkpoint recovery"),
   ).toBeInTheDocument();
-  expect(screen.getByText(/continue from saved progress/)).toBeInTheDocument();
+  expect(screen.getByText(/Older Inbox emails remain/)).toBeInTheDocument();
   expect(screen.getByText("Removed from cache")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Stop sync" }));
   await waitFor(() => expect(syncCommand).toHaveBeenCalledWith("cancel"));
@@ -181,6 +181,34 @@ it("keeps cached mail readable when local processing fails", async () => {
     await screen.findByText(/Their original content is saved/),
   ).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("Sync finished with some errors"),
+  ).toBeInTheDocument();
+});
+
+it("shows partial download success and explains failed-read and older-mail continuation", async () => {
+  vi.mocked(syncCommand).mockResolvedValue({
+    state: "completed",
+    accountId: "a",
+    limit: 500,
+    discovered: 500,
+    imported: 499,
+    updated: 0,
+    errors: 1,
+    capped: true,
+    more: true,
+    snapshotLimited: true,
+    code: "provider_error",
+  });
+  render(<Mailbox connectionRevision={0} />);
+  await screen.findByRole("cell", { name: "Sender" });
+  expect(
+    screen.getByText("Sync finished with some errors"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/retry failed emails and continue older Inbox mail/),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sync Gmail" })).toBeEnabled();
 });
 
 it.each([

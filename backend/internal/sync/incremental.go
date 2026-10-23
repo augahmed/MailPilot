@@ -8,7 +8,7 @@ import (
 	"mailpilot.local/core/internal/repository"
 )
 
-func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64, reader Reader, changes provider.ChangeReader) error {
+func (s *Service) syncChanges(ctx context.Context, a domain.AccountID, g uint64, reader Reader, changes provider.ChangeReader, recovering bool) error {
 	state, err := s.checkpoints.Load(ctx, a)
 	if err != nil {
 		return err
@@ -27,17 +27,7 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 		s.update(g, func(p *Progress) { p.Mode = value; p.SnapshotLimited = state.Limited })
 	}
 	more := func() { s.update(g, func(p *Progress) { p.More = true }) }
-	if state.Phase == "" {
-		cursor, err := changes.CurrentCheckpoint(ctx)
-		if err != nil {
-			return err
-		}
-		// Also reconcile existing caches created before checkpoints were implemented.
-		if err := commit(repository.SyncCheckpoint{Phase: "reconcile", Cursor: cursor}, nil, ""); err != nil {
-			return err
-		}
-		mode("initial")
-	} else if state.Phase == "history" {
+	if state.Phase == "history" {
 		mode("incremental")
 	} else {
 		mode("recovery")
@@ -45,81 +35,11 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 	budget := s.limit
 	observed := map[domain.ProviderMessageID]bool{}
 	observe := func(id domain.ProviderMessageID, deleted bool, next repository.SyncCheckpoint) error {
-		s.update(g, func(p *Progress) { p.Discovered++ })
-		old, err := s.emails.GetByProviderID(ctx, a, id)
-		exists := err == nil
-		if err != nil && !errors.Is(err, repository.ErrNotFound) {
-			return err
-		}
-		var email *domain.Email
-		if !deleted {
-			metadata, err := changes.FetchMessageMetadata(ctx, id)
-			if errors.Is(err, provider.ErrNotFound) {
-				deleted = true
-			} else if err != nil {
-				return err
-			} else {
-				if metadata.ProviderID != id {
-					return provider.ErrMalformed
-				}
-				if exists || metadata.InSyncScope {
-					var value domain.Email
-					if exists && old.Email.BodyState == "complete" && metadata.ContentRevision != "" && metadata.ContentRevision == old.Email.ContentRevision {
-						value = old.Email
-						value.Labels = metadata.Labels
-						value.ProviderThreadID = metadata.ProviderThreadID
-					} else {
-						value, err = reader.FetchMessage(ctx, id)
-						if errors.Is(err, provider.ErrNotFound) {
-							deleted = true
-						} else if err != nil {
-							return err
-						}
-					}
-					if !deleted {
-						if value.AccountID != a || value.ProviderID != id || value.Validate() != nil {
-							return provider.ErrMalformed
-						}
-						email = &value
-					}
-				}
-			}
-		}
-		var removed domain.ProviderMessageID
-		if deleted {
-			removed = id
-		}
-		if err := commit(next, email, removed); err != nil {
+		if err := s.observe(ctx, a, g, reader, changes, &state, next, id, deleted, false); err != nil {
 			return err
 		}
 		observed[id] = true
 		budget--
-		s.update(g, func(p *Progress) {
-			if deleted && exists {
-				p.Removed++
-			} else if email != nil {
-				if exists {
-					p.Updated++
-				} else {
-					p.Imported++
-				}
-			}
-			if email != nil && email.BodyState != "complete" {
-				p.Errors++
-				p.Code = "body_unavailable"
-				p.More = true
-			}
-		})
-		// Report committed observations even if post-commit chunk preparation is
-		// interrupted. The source/checkpoint must never be counted as rolled back.
-		if email != nil && s.prepareChunks != nil {
-			if err := s.prepareChunks(ctx, a, id); err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				s.update(g, func(p *Progress) { p.Errors++; p.Code = "chunking_failed" })
-			}
-		}
 		return nil
 	}
 	// Expiration recovery reconciles every cached identity with authoritative GETs.
@@ -132,7 +52,7 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 			}
 			if len(ids) == 0 {
 				next := state
-				next.Phase = "snapshot"
+				next.Phase = "history"
 				next.After = ""
 				return commit(next, nil, "")
 			}
@@ -155,64 +75,6 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 			return nil
 		}
 	}
-	if state.Phase == "snapshot" && budget != s.limit {
-		more()
-		return nil
-	}
-	if state.Phase == "snapshot" {
-		// Preserve the bounded initial recent-Inbox import. On partial failure retry
-		// from its beginning with the same pre-scan anchor; never infer deletions.
-		modeValue := s.Status().Mode
-		if modeValue != "initial" {
-			mode("recovery")
-		}
-		seen := map[domain.ProviderMessageID]bool{}
-		pages := map[string]bool{}
-		token := ""
-		limited := false
-		for len(seen) < s.limit {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if pages[token] {
-				return provider.ErrMalformed
-			}
-			pages[token] = true
-			size := min(100, s.limit-len(seen))
-			page, err := reader.ListMessages(ctx, provider.ListMessagesOptions{Page: provider.PageOptions{Limit: size, PageToken: token}})
-			if err != nil {
-				return err
-			}
-			if len(page.Messages) > size || len(page.Messages) == 0 && page.NextPageToken != "" || len(pages) > s.limit+1 {
-				return provider.ErrMalformed
-			}
-			for _, ref := range page.Messages {
-				if ref.AccountID != a || ref.ProviderID == "" {
-					return provider.ErrMalformed
-				}
-				if seen[ref.ProviderID] {
-					continue
-				}
-				seen[ref.ProviderID] = true
-				if err := observe(ref.ProviderID, false, state); err != nil {
-					return err
-				}
-			}
-			limited = page.NextPageToken != ""
-			if !limited || len(seen) >= s.limit {
-				break
-			}
-			token = page.NextPageToken
-		}
-		next := state
-		next.Phase = "history"
-		next.Limited = limited
-		if err := commit(next, nil, ""); err != nil {
-			return err
-		}
-		s.update(g, func(p *Progress) { p.Capped = limited; p.SnapshotLimited = limited; p.More = true })
-		return nil // Next manual run replays all changes since the pre-scan anchor.
-	}
 	if state.Phase != "history" {
 		return repository.ErrStorage
 	}
@@ -231,11 +93,14 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 		pages[token] = true
 		page, err := changes.ListChanges(ctx, start, provider.PageOptions{Limit: 100, PageToken: token})
 		if errors.Is(err, provider.ErrCheckpointExpired) {
+			if recovering {
+				return err
+			}
 			cursor, err := changes.CurrentCheckpoint(ctx)
 			if err != nil {
 				return err
 			}
-			next := repository.SyncCheckpoint{Cursor: cursor, Phase: "reconcile", Limited: state.Limited}
+			next := repository.SyncCheckpoint{Cursor: cursor, Phase: "reconcile", Limited: true, InboxVersion: 1, RetryIDs: state.RetryIDs}
 			if err := commit(next, nil, ""); err != nil {
 				return err
 			}
@@ -244,7 +109,7 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 			// Begin recovery immediately when this job has not spent its change
 			// budget. Otherwise the next manual run resumes the durable phase.
 			if budget == s.limit {
-				return s.incremental(ctx, a, g, reader, changes)
+				return s.syncChanges(ctx, a, g, reader, changes, true)
 			}
 			return nil
 		}
@@ -298,6 +163,23 @@ func (s *Service) incremental(ctx context.Context, a domain.AccountID, g uint64,
 			next.Cursor = page.Cursor
 			if err := commit(next, nil, ""); err != nil {
 				return err
+			}
+			// Retry a bounded rotation of failed reads without blocking later mail.
+			queued := append([]domain.ProviderMessageID(nil), state.RetryIDs...)
+			for _, id := range queued[:min(len(queued), 50)] {
+				if budget <= 0 {
+					break
+				}
+				if observed[id] {
+					continue
+				}
+				next := withoutRetry(state, id)
+				if err := observe(id, false, next); err != nil {
+					return err
+				}
+			}
+			if len(state.RetryIDs) > 0 {
+				more()
 			}
 			// History has priority. Use only the remaining observation budget to
 			// retry cached incomplete bodies, which may recover without a new Gmail
