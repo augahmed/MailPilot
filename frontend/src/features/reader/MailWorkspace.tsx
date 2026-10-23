@@ -72,6 +72,7 @@ export function MailWorkspace({
         )}
         <div hidden={page !== "dashboard"}>
           <Mailbox
+            active={page === "dashboard" && selection?.page !== page}
             connectionRevision={connectionRevision}
             onOpen={(accountId, emailId, button) => {
               setEvidence(null);

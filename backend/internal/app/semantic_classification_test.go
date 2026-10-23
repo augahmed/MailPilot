@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/domain"
@@ -90,9 +91,86 @@ func TestSemanticCoordinatorAndReviewOverrides(t *testing.T) {
 	}
 	listed := review.Review(ctx, ClassificationRequest{Operation: "list"})
 	for _, r := range listed.Rows {
+		if r.EmailID != row.EmailID {
+			if r.State != "suggested" {
+				t.Fatal("unrelated source invalidated assessment", r)
+			}
+			continue
+		}
 		if (r.State != "stale" && r.State != "not_reviewed") || len(r.Predictions) != 0 {
 			t.Fatal("stale predictions visible", listed)
 		}
+	}
+}
+
+func TestOrganizationConfirmationSurvivesUnrelatedWorkAndIdenticalReassessment(t *testing.T) {
+	for _, change := range []string{"reassessment", "other_source", "other_index"} {
+		t.Run(change, func(t *testing.T) {
+			ctx := context.Background()
+			index, db, _, engine, _ := semanticAppFixture(t, 2)
+			indexCommand(index, "start")
+			if p := waitIndex(t, index); p.Status != "complete" {
+				t.Fatal(p)
+			}
+			stored, err := db.Emails().Get(ctx, "a", "mail-000000")
+			if err != nil {
+				t.Fatal(err)
+			}
+			fake := &organizationFake{email: stored.Email, labels: []domain.EmailLabel{}}
+			org := NewOrganization(ctx, index.session, func(domain.AccountID) OrganizationProvider { return fake }, db.Emails(), db.Categories(), db.Classifications(), db.Organization(), engine)
+			t.Cleanup(org.Close)
+			preview := previewOrganization(t, org, stored.Email)
+			original, err := db.Classifications().Get(ctx, "a", stored.Email.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if change == "reassessment" {
+				cats, err := db.Categories().List(ctx, "a")
+				if err != nil {
+					t.Fatal(err)
+				}
+				run, err := engine.Classify(ctx, stored.Email, cats)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if run.InputHash != original.InputHash {
+					t.Fatal("fixture evidence changed")
+				}
+				run.Timestamp = original.Timestamp.Add(time.Millisecond)
+				for i := range run.Results {
+					run.Results[i].Timestamp = run.Timestamp
+				}
+				if err := db.Classifications().Replace(ctx, run); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				other, err := db.Emails().Get(ctx, "a", "mail-000001")
+				if err != nil {
+					t.Fatal(err)
+				}
+				other.Email.BodyText += " Unrelated updated content."
+				if _, err := db.Emails().Upsert(ctx, other.Email); err != nil {
+					t.Fatal(err)
+				}
+				if change == "other_index" {
+					chunker, err := NewCachedChunker(db.Emails(), db.Chunks())
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := chunker.Prepare(ctx, "a", other.Email.ProviderID); err != nil {
+						t.Fatal(err)
+					}
+				}
+				current, err := db.Classifications().Get(ctx, "a", stored.Email.ID)
+				if err != nil || current.InputHash != original.InputHash {
+					t.Fatal("unrelated work revoked selected assessment", err)
+				}
+			}
+			applied := applyOrganization(t, org, preview)
+			if applied.Code != "" || applied.State != "applied" || len(fake.writes) != 2 {
+				t.Fatalf("valid confirmation rejected: %+v", applied)
+			}
+		})
 	}
 }
 

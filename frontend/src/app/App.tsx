@@ -127,7 +127,7 @@ function AuthorizedApp({
         )}
         {visited.has("organization") && (
           <div hidden={page !== "organization"}>
-            <Organization />
+            <Organization active={page === "organization"} />
           </div>
         )}
         {visited.has("recovery") && (

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Page } from "../../app/navigation";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ConnectionStatus } from "./GmailConnection";
 import type { GmailConnectionState } from "./useGmailConnection";
 
@@ -14,7 +15,6 @@ export function AccountDropdown({
   const [confirming, setConfirming] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const cancel = useRef<HTMLButtonElement>(null);
   const disconnect = useRef<HTMLButtonElement>(null);
   const working =
     connection.busy ||
@@ -32,17 +32,17 @@ export function AccountDropdown({
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [open]);
-  useEffect(() => {
-    if (confirming) cancel.current?.focus();
-  }, [confirming]);
+  const cancelDisconnect = () => {
+    setConfirming(false);
+    requestAnimationFrame(() => disconnect.current?.focus());
+  };
   return (
     <div
       className="account-dropdown"
       ref={container}
       onBlur={(event) => {
-        // Replacing the focused Disconnect button can emit a blur with no
-        // destination before the confirmation controls receive focus. Only a
-        // known outside focus target should dismiss the panel here; outside
+        // Transient blur events can have no destination while controls change.
+        // Only a known outside target should dismiss the panel here; outside
         // pointer presses and Escape are handled separately.
         if (
           event.relatedTarget &&
@@ -53,7 +53,7 @@ export function AccountDropdown({
         }
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") {
+        if (event.key === "Escape" && !confirming) {
           setOpen(false);
           setConfirming(false);
           trigger.current?.focus();
@@ -82,80 +82,58 @@ export function AccountDropdown({
           <p className="account-label">GMAIL ACCOUNT</p>
           <strong className="account-email">{connection.email}</strong>
           <ConnectionStatus connection={connection} />
-          {confirming ? (
-            <div
-              className="disconnect-confirmation"
-              role="group"
-              aria-labelledby="disconnect-heading"
-            >
-              <h2 id="disconnect-heading">Disconnect Gmail?</h2>
-              <p>
-                This removes this device’s credentials and attempts to revoke
-                Google access. Cached mail stays on this device. You will need
-                to reconnect to access it.
-              </p>
-              <div className="account-actions">
-                <button
-                  className="secondary-button"
-                  ref={cancel}
-                  onClick={() => {
-                    setConfirming(false);
-                    requestAnimationFrame(() => disconnect.current?.focus());
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="danger-button"
-                  onClick={() => {
-                    void connection.act("gmail_disconnect");
-                  }}
-                >
-                  Confirm disconnect
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <button
-                className="dropdown-action"
-                disabled={working}
-                onClick={() => {
-                  void connection.act("gmail_check");
-                }}
-              >
-                Check Connection
-              </button>
-              <button
-                className="dropdown-action"
-                onClick={() => {
-                  navigate("settings");
-                  setOpen(false);
-                }}
-              >
-                Optional AI settings
-              </button>
-              <button
-                className="dropdown-action"
-                onClick={() => {
-                  navigate("recovery");
-                  setOpen(false);
-                }}
-              >
-                Historical recovery
-              </button>
-              <button
-                className="dropdown-action danger-text"
-                ref={disconnect}
-                disabled={connection.busy}
-                onClick={() => setConfirming(true)}
-              >
-                Disconnect
-              </button>
-            </>
-          )}
+          <button
+            className="dropdown-action"
+            disabled={working}
+            onClick={() => {
+              void connection.act("gmail_check");
+            }}
+          >
+            Check Connection
+          </button>
+          <button
+            className="dropdown-action"
+            onClick={() => {
+              navigate("settings");
+              setOpen(false);
+            }}
+          >
+            Optional AI settings
+          </button>
+          <button
+            className="dropdown-action"
+            onClick={() => {
+              navigate("recovery");
+              setOpen(false);
+            }}
+          >
+            Historical recovery
+          </button>
+          <button
+            className="dropdown-action danger-text"
+            ref={disconnect}
+            disabled={connection.busy}
+            onClick={() => setConfirming(true)}
+          >
+            Disconnect
+          </button>
         </div>
       )}
+      <ConfirmDialog
+        open={open && confirming}
+        title="Disconnect Gmail?"
+        confirmLabel="Confirm disconnect"
+        destructive
+        onCancel={cancelDisconnect}
+        onConfirm={() => void connection.act("gmail_disconnect")}
+      >
+        <p className="account-email">{connection.email}</p>
+        <p>
+          This removes this device’s credentials and attempts to revoke Google
+          access. Cached mail stays on this device. You will need to reconnect
+          to access it.
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }

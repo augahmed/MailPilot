@@ -3,6 +3,7 @@ package gmail
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -92,6 +93,73 @@ func TestLabelWritesAreNarrowAndNeverRetried(t *testing.T) {
 				}
 			}
 
+		})
+	}
+}
+
+func TestCreateLabelVerifiesOmittedTypeWithoutRetryingWrite(t *testing.T) {
+	for _, mode := range []string{"verified", "wrong_id", "wrong_name", "system", "missing_type", "get_failed", "post_failed"} {
+		t.Run(mode, func(t *testing.T) {
+			var creates, reads atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method == http.MethodPost && r.URL.Path == "/labels" {
+					creates.Add(1)
+					if mode == "post_failed" {
+						w.WriteHeader(503)
+						return
+					}
+					json.NewEncoder(w).Encode(map[string]string{"id": "Label_created", "name": "MailPilot/Receipts"})
+					return
+				}
+				if r.Method != http.MethodGet || r.URL.Path != "/labels/Label_created" {
+					t.Error("unexpected request")
+					w.WriteHeader(404)
+					return
+				}
+				reads.Add(1)
+				if mode == "get_failed" {
+					w.WriteHeader(404)
+					return
+				}
+				label := map[string]string{"id": "Label_created", "name": "MailPilot/Receipts", "type": "user"}
+				switch mode {
+				case "wrong_id":
+					label["id"] = "Label_other"
+				case "wrong_name":
+					label["name"] = "Other"
+				case "system":
+					label["type"] = "system"
+				case "missing_type":
+					delete(label, "type")
+				}
+				json.NewEncoder(w).Encode(label)
+			}))
+			defer server.Close()
+			p := NewProvider("a", syntheticTokens{})
+			p.baseURL = server.URL
+			p.client = server.Client()
+			label, err := p.CreateLabel(context.Background(), "MailPilot/Receipts")
+			if mode == "verified" {
+				if err != nil || label.ProviderID != "Label_created" || label.Kind != domain.LabelKindUser {
+					t.Fatal("valid creation rejected", err)
+				}
+			} else if err == nil {
+				t.Fatal("unverified creation accepted")
+			}
+			if mode == "system" && !errors.Is(err, provider.ErrMalformed) {
+				t.Fatal("system label not rejected", err)
+			}
+			if creates.Load() != 1 {
+				t.Fatal("POST was retried")
+			}
+			wantReads := int32(1)
+			if mode == "post_failed" {
+				wantReads = 0
+			}
+			if reads.Load() != wantReads {
+				t.Fatal("unexpected verification count", reads.Load())
+			}
 		})
 	}
 }

@@ -9,7 +9,16 @@ import (
 )
 
 func TestOrganizationPhishingContract(t *testing.T) {
-	data, err := os.ReadFile("../../../contracts/organization-phishing-v1.json")
+	checkOrganizationContract(t, "organization-phishing-v1.json")
+}
+
+func TestOrganizationConflictContract(t *testing.T) {
+	checkOrganizationContract(t, "organization-conflict-v1.json")
+}
+
+func checkOrganizationContract(t *testing.T, name string) {
+	t.Helper()
+	data, err := os.ReadFile("../../../contracts/" + name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +31,7 @@ func TestOrganizationPhishingContract(t *testing.T) {
 	if err = decoder.Decode(&fixture); err != nil {
 		t.Fatal(err)
 	}
-	if !fixture.Request.Valid() || fixture.Request.Source != "phishing" || fixture.Response.Rows[0].Phishing.Score != 80 {
+	if !fixture.Request.Valid() || name == "organization-phishing-v1.json" && (fixture.Request.Source != "phishing" || fixture.Response.Rows[0].Phishing.Score != 80) || name == "organization-conflict-v1.json" && fixture.Response.ConflictReason != "labels_changed" {
 		t.Fatal("invalid shared contract")
 	}
 	encoded, err := json.Marshal(fixture)

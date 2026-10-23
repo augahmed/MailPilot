@@ -22,6 +22,15 @@ include the history ID in that revision. Partial cached bodies always require a
 full GET when observed. No broader Inbox import, attachment download, background
 sync or new Gmail mutation path is introduced.
 
+Source hash recipe v2 excludes opaque attachment download handles, just as it
+excludes provider message/thread identities. Attachment part IDs, filenames, MIME
+types, sizes, disposition and Content-ID remain source inputs. Original attachment
+metadata stays cached; changing a download handle alone does not replace the
+cached source or revoke classifications/vectors. The next normal source upsert
+converts an affected v1 hash with the existing transactional invalidation and
+shared chunk preparation; historical journal hashes/digests are never rewritten.
+Text preprocessing/model recipes are unchanged because no text cleanup changed.
+
 An explicit organization preview fetches full snapshots for only its selected
 emails (at most 25). It validates their account/provider identity and publishes
 them together with the existing source repository. It runs the same shared text

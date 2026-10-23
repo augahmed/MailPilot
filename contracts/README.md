@@ -142,6 +142,16 @@ States: idle, running, completed, error, cancelled. Optional `code` is a safe di
 }
 ```
 
+Each row optionally adds `classification: {state,categoryId,categoryName}`; see
+[mailbox-classification-v1.json](mailbox-classification-v1.json). State is unclassified,
+suggested, assigned, multiple_suggestions, multiple_assignments or stale. Only a
+current single category includes its ID/name (at most 100/101 characters); stale
+assessments never expose an old category. This reads saved classifications without
+inference. Legacy rows without the field remain decodable. The Your Emails UI
+assembles up to 25 rows from bounded ten-row responses, filters by category or
+unclassified across the cached list, and sorts the displayed page by category,
+unclassified first or newest first. Filtered pagination retains source offsets.
+
 An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `sync_cancel`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; schemaVersion in health now reports 16. Chunk storage adds no public IPC.
 
 ## Category management (protocol v1 additive extension)
@@ -500,7 +510,9 @@ authority crosses this boundary.
 
 [classification-local-v1.json](classification-local-v1.json) is the new active shared
 fixture. `classification.review` / `classification_review` retains list/run, account
-authorization, five-email pages and existing deadlines. Optional `emailId`,
+authorization, five-email IPC pages and existing deadlines. The UI assembles up to
+25 emails from five sequential responses, rechecks account ownership and duplicate
+IDs, and directs local overrides to the corresponding five-email subpage. Optional `emailId`,
 `categoryId`, `revision` are forbidden on list/run. New assigned/unclassified/auto
 operations require the explicit current account, email and its 64-hex reader
 revision. Only assigned accepts/requires category ID. These mutate a local primary
@@ -536,3 +548,23 @@ apply confirmation/digest, cancellation, journaling, reconciliation and undo rem
 These count current assessments, including abstention, separately from vectors.
 No new native command, capability, external AI permission or classification queue
 is added. See [semantic classification](../docs/SEMANTIC_CLASSIFICATION.md).
+
+Organization freshness after migration 021 uses per-email index revisions while
+shared category/example changes retain account-wide invalidation. Identical semantic
+reassessment timestamps do not revoke otherwise identical reviewed evidence. Legacy
+plan digests/timestamp checks remain unchanged. The UI reloads current selection
+data on Go Back and page return; batch-specific choices must be selected again.
+
+[organization-conflict-v1.json](organization-conflict-v1.json) adds optional
+`conflictReason` to a `stale_preview` response: classification_changed, mail_changed,
+labels_changed, target_label_changed, expired or plan_changed. These fixed identifiers
+contain no email or provider diagnostics. The UI explains the specific conflict and
+requires a new preview; no rejected confirmation authorizes a write. A valid changed
+full Gmail read updates the local source/chunk cache so returning to selection can
+show current data, preserving the immutable plan and complete cached bodies.
+
+A successful label-create response lacking owner type is verified by GET of its
+exact returned label ID, requiring matching ID/name and user type. POST is never
+retried. Failure to verify remains uncertain and requires reconciliation. A prior
+uncertain creation is not retroactively claimed; a fresh preview may reuse a
+currently existing user label with separately reviewed membership additions.

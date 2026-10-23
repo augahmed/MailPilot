@@ -1,33 +1,55 @@
 import type { OpenMail } from "../../lib/ipc/reader";
 import { useEffect, useRef, useState } from "react";
 import {
-  getMailbox,
+  manageCategories,
   syncCommand,
-  type MailboxPage,
+  type Category,
   type SyncProgress,
 } from "../../lib/ipc/client";
+import {
+  listMailboxEmails,
+  mailboxCategory,
+  type MailboxViewPage,
+} from "./listEmails";
 
 export function Mailbox({
   connectionRevision,
   onOpen,
+  active: visible = true,
 }: {
   connectionRevision: number;
   onOpen?: OpenMail;
+  active?: boolean;
 }) {
   const [progress, setProgress] = useState<SyncProgress | null>(null);
-  const [page, setPage] = useState<MailboxPage | null>(null);
+  const [page, setPage] = useState<MailboxViewPage | null>(null);
   const [offset, setOffset] = useState(0);
+  const [history, setHistory] = useState<number[]>([]);
+  const [categoryId, setCategoryId] = useState("");
+  const [sort, setSort] = useState("recent");
+  const [categories, setCategories] = useState<{
+    accountId: string;
+    rows: Category[];
+    failed: boolean;
+  } | null>(null);
+  const [categoryReload, setCategoryReload] = useState(0);
   const [error, setError] = useState(false);
   const [starting, setStarting] = useState(false);
   const revision = useRef(0);
   useEffect(() => {
+    if (!visible) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     const current = ++revision.current;
     const poll = async () => {
       try {
         const status = await syncCommand();
-        const mailbox = await getMailbox(offset);
+        const mailbox = await listMailboxEmails(
+          offset,
+          categoryId,
+          () => active && current === revision.current,
+        );
+        if (!mailbox) return;
         if (active && current === revision.current) {
           setProgress(status);
           setPage(mailbox);
@@ -50,7 +72,69 @@ export function Mailbox({
       active = false;
       clearTimeout(timer);
     };
-  }, [offset, connectionRevision]);
+  }, [offset, categoryId, connectionRevision, visible]);
+  useEffect(() => {
+    const accountId = page?.accountId;
+    if (!accountId || !visible) return;
+    let active = true;
+    async function load() {
+      const rows = new Map<string, Category>();
+      try {
+        for (let offset = 0; offset <= 1_000_000; offset += 5) {
+          const result = await manageCategories({
+            operation: "list",
+            accountId,
+            offset,
+          });
+          if (!active) return;
+          if (
+            result.code ||
+            result.accountId !== accountId ||
+            (result.hasMore && result.rows.length !== 5)
+          )
+            throw Error("Categories changed");
+          for (const row of result.rows) {
+            if (rows.has(row.id)) throw Error("Duplicate category");
+            rows.set(row.id, row);
+          }
+          if (!result.hasMore) {
+            const enabled = [...rows.values()].filter((row) => row.enabled);
+            setCategories({
+              accountId: accountId!,
+              rows: enabled,
+              failed: false,
+            });
+            setCategoryId((id) =>
+              id === "__unclassified__" || enabled.some((row) => row.id === id)
+                ? id
+                : "",
+            );
+            return;
+          }
+        }
+        throw Error("Too many categories");
+      } catch {
+        if (active)
+          setCategories({ accountId: accountId!, rows: [], failed: true });
+      }
+    }
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [page?.accountId, categoryReload, visible]);
+  const rows = [...(page?.rows ?? [])].sort((a, b) => {
+    if (sort === "recent")
+      return b.receivedAt - a.receivedAt || a.id.localeCompare(b.id);
+    if (sort === "unclassified") {
+      const order =
+        Number(mailboxCategory(b) === "Unclassified") -
+        Number(mailboxCategory(a) === "Unclassified");
+      if (order) return order;
+    }
+    const order = mailboxCategory(a).localeCompare(mailboxCategory(b));
+    return sort === "category-desc" ? -order : order;
+  });
   const start = async () => {
     setStarting(true);
     try {
@@ -96,6 +180,70 @@ export function Mailbox({
       <p className="mailbox-caption">
         Your local cached subset. Sync to check for Gmail changes.
       </p>
+      <div className="organization-filters">
+        <label>
+          Filter by category
+          <select
+            value={categoryId}
+            disabled={
+              !categories ||
+              categories.accountId !== page?.accountId ||
+              categories.failed
+            }
+            onChange={(event) => {
+              revision.current++;
+              setCategoryId(event.target.value);
+              setPage(null);
+              setOffset(0);
+              setHistory([]);
+            }}
+          >
+            <option value="">All categories</option>
+            <option value="__unclassified__">Unclassified</option>
+            {categories?.accountId === page?.accountId &&
+              categories?.rows.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          Sort this page by
+          <select
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+          >
+            <option value="recent">Newest first</option>
+            <option value="category">Category (A–Z)</option>
+            <option value="category-desc">Category (Z–A)</option>
+            <option value="unclassified">Unclassified first</option>
+          </select>
+        </label>
+        <button
+          className="secondary-button"
+          disabled={!categoryId && sort === "recent" && !history.length}
+          onClick={() => {
+            setCategoryId("");
+            setSort("recent");
+            setOffset(0);
+            setHistory([]);
+          }}
+        >
+          Reset filters
+        </button>
+      </div>
+      {categories?.failed && (
+        <p role="alert">
+          Could not load category filters.{" "}
+          <button
+            className="secondary-button"
+            onClick={() => setCategoryReload((value) => value + 1)}
+          >
+            Retry category filters
+          </button>
+        </p>
+      )}
       <details className="sync-details" open={progress?.state === "running"}>
         <summary aria-live="polite">
           {progress?.state === "running"
@@ -199,7 +347,11 @@ export function Mailbox({
         <p>Connect Gmail to view this account’s cache.</p>
       ) : page.rows.length === 0 ? (
         <div className="mailbox-empty">
-          <h3>No cached messages on this page</h3>
+          <h3>
+            {categoryId
+              ? "No matching cached messages"
+              : "No cached messages on this page"}
+          </h3>
           <p>
             Use Sync Gmail to import a bounded Inbox snapshot, or return to the
             previous page.
@@ -218,11 +370,12 @@ export function Mailbox({
                 <th scope="col">Sender</th>
                 <th scope="col">Subject</th>
                 <th scope="col">Received</th>
+                <th scope="col">Category</th>
                 <th scope="col">Phishing risk</th>
               </tr>
             </thead>
             <tbody>
-              {page.rows.map((row) => (
+              {rows.map((row) => (
                 <tr key={row.id}>
                   <td>{row.sender || "Unknown sender"}</td>
                   <td>
@@ -242,6 +395,16 @@ export function Mailbox({
                     <time dateTime={new Date(row.receivedAt).toISOString()}>
                       {new Date(row.receivedAt).toLocaleString()}
                     </time>
+                  </td>
+                  <td>
+                    {mailboxCategory(row)}
+                    {row.classification?.categoryId && (
+                      <small>
+                        {row.classification.state === "assigned"
+                          ? "User assigned"
+                          : "Suggested"}
+                      </small>
+                    )}
                   </td>
                   <td>
                     {row.phishing ? (
@@ -285,13 +448,16 @@ export function Mailbox({
         </div>
       )}
       <div className="account-actions mailbox-pagination">
-        <span className="page-number">Page {offset / 10 + 1}</span>
+        <span className="page-number">
+          Page {history.length + 1} · up to 25 emails
+        </span>
         <button
           className="secondary-button"
-          disabled={offset === 0}
+          disabled={!history.length}
           onClick={() => {
             setPage(null);
-            setOffset(Math.max(0, offset - 10));
+            setOffset(history[history.length - 1] ?? 0);
+            setHistory((values) => values.slice(0, -1));
           }}
         >
           Previous
@@ -301,7 +467,8 @@ export function Mailbox({
           disabled={!page?.hasMore}
           onClick={() => {
             setPage(null);
-            setOffset(offset + 10);
+            setHistory((values) => [...values, offset]);
+            setOffset(page?.nextOffset ?? offset + 25);
           }}
         >
           Next

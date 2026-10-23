@@ -4,6 +4,16 @@ import { z } from "zod";
 export const organizationResponseSchema = z
   .object({
     accountId: z.string().max(100),
+    conflictReason: z
+      .enum([
+        "classification_changed",
+        "mail_changed",
+        "labels_changed",
+        "target_label_changed",
+        "expired",
+        "plan_changed",
+      ])
+      .optional(),
     state: z.enum([
       "idle",
       "running",

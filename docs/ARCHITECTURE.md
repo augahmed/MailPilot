@@ -1,6 +1,6 @@
 # MailPilot architecture
 
-Reviewed 2026-10-21 against executable composition and call sites. This document
+Reviewed 2026-10-22 against executable composition and call sites. This document
 describes implemented runtime/trust boundaries; [PRODUCT_PLAN.md](PRODUCT_PLAN.md)
 records product scope and limits. [AGENTS.md](../AGENTS.md) is the engineering
 contract, and [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) records the
@@ -22,7 +22,7 @@ mailbox quality or release approval.
 | Gmail organization | Preview/dry run, explicit confirmation, namespaced label additions, durable journal, reconciliation and verified best-effort undo. | No automatic labels or other mailbox actions. |
 | Phishing | Offline bounded feature extraction plus versioned scoring/persistence/display. Authentication header provenance remains unverified. | Risk scores are explanations, not probabilities, authentication verification or safety guarantees. |
 | AI | `ai.settings`, provider-scoped OS keys and approved cached-email Summary and source-limited evidence questions through one AIProvider; OpenAI is the only installed functional adapter. | Evidence questions require exact per-request approval and validated citations ([contract](EMAIL_QUESTIONS.md)). No tools, replies, new drafts or general chat. |
-| Search/storage | SQLite migrations 001–020, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; migration 020 indexes shared passages with external-content FTS5. | Local vector indexing is active on explicit Start/Resume. Semantic search uses complete compatible chunk generations. Keyword search works without vectors; hybrid fuses email ranks and prioritizes exact literals. Old vector schemas are inert. |
+| Search/storage | SQLite migrations 001–021, deterministic cached chunk production/persistence, source invalidation and historical derived-row compatibility; migration 020 indexes shared passages with external-content FTS5. | Local vector indexing is active on explicit Start/Resume. Semantic search uses complete compatible chunk generations. Keyword search works without vectors; hybrid fuses email ranks and prioritizes exact literals. Old vector schemas are inert. |
 | Historical recovery | GET-only Gmail draft matching and local status/reconcile/resolve/cancel for old journal actions. | No draft creation, resending, remote deletion or reactivation of historical previews. |
 
 Composition is in [main.go](../backend/cmd/mailpilot-core/main.go). Actual command
@@ -69,7 +69,10 @@ dashboard; transient refresh/network failures retain an already authorized cache
 session, while definitive rejection or disconnect clears feature state. Five
 feature cards open the existing index, search, evidence questions, categories/review
 and organization workflows in a shared shell. Visited pages retain local state;
-unvisited feature pages do not poll. The account dropdown provides connection
+unvisited feature pages do not poll. Organization and Your Emails reload on return
+and suspend list polling while hidden. Your Emails filters current local category
+summaries across cached pages and sorts each 25-email display page; classification
+review combines five bounded IPC pages into a 25-email display page. The account dropdown provides connection
 checks, confirmed disconnect, optional AI settings and historical recovery. The
 reader remains shared across dashboard, search and evidence questions. Categories
 and classification share a page with collapsed category editors and per-email
@@ -205,6 +208,7 @@ Current source-of-truth DDL is [the migrations directory](../backend/internal/st
 | 018 | Account-scoped category prototypes and explicit confirmed examples, derived-data invalidation and compatible coordinator recipe. |
 | 019 | Versioned semantic assessment evidence, account/email invalidation fences, explicit primary preferences and classifier identity in the shared coordinator. |
 | 020 | External-content FTS5 index over shared chunks, backfilled on upgrade and maintained by transactional triggers; no duplicate passage store. |
+| 021 | Per-email index revision invalidation for semantic assessments; shared category/example fences and historical evidence remain intact. |
 
 The historical `email_embeddings`, `category_embeddings`, `email_passage_vectors`
 and `email_retrieval_indexes` have no active inference/retrieval consumers.

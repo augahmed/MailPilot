@@ -145,13 +145,16 @@ it("does not display stale category or confidence and explains unavailable bodie
   expect(screen.getByText("Body unavailable")).toBeInTheDocument();
 });
 it("pages locally and escapes hostile message content and reasons", async () => {
-  vi.mocked(reviewClassifications).mockResolvedValue({
+  vi.mocked(reviewClassifications).mockImplementation(async (request) => ({
     ...saved,
     hasMore: true,
     rows: [
       {
         ...saved.rows[0]!,
-        subject: '<img src="https://example.test">',
+        email_id: `mail-${request.offset ?? 0}`,
+        subject: request.offset
+          ? `Email ${request.offset}`
+          : '<img src="https://example.test">',
         predictions: [
           {
             ...saved.rows[0]!.predictions[0]!,
@@ -160,18 +163,78 @@ it("pages locally and escapes hostile message content and reasons", async () => 
         ],
       },
     ],
-  });
+  }));
   const { container } = render(<ClassificationReview />);
   await screen.findByText('<img src="https://example.test">');
   expect(container.querySelector("img")).toBeNull();
   expect(container.querySelector("script")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Next review page" }));
   await waitFor(() =>
-    expect(reviewClassifications).toHaveBeenLastCalledWith({
+    expect(reviewClassifications).toHaveBeenCalledWith({
       operation: "list",
-      offset: 5,
+      offset: 25,
     }),
   );
+});
+
+it("loads and classifies 25 emails using bounded requests, and applies overrides to the correct subpage", async () => {
+  const fixture =
+    await import("../../../../contracts/classification-local-v1.json");
+  const template = fixture.default.response.rows[0]!;
+  const rows = Array.from({ length: 30 }, (_, i) => ({
+    ...template,
+    email_id: `email-${i}`,
+    subject: `Message ${i}`,
+    predictions: template.predictions.map((p) => ({
+      ...p,
+      email_id: `email-${i}`,
+    })),
+  }));
+  vi.mocked(reviewClassifications).mockImplementation(async (request) => {
+    const offset = request.offset ?? 0;
+    return {
+      ...fixture.default.response,
+      rows: rows.slice(offset, offset + 5),
+      hasMore: offset + 5 < rows.length,
+      processed: request.operation === "run" ? 5 : 0,
+      errors: 0,
+    } as ClassificationPage;
+  });
+  render(<ClassificationReview />);
+  await screen.findByText("Message 24");
+  expect(screen.queryByText("Message 25")).toBeNull();
+  expect(reviewClassifications).not.toHaveBeenCalledWith(
+    expect.objectContaining({ operation: "run" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Classify this page" }));
+  await screen.findByText("Saved assessments for 25 cached emails. 0 errors.");
+  expect(
+    vi
+      .mocked(reviewClassifications)
+      .mock.calls.filter(([r]) => r.operation === "run")
+      .map(([r]) => r.offset),
+  ).toEqual([0, 5, 10, 15, 20]);
+  fireEvent.change(screen.getByLabelText("Primary category for Message 24"), {
+    target: { value: "personal" },
+  });
+  fireEvent.click(
+    within(
+      screen.getByRole("group", {
+        name: "Local category override for Message 24",
+      }),
+    ).getByRole("button", { name: "Assign primary category" }),
+  );
+  await waitFor(() =>
+    expect(reviewClassifications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "assigned",
+        emailId: "email-24",
+        offset: 20,
+      }),
+    ),
+  );
+  expect(screen.getByText("Message 0")).toBeVisible();
+  expect(screen.getByText("Message 24")).toBeVisible();
 });
 it("clears displayed mail on bridge failure or authorization loss", async () => {
   vi.mocked(reviewClassifications).mockResolvedValue(saved);

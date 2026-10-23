@@ -54,7 +54,23 @@ func (p *Provider) CreateLabel(ctx context.Context, name string) (domain.EmailLa
 	if err := p.post(ctx, "/labels", map[string]string{"name": name, "labelListVisibility": "labelShow", "messageListVisibility": "show"}, &l); err != nil {
 		return domain.EmailLabel{}, err
 	}
-	if !validID(l.ID) || l.Name != name || l.Type != "user" {
+	if !validID(l.ID) || l.Name != name {
+		return domain.EmailLabel{}, provider.ErrMalformed
+	}
+	// A successful create can omit the output-only owner type. Verify that exact
+	// returned resource with a GET instead of treating a valid creation as an
+	// ambiguous write. Never retry POST or infer ownership from a name lookup.
+	if l.Type == "" {
+		var verified struct{ ID, Name, Type string }
+		if err := p.get(ctx, "/labels/"+url.PathEscape(l.ID), url.Values{}, &verified); err != nil {
+			return domain.EmailLabel{}, err
+		}
+		if verified.ID != l.ID || verified.Name != name {
+			return domain.EmailLabel{}, provider.ErrMalformed
+		}
+		l = verified
+	}
+	if l.Type != "user" {
 		return domain.EmailLabel{}, provider.ErrMalformed
 	}
 	label := domain.EmailLabel{AccountID: p.account, ProviderID: domain.ProviderLabelID(l.ID), Name: l.Name, Kind: domain.LabelKindUser}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -70,27 +71,38 @@ func (s *Organization) apply(ctx context.Context, plan domain.OrganizationPlan, 
 	for _, row := range plan.Rows {
 		if plan.Kind == domain.ActionLabelDelta {
 			if err := s.checkProposal(ctx, plan.AccountID, row); err != nil {
+				if errors.Is(err, repository.ErrConflict) {
+					err = organizationConflict("classification_changed")
+				}
 				return organizationDTO(plan), err
 			}
 			live, err := p.FetchMessage(ctx, row.ProviderID)
 			if err != nil {
 				return organizationDTO(plan), err
 			}
-			if live.AccountID != plan.AccountID || live.ProviderID != row.ProviderID || !matchesOrganizationInput(live, categories, row) {
-				return organizationDTO(plan), repository.ErrConflict
+			if live.AccountID != plan.AccountID || live.ProviderID != row.ProviderID || live.ID != "" && live.ID != row.EmailID {
+				return organizationDTO(plan), organizationConflict("mail_changed")
 			}
 			ids, _, err := labelsSnapshot(plan.AccountID, live.Labels)
-			if err != nil || !slices.Equal(ids, row.BeforeLabels) {
-				return organizationDTO(plan), repository.ErrConflict
+			if err != nil {
+				return organizationDTO(plan), err
+			}
+			if !slices.Equal(ids, row.BeforeLabels) {
+				s.cacheRejectedSnapshot(ctx, plan.AccountID, row, live)
+				return organizationDTO(plan), organizationConflict("labels_changed")
+			}
+			if !matchesOrganizationInput(live, categories, row) {
+				s.cacheRejectedSnapshot(ctx, plan.AccountID, row, live)
+				return organizationDTO(plan), organizationConflict("mail_changed")
 			}
 		}
 		l, exists := labels[row.ProposedLabel]
 		if row.LabelID != "" {
 			if !exists || l.Kind != domain.LabelKindUser || l.ProviderID != row.LabelID {
-				return organizationDTO(plan), repository.ErrConflict
+				return organizationDTO(plan), organizationConflict("target_label_changed")
 			}
 		} else if exists {
-			return organizationDTO(plan), repository.ErrConflict
+			return organizationDTO(plan), organizationConflict("target_label_changed")
 		}
 	}
 	if ctx.Err() != nil {
@@ -266,6 +278,26 @@ func (s *Organization) apply(ctx context.Context, plan domain.OrganizationPlan, 
 		}
 	}
 	return s.finish(plan)
+}
+
+// A rejected confirmation grants no Gmail write authority. Persist a valid full
+// read through the existing source/chunk lifecycle so Go Back can show current
+// data instead of the same obsolete selection. The original plan stays immutable.
+func (s *Organization) cacheRejectedSnapshot(ctx context.Context, account domain.AccountID, row domain.OrganizationRow, live domain.Email) {
+	if live.AccountID != account || live.ProviderID != row.ProviderID || live.ID != "" && live.ID != row.EmailID || live.Validate() != nil {
+		return
+	}
+	stored, err := s.emails.Get(ctx, account, row.EmailID)
+	if err != nil || stored.Email.BodyState == "complete" && live.BodyState != "complete" {
+		return
+	}
+	live.ID = row.EmailID
+	if _, err := s.emails.Upsert(ctx, live); err != nil {
+		return
+	}
+	if s.prepareChunks != nil {
+		_ = s.prepareChunks(ctx, account, live.ProviderID)
+	}
 }
 func (s *Organization) refreshLabels(ctx context.Context, account domain.AccountID, id domain.EmailID, labels []domain.EmailLabel) error {
 	stored, err := s.emails.Get(ctx, account, id)

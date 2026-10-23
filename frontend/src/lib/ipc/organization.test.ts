@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import fixture from "../../../../contracts/organization-v1.json";
 import { organize, organizationResponseSchema } from "./organization";
 import batchFixture from "../../../../contracts/organization-batch-v1.json";
+import conflictFixture from "../../../../contracts/organization-conflict-v1.json";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -11,6 +12,17 @@ vi.mock("@tauri-apps/api/core", () => ({
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
   vi.mocked(invoke).mockResolvedValue(fixture.response);
+});
+it("preserves bounded conflict reasons and rejects arbitrary diagnostics", () => {
+  expect(organizationResponseSchema.parse(conflictFixture.response)).toEqual(
+    conflictFixture.response,
+  );
+  expect(
+    organizationResponseSchema.safeParse({
+      ...conflictFixture.response,
+      conflictReason: "provider body",
+    }).success,
+  ).toBe(false);
 });
 it("accepts 25-email/50-step responses and separately displays current cached labels", () => {
   expect(

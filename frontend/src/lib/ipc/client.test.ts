@@ -128,6 +128,22 @@ it("checks the shared organization contract and rejects destructive operations a
 });
 
 import { mailboxSchema } from "./client";
+import mailboxClassification from "../../../../contracts/mailbox-classification-v1.json";
+
+it("accepts the bounded mailbox classification summary and rejects unknown states", () => {
+  expect(mailboxSchema.parse(mailboxClassification)).toEqual(
+    mailboxClassification,
+  );
+  const row = mailboxClassification.rows[0]!;
+  expect(
+    mailboxSchema.safeParse({
+      ...mailboxClassification,
+      rows: [
+        { ...row, classification: { ...row.classification, state: "unsafe" } },
+      ],
+    }).success,
+  ).toBe(false);
+});
 import phishingFixture from "../../../../contracts/phishing-v1.json";
 it("validates the phishing v1 contract and rejects invalid scores and verdicts", () => {
   expect(mailboxSchema.safeParse(phishingFixture).success).toBe(true);

@@ -101,6 +101,21 @@ export const mailboxSchema = z
             subject: z.string(),
             receivedAt: z.number().int(),
             bodyState: z.enum(["", "complete", "unavailable"]),
+            classification: z
+              .object({
+                state: z.enum([
+                  "unclassified",
+                  "suggested",
+                  "assigned",
+                  "multiple_suggestions",
+                  "multiple_assignments",
+                  "stale",
+                ]),
+                categoryId: z.string().max(100),
+                categoryName: z.string().max(101),
+              })
+              .strict()
+              .optional(),
             phishing: z
               .object({
                 score: z.number().int().min(0).max(100),

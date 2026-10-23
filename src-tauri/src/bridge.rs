@@ -429,6 +429,8 @@ pub struct OrganizationStep {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrganizationResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conflict_reason: Option<OrganizationConflictReason>,
     pub account_id: String,
     pub state: String,
     pub code: String,
@@ -440,6 +442,16 @@ pub struct OrganizationResponse {
     pub rows: Vec<OrganizationRow>,
     pub steps: Vec<OrganizationStep>,
     pub has_more: bool,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrganizationConflictReason {
+    ClassificationChanged,
+    MailChanged,
+    LabelsChanged,
+    TargetLabelChanged,
+    Expired,
+    PlanChanged,
 }
 
 const MAX_FRAME: u64 = 64 * 1024;
@@ -584,7 +596,26 @@ pub struct MailboxRow {
     pub received_at: i64,
     pub body_state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub classification: Option<MailboxClassification>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phishing: Option<RiskAssessment>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailboxClassification {
+    pub state: MailboxClassificationState,
+    pub category_id: String,
+    pub category_name: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MailboxClassificationState {
+    Unclassified,
+    Suggested,
+    Assigned,
+    MultipleSuggestions,
+    MultipleAssignments,
+    Stale,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -1175,6 +1206,19 @@ mod classification_tests {
 mod organization_tests {
     use super::*;
     #[test]
+    fn conflict_reason_is_bounded_and_preserved() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../contracts/organization-conflict-v1.json"
+        ))
+        .unwrap();
+        let response: OrganizationResponse =
+            serde_json::from_value(fixture["response"].clone()).unwrap();
+        assert_eq!(serde_json::to_value(response).unwrap(), fixture["response"]);
+        let mut bad = fixture["response"].clone();
+        bad["conflictReason"] = serde_json::json!("provider body");
+        assert!(serde_json::from_value::<OrganizationResponse>(bad).is_err());
+    }
+    #[test]
     fn organization_accepts_25_and_rejects_26_selected_emails() {
         let fixture: Value =
             serde_json::from_str(include_str!("../../contracts/organization-batch-v1.json"))
@@ -1242,6 +1286,18 @@ mod organization_tests {
 #[cfg(test)]
 mod risk_tests {
     use super::*;
+    #[test]
+    fn mailbox_classification_contract() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../contracts/mailbox-classification-v1.json"
+        ))
+        .unwrap();
+        let page: MailboxPage = serde_json::from_value(fixture.clone()).unwrap();
+        assert_eq!(serde_json::to_value(page).unwrap(), fixture);
+        let mut bad = fixture;
+        bad["rows"][0]["classification"]["state"] = serde_json::json!("unsafe");
+        assert!(serde_json::from_value::<MailboxPage>(bad).is_err());
+    }
     #[test]
     fn phishing_contract_preserves_signed_reasons() {
         let fixture = include_str!("../../contracts/phishing-v1.json");

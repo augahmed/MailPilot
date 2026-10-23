@@ -81,7 +81,12 @@ artifact/tokenizer/pooling/input-policy recipe; incompatible dimensions require 
 new version. There is no cross-message/global vector deduplication.
 
 Source revision is the existing cached `EmailContentHash`, not provider
-`content_revision`, `updated_at` or the chunk hash. Migration triggers participate
+`content_revision`, `updated_at` or the chunk hash. Source hash recipe v2 omits
+opaque attachment retrieval handles while retaining all other attachment metadata.
+Affected old hashes transition only on normal source upserts, invalidating old
+derived state through the existing source fence; immutable journals are unchanged.
+No tokenizer, cleaned text or model input changes, so their recipes stay pinned.
+Migration triggers participate
 in existing import/checkpoint transactions: content changes mark state `stale`,
 rotate the generation and clear the timestamp. Old chunks/vectors remain private
 as a reuse cache until replacement; `List`, `Embedding` and writes reject stale

@@ -320,6 +320,8 @@ form textarea {
   flex-direction: column;
 }
 .app-header {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -583,14 +585,6 @@ button:hover:not(:disabled) {
   background: #a43b3b;
   border-color: #a43b3b;
 }
-.disconnect-confirmation {
-  border-top: 1px solid var(--border);
-  margin-top: 16px;
-  padding-top: 16px;
-}
-.disconnect-confirmation h2 {
-  margin-bottom: 10px;
-}
 .connection-landing {
   max-width: 590px;
   margin: 52px auto 48px;
@@ -708,16 +702,19 @@ summary {
   vertical-align: top;
 }
 .mailbox .mail-table th:first-child {
-  width: 19%;
+  width: 17%;
 }
 .mailbox .mail-table th:nth-child(2) {
-  width: 43%;
+  width: 30%;
 }
 .mailbox .mail-table th:nth-child(3) {
+  width: 18%;
+}
+.mailbox .mail-table th:nth-child(4) {
   width: 20%;
 }
 .mailbox .mail-table th:last-child {
-  width: 18%;
+  width: 15%;
 }
 .email-subject {
   background: transparent;
@@ -1323,6 +1320,9 @@ summary {
 }
 .organization-preview-table th:first-child {
   width: 34%;
+}
+.organization-panel .organization-preview-table {
+  min-width: 480px;
 }
 .organization-preview-table th:nth-child(2) {
   width: 33%;

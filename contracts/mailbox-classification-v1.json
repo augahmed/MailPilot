@@ -1,0 +1,18 @@
+{
+  "accountId": "synthetic-account",
+  "rows": [
+    {
+      "id": "local-id",
+      "sender": "Example",
+      "subject": "Synthetic subject",
+      "receivedAt": 1700000000123,
+      "bodyState": "complete",
+      "classification": {
+        "state": "suggested",
+        "categoryId": "finance",
+        "categoryName": "Finance"
+      }
+    }
+  ],
+  "hasMore": false
+}

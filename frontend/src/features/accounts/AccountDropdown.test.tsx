@@ -35,10 +35,12 @@ describe("account dropdown disconnect", () => {
     const disconnect = screen.getByRole("button", { name: "Disconnect" });
     disconnect.focus();
     fireEvent.click(disconnect);
+    expect(
+      screen.getByRole("dialog", { name: "Disconnect Gmail?" }),
+    ).toHaveAttribute("open");
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect(cancel).toHaveFocus();
-    // Replacing the focused Disconnect button can produce a blur without
-    // a destination. It must not dismiss the confirmation controls.
+    // A transient blur without a destination must not dismiss the modal.
     fireEvent.blur(cancel, { relatedTarget: null });
     expect(
       screen.getByRole("heading", { name: "Disconnect Gmail?" }),
@@ -52,6 +54,20 @@ describe("account dropdown disconnect", () => {
     const { connection } = fixture();
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Disconnect" })).toHaveFocus(),
+    );
+    expect(connection.act).not.toHaveBeenCalled();
+  });
+
+  it("cancels the modal with Escape and restores focus without disconnecting", async () => {
+    const { connection } = fixture();
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    fireEvent(
+      screen.getByRole("dialog", { name: "Disconnect Gmail?" }),
+      new Event("cancel", { cancelable: true }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Disconnect" })).toHaveFocus(),
     );

@@ -34,6 +34,27 @@ const messages: Record<string, string> = {
     "This preview is invalid or too large. Select up to 25 eligible emails; use a smaller selection if their label details exceed the supported size.",
   busy: "An earlier account operation is still stopping.",
 };
+const conflictMessages: Record<string, string> = {
+  classification_changed:
+    "The local classification evidence changed after this preview. Go Back, refresh classifications if needed, and preview again. No new Gmail changes were authorized.",
+  mail_changed:
+    "The current Gmail message differs from this preview. Go Back and preview the current mail again. No new Gmail changes were authorized.",
+  labels_changed:
+    "Gmail labels on a selected message changed after this preview. Go Back and preview its current labels again. No new Gmail changes were authorized.",
+  target_label_changed:
+    "A target Gmail label was created, renamed or replaced after this preview. Go Back and preview again to use the current label. No new Gmail changes were authorized.",
+  expired:
+    "This preview expired. Go Back and preview the current changes again. No new Gmail changes were authorized.",
+  plan_changed:
+    "This saved preview is no longer available for confirmation. Go Back and prepare a fresh preview. No new Gmail changes were authorized.",
+};
+function stepMessage(code: string) {
+  if (code === "label_exists_ownership_unknown")
+    return "The label exists in Gmail, but the earlier creation could not be verified. Go Back and prepare a fresh preview to reuse it. This batch did not add it to the selected email.";
+  if (code === "blocked_by_uncertainty")
+    return "Skipped because an earlier Gmail operation could not be verified. Check recorded outcomes before preparing a fresh preview.";
+  return code.replaceAll("_", " ");
+}
 function uncertain(result: OrganizationResponse | null) {
   return (
     result?.state === "uncertain" ||
@@ -66,7 +87,7 @@ function completion(result: OrganizationResponse) {
     ? `Gmail label changes confirmed for ${count} ${count === 1 ? "email" : "emails"}.`
     : "The selected emails already have the reviewed Gmail labels. No additions were needed.";
 }
-export function Organization() {
+export function Organization({ active: visible = true }: { active?: boolean }) {
   const [view, setView] = useState<View>("select");
   const [suggestionMode, setSuggestionMode] = useState<"choose" | "highest">(
     "choose",
@@ -104,7 +125,7 @@ export function Organization() {
   const stageHeading = useRef<HTMLHeadingElement>(null);
   const focusStage = useCallback(() => {
     requestAnimationFrame(() => {
-      if (!mounted.current) return;
+      if (!mounted.current || stageHeading.current?.closest("[hidden]")) return;
       stageHeading.current?.focus({ preventScroll: true });
       stageHeading.current?.scrollIntoView?.({ block: "start" });
     });
@@ -136,7 +157,11 @@ export function Organization() {
         setError(messages.unauthorized!);
         return;
       }
-      setError(messages[result.code] ?? "");
+      setError(
+        result.code === "stale_preview" && result.conflictReason
+          ? (conflictMessages[result.conflictReason] ?? messages.stale_preview!)
+          : (messages[result.code] ?? ""),
+      );
       if (result.state === "applied" && !result.code) {
         setCompleted(result);
         setNotice(completion(result));
@@ -176,6 +201,11 @@ export function Organization() {
         // retryable instead of disguising it as an empty results screen.
         setBatch(null);
         setView("select");
+        if (refresh) {
+          setChoices({});
+          setLoading(true);
+          setReload((value) => value + 1);
+        }
         if (
           result.state === "expired" ||
           (result.state === "preview" && result.expiresAt <= Date.now())
@@ -199,7 +229,7 @@ export function Organization() {
   useEffect(() => {
     let active = true;
     const accountId = page?.accountId ?? "";
-    if (!accountId) return;
+    if (!accountId || !visible) return;
     async function loadCategories() {
       const rows = new Map<string, Category>();
       try {
@@ -241,11 +271,13 @@ export function Organization() {
     return () => {
       active = false;
     };
-  }, [page?.accountId, categoryReload]);
+  }, [page?.accountId, categoryReload, visible]);
   useEffect(() => {
+    if (!visible) return;
     let active = true;
     const current = ++revision.current;
     async function load() {
+      setLoading(true);
       try {
         const result = await listOrganizationEmails(
           {
@@ -268,6 +300,16 @@ export function Organization() {
         }
         account.current = result.accountId;
         setPage(result);
+        // The backend may have refreshed sources or suggestions during preview.
+        // Revalidate selection against this list, never the discarded page.
+        setChoices({});
+        setSelected((current) =>
+          current.filter((id) =>
+            result.rows.some(
+              (row) => row.emailId === id && row.change === "candidate",
+            ),
+          ),
+        );
         setLoading(false);
         if (result.code)
           setError(messages[result.code] ?? "Could not load cached emails.");
@@ -284,6 +326,8 @@ export function Organization() {
       } catch {
         if (active && !pending.current && current === revision.current) {
           setPage(null);
+          setSelected([]);
+          setChoices({});
           setError(
             "Could not load cached emails. Refresh the list or restart MailPilot.",
           );
@@ -305,8 +349,10 @@ export function Organization() {
     reload,
     clearAccount,
     receive,
+    visible,
   ]);
   useEffect(() => {
+    if (!visible) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
@@ -355,7 +401,7 @@ export function Organization() {
       active = false;
       clearTimeout(timer);
     };
-  }, [receive]);
+  }, [receive, visible]);
   async function act(operation: OrganizationRequest["operation"]) {
     if (pending.current || !account.current) return;
     if (
@@ -459,17 +505,21 @@ export function Organization() {
     setChoices({});
     setError("");
     if (resetFilters) {
-      const refresh = !!categoryId || offset !== 0;
       setCategoryId("");
       setSort("category");
       setOffset(0);
       setHistory([]);
-      setLoading(refresh);
+      setLoading(true);
+      setReload((value) => value + 1);
     }
   }
   function goBack() {
     revision.current++;
     setBatch(null);
+    setChoices({});
+    setLoading(true);
+    setReload((value) => value + 1);
+    setCategoryReload((value) => value + 1);
     setSelected((current) =>
       current.filter((id) =>
         page?.rows.some(
@@ -706,7 +756,7 @@ export function Organization() {
               {selected.length} of {organizationBatchSize} selected
             </strong>
             <button
-              disabled={locked || !selected.length}
+              disabled={locked || !selected.length || !page || !!page.code}
               onClick={() => void act("preview")}
             >
               Preview Label Changes
@@ -882,7 +932,7 @@ export function Organization() {
                   </strong>
                   <span>
                     {step.state.replaceAll("_", " ")}
-                    {step.code ? ` · ${step.code.replaceAll("_", " ")}` : ""}
+                    {step.code ? ` · ${stepMessage(step.code)}` : ""}
                   </span>
                 </li>
               ))}

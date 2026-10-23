@@ -13,6 +13,7 @@ import {
   getHealth,
   syncCommand,
   getMailbox,
+  manageCategories,
 } from "../lib/ipc/client";
 import { features } from "./navigation";
 import type { OpenMail } from "../lib/ipc/reader";
@@ -66,10 +67,16 @@ vi.mock("../lib/ipc/client", () => ({
   gmailCommand: vi.fn(),
   syncCommand: vi.fn(),
   getMailbox: vi.fn(),
+  manageCategories: vi.fn(),
 }));
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(manageCategories).mockResolvedValue({
+    accountId: "a",
+    rows: [],
+    hasMore: false,
+  });
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   vi.mocked(getHealth).mockResolvedValue({
     name: "MailPilot",
@@ -77,7 +84,7 @@ beforeEach(() => {
     protocolVersion: 1,
     backend: "connected",
     database: "connected",
-    schemaVersion: 20,
+    schemaVersion: 21,
   });
   vi.mocked(gmailCommand).mockResolvedValue({ state: "disconnected" });
   vi.mocked(syncCommand).mockResolvedValue({
@@ -102,7 +109,7 @@ beforeEach(() => {
         phishing: { score: 18, risk: "LOW", version: "v1", reasons: [] },
       },
     ],
-    hasMore: true,
+    hasMore: false,
   });
 });
 afterEach(() => {
@@ -235,10 +242,22 @@ it("opens all five existing workflows and returns focus to the originating card"
 });
 it("preserves search input, mailbox pagination and reader focus across navigation", async () => {
   connected();
+  const rows = Array.from({ length: 30 }, (_, i) => ({
+    id: `mail-${i}`,
+    sender: "Sender",
+    subject: i % 25 ? `Other ${i}` : "Cached message",
+    receivedAt: 1700000000000 - i,
+    bodyState: "complete" as const,
+  }));
+  vi.mocked(getMailbox).mockImplementation(async (offset = 0) => ({
+    accountId: "a",
+    rows: rows.slice(offset, offset + 10),
+    hasMore: offset + 10 < rows.length,
+  }));
   render(<App />);
   await screen.findByText("Cached message");
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  await screen.findByText("Page 2");
+  await screen.findByText(/^Page 2/);
   const message = await screen.findByRole("button", { name: "Cached message" });
   fireEvent.click(message);
   fireEvent.click(screen.getByRole("button", { name: "Back to mailbox" }));
@@ -248,7 +267,7 @@ it("preserves search input, mailbox pagination and reader focus across navigatio
     target: { value: "invoice" },
   });
   fireEvent.click(screen.getByRole("button", { name: /Back to dashboard/ }));
-  expect(screen.getByText("Page 2")).toBeVisible();
+  expect(screen.getByText(/^Page 2/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: /Email Search/ }));
   expect(screen.getByLabelText("Existing search")).toHaveValue("invoice");
 });

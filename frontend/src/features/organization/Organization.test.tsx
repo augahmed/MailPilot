@@ -76,6 +76,126 @@ beforeEach(() => {
   );
 });
 
+it("explains a Gmail label conflict after confirmation and reloads on Go Back", async () => {
+  vi.mocked(organize).mockImplementation(async (request) =>
+    request.operation === "list"
+      ? page
+      : request.operation === "preview"
+        ? fresh()
+        : request.operation === "apply"
+          ? fresh({ code: "stale_preview", conflictReason: "labels_changed" })
+          : idle,
+  );
+  render(<Organization />);
+  await selectAndPreview();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm Changes" }));
+  await screen.findByText(/Gmail labels on a selected message changed/);
+  expect(
+    screen.getByRole("button", { name: "Confirm Changes" }),
+  ).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Go Back" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Preview Label Changes" }),
+    ).toBeEnabled(),
+  );
+});
+
+it("explains an earlier uncertain label creation without offering an unconfirmed retry", async () => {
+  vi.mocked(organize).mockImplementation(async (request) =>
+    request.operation === "list"
+      ? page
+      : fresh({
+          state: "failed",
+          steps: [
+            {
+              ...preview.steps[0]!,
+              state: "conflict",
+              code: "label_exists_ownership_unknown",
+            },
+            {
+              ...preview.steps[1]!,
+              state: "skipped",
+              code: "blocked_by_uncertainty",
+            },
+          ],
+        }),
+  );
+  render(<Organization />);
+  await screen.findByText(/earlier creation could not be verified/);
+  expect(screen.queryByRole("button", { name: "Confirm Changes" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Go Back" })).toBeEnabled();
+});
+
+it("reloads changed cached mail after a rejected confirmation and Go Back", async () => {
+  let changed = false;
+  vi.mocked(organize).mockImplementation(async (request) => {
+    if (request.operation === "list")
+      return changed
+        ? {
+            ...page,
+            rows: [
+              {
+                ...page.rows[0]!,
+                subject: "Current cached mail",
+                change: "unclassified",
+                proposedLabel: "",
+              },
+            ],
+          }
+        : page;
+    if (request.operation === "preview") return fresh();
+    if (request.operation === "apply") {
+      changed = true;
+      return fresh({ code: "stale_preview" });
+    }
+    return idle;
+  });
+  render(<Organization />);
+  await selectAndPreview();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm Changes" }));
+  await screen.findByText(/Go back and preview the current changes again/);
+  fireEvent.click(screen.getByRole("button", { name: "Go Back" }));
+  await screen.findByText("Current cached mail");
+  expect(screen.queryByText("Your receipt")).toBeNull();
+  expect(screen.getByText("0 of 25 selected")).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Preview Label Changes" }),
+  ).toBeDisabled();
+});
+
+it("refreshes current rows on returning to the organization page without restoring an abandoned preview", async () => {
+  let changed = false;
+  vi.mocked(organize).mockImplementation(async (request) =>
+    request.operation === "list"
+      ? {
+          ...page,
+          rows: [
+            {
+              ...page.rows[0]!,
+              subject: changed ? "Updated while away" : "Your receipt",
+            },
+          ],
+        }
+      : request.operation === "preview"
+        ? fresh()
+        : idle,
+  );
+  const { rerender } = render(<Organization active />);
+  await selectAndPreview();
+  fireEvent.click(screen.getByRole("button", { name: "Go Back" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Preview Label Changes" }),
+    ).toBeEnabled(),
+  );
+  rerender(<Organization active={false} />);
+  changed = true;
+  rerender(<Organization active />);
+  await screen.findByText("Updated while away");
+  expect(screen.queryByRole("button", { name: "Confirm Changes" })).toBeNull();
+});
+
 it("shows only selected emails on a separate review screen and preserves selection on Go Back", async () => {
   vi.mocked(organize).mockImplementation(async (request) =>
     request.operation === "list"
@@ -218,6 +338,9 @@ it("requires a separately reviewed and confirmed Undo and then returns to screen
   );
   fireEvent.click(screen.getByRole("button", { name: "Go Back" }));
   expect(screen.getByText("0 of 25 selected")).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Undo" }));
   await screen.findByRole("heading", { name: "2. Review undo" });
   fireEvent.click(screen.getByRole("button", { name: "Confirm Changes" }));
@@ -264,6 +387,11 @@ it("keeps a failed preview on selection with a retryable selection instead of em
   ).toBeChecked();
   expect(screen.queryByRole("button", { name: "Confirm Changes" })).toBeNull();
   fail = false;
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Preview Label Changes" }),
+    ).toBeEnabled(),
+  );
   fireEvent.click(
     screen.getByRole("button", { name: "Preview Label Changes" }),
   );
@@ -481,6 +609,9 @@ it("selects and resets all 25 eligible emails and sends exactly that selection t
   ).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Reset" }));
   expect(screen.getByText("0 of 25 selected")).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Select all" })).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Select all" }));
   fireEvent.click(
     screen.getByRole("button", { name: "Preview Label Changes" }),

@@ -64,7 +64,7 @@ func TestChunkMigrationUpgradesFourteenWithoutReinterpretingHistory(t *testing.T
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if s.SchemaVersion() != 20 {
+	if s.SchemaVersion() != 21 {
 		t.Fatal("missing migration 015")
 	}
 	for _, table := range []string{"email_chunks", "chunk_embeddings", "index_state"} {

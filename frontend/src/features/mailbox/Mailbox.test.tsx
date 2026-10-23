@@ -1,13 +1,24 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { Mailbox } from "./Mailbox";
-import { getMailbox, syncCommand } from "../../lib/ipc/client";
+import {
+  getMailbox,
+  syncCommand,
+  manageCategories,
+  type MailboxPage,
+} from "../../lib/ipc/client";
 vi.mock("../../lib/ipc/client", () => ({
   getMailbox: vi.fn(),
   syncCommand: vi.fn(),
+  manageCategories: vi.fn(),
 }));
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(manageCategories).mockResolvedValue({
+    accountId: "a",
+    rows: [],
+    hasMore: false,
+  });
   vi.mocked(syncCommand).mockResolvedValue({
     state: "completed",
     accountId: "a",
@@ -20,7 +31,7 @@ beforeEach(() => {
   });
   vi.mocked(getMailbox).mockResolvedValue({
     accountId: "a",
-    hasMore: true,
+    hasMore: false,
     rows: [
       {
         id: "1",
@@ -33,6 +44,18 @@ beforeEach(() => {
   });
 });
 it("shows progress and escaped cached mail, starts sync and pages locally", async () => {
+  const rows = Array.from({ length: 31 }, (_, i) => ({
+    id: String(i),
+    sender: i ? `Sender ${i}` : "Sender",
+    subject: i ? `Email ${i}` : '<img src="https://example.test">',
+    receivedAt: 1700000000000 - i,
+    bodyState: "complete" as const,
+  }));
+  vi.mocked(getMailbox).mockImplementation(async (offset = 0) => ({
+    accountId: "a",
+    rows: rows.slice(offset, offset + 10),
+    hasMore: offset + 10 < rows.length,
+  }));
   const { container } = render(<Mailbox connectionRevision={0} />);
   expect(
     await screen.findByRole("cell", { name: "Sender" }),
@@ -45,7 +68,7 @@ it("shows progress and escaped cached mail, starts sync and pages locally", asyn
   fireEvent.click(screen.getByRole("button", { name: "Sync Gmail" }));
   await waitFor(() => expect(syncCommand).toHaveBeenCalledWith(true));
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  await waitFor(() => expect(getMailbox).toHaveBeenCalledWith(10));
+  await waitFor(() => expect(getMailbox).toHaveBeenCalledWith(25));
 });
 it("does not allow sync while disconnected", async () => {
   vi.mocked(getMailbox).mockResolvedValue({
@@ -190,4 +213,69 @@ it("distinguishes missing risk assessments without inventing a safe score", asyn
   render(<Mailbox connectionRevision={0} />);
   expect(await screen.findByText("Not assessed")).toBeVisible();
   expect(screen.queryByText(/Low ·/)).toBeNull();
+});
+
+it("filters across cached pages, sorts categories and unclassified mail, and preserves reader navigation", async () => {
+  const all: MailboxPage["rows"] = Array.from({ length: 60 }, (_, i) => ({
+    id: `mail-${i}`,
+    sender: "Synthetic sender",
+    subject: `Message ${i}`,
+    receivedAt: 1700000000000 - i,
+    bodyState: "complete",
+    classification: {
+      state: i % 2 ? "unclassified" : "suggested",
+      categoryId: i % 2 ? "" : "finance",
+      categoryName: i % 2 ? "" : "Finance",
+    },
+  }));
+  vi.mocked(getMailbox).mockImplementation(async (offset = 0) => ({
+    accountId: "a",
+    rows: all.slice(offset, offset + 10),
+    hasMore: offset + 10 < all.length,
+  }));
+  vi.mocked(manageCategories).mockResolvedValue({
+    accountId: "a",
+    rows: [
+      {
+        id: "finance",
+        name: "Finance",
+        description: "Financial mail",
+        enabled: true,
+        created_at: 0,
+        updated_at: 0,
+      },
+    ],
+    hasMore: false,
+  });
+  const onOpen = vi.fn();
+  render(<Mailbox connectionRevision={0} onOpen={onOpen} />);
+  await screen.findByText("Message 24");
+  const sort = screen.getByRole("combobox", { name: "Sort this page by" });
+  fireEvent.change(sort, { target: { value: "unclassified" } });
+  expect(screen.getAllByRole("row")[1]).toHaveTextContent("Message 1");
+  fireEvent.change(sort, { target: { value: "category" } });
+  expect(screen.getAllByRole("row")[1]).toHaveTextContent("Finance");
+  fireEvent.change(
+    screen.getByRole("combobox", { name: "Filter by category" }),
+    { target: { value: "finance" } },
+  );
+  await screen.findByText("Message 48");
+  expect(screen.queryByText("Message 1")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByText("Message 50");
+  expect(screen.queryByText("Message 48")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Message 50" }));
+  expect(onOpen).toHaveBeenCalledWith(
+    "a",
+    "mail-50",
+    expect.any(HTMLButtonElement),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+  await screen.findByText("Message 48");
+  fireEvent.change(
+    screen.getByRole("combobox", { name: "Filter by category" }),
+    { target: { value: "__unclassified__" } },
+  );
+  await screen.findByText("Message 49");
+  expect(screen.queryByText("Message 0")).toBeNull();
 });

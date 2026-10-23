@@ -54,7 +54,12 @@ func (s *Organization) checkProposal(ctx context.Context, account domain.Account
 	if err != nil {
 		return err
 	}
-	if email.ProviderID != row.ProviderID || current.InputHash != row.InputHash || current.PredictionTimestamp != row.PredictionTimestamp || current.CategoryID != row.CategoryID || current.ProposedLabel != row.ProposedLabel || !reflect.DeepEqual(current.Phishing, row.Phishing) || !reflect.DeepEqual(current.Classification, row.Classification) || current.Confidence != row.Confidence {
+	// Semantic evidence binds the actual source/model/category generations and
+	// selected score. Recomputing that identical evidence changes only its clock,
+	// not the reviewed authority. Retain legacy timestamp checks for old plans
+	// without that versioned evidence; their immutable digest is unchanged.
+	legacyTimestampChanged := row.Classification == nil && current.PredictionTimestamp != row.PredictionTimestamp
+	if email.ProviderID != row.ProviderID || current.InputHash != row.InputHash || legacyTimestampChanged || current.CategoryID != row.CategoryID || current.ProposedLabel != row.ProposedLabel || !reflect.DeepEqual(current.Phishing, row.Phishing) || !reflect.DeepEqual(current.Classification, row.Classification) || current.Confidence != row.Confidence {
 		return repository.ErrConflict
 	}
 	return nil

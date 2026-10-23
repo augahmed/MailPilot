@@ -7,6 +7,7 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   onCancel,
+  destructive = false,
 }: {
   open: boolean;
   title: string;
@@ -14,6 +15,7 @@ export function ConfirmDialog({
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  destructive?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
@@ -48,7 +50,11 @@ export function ConfirmDialog({
         >
           Cancel
         </button>
-        <button type="button" onClick={onConfirm}>
+        <button
+          type="button"
+          className={destructive ? "danger-button" : undefined}
+          onClick={onConfirm}
+        >
           {confirmLabel}
         </button>
       </div>

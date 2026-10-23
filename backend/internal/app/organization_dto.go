@@ -108,17 +108,18 @@ type OrganizationStepDTO struct {
 	Code    string `json:"code"`
 }
 type OrganizationResponse struct {
-	AccountID string                `json:"accountId"`
-	State     string                `json:"state"`
-	Code      string                `json:"code"`
-	ID        string                `json:"id"`
-	Digest    string                `json:"digest"`
-	Kind      string                `json:"kind"`
-	ExpiresAt int64                 `json:"expiresAt"`
-	DryRun    bool                  `json:"dryRun"`
-	Rows      []OrganizationRowDTO  `json:"rows"`
-	Steps     []OrganizationStepDTO `json:"steps"`
-	HasMore   bool                  `json:"hasMore"`
+	ConflictReason string                `json:"conflictReason,omitempty"`
+	AccountID      string                `json:"accountId"`
+	State          string                `json:"state"`
+	Code           string                `json:"code"`
+	ID             string                `json:"id"`
+	Digest         string                `json:"digest"`
+	Kind           string                `json:"kind"`
+	ExpiresAt      int64                 `json:"expiresAt"`
+	DryRun         bool                  `json:"dryRun"`
+	Rows           []OrganizationRowDTO  `json:"rows"`
+	Steps          []OrganizationStepDTO `json:"steps"`
+	HasMore        bool                  `json:"hasMore"`
 }
 
 func emptyOrganization() OrganizationResponse {

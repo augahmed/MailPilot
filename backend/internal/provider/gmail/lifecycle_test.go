@@ -385,7 +385,7 @@ func TestGmailLifecyclePartialImportRetryLabelsAndIdempotency(t *testing.T) {
 	if p := h.syncRun(); p.Updated != 1 || p.Errors != 0 {
 		t.Fatal("incomplete body did not retry without history", p)
 	}
-	if p := h.command("status"); p.Status != "pending" || p.PendingAssessments != 2 || h.embedder.count() != count {
+	if p := h.command("status"); p.Status != "pending" || p.PendingAssessments != 1 || p.AssessedMessages != 1 || h.embedder.count() != count {
 		t.Fatal(p)
 	}
 	h.search(1)

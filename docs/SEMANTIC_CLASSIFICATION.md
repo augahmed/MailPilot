@@ -4,7 +4,7 @@ Implemented 2026-10-20. The classifier reads current account-scoped shared email
 chunk vectors and enabled category prototypes. It has no embedder, external AI,
 mailbox writer, separate vector cache or background queue. Start/Resume on the
 existing Local Email Index coordinator builds vectors/prototypes and then assesses
-cached emails. Startup and polling never start work. The existing five-email
+cached emails. Startup and polling never start work. The 25-email interface
 **Classify this page** action computes assessments from saved vectors without
 inference. Missing/incompatible/incomplete vectors abstain or use decisive rules.
 
@@ -216,5 +216,30 @@ fixtures cover five simultaneous suggestions and score identities. UI tests veri
 all suggestions display with one set of evidence/override controls and that label
 selection supports complete per-email options in the default mode and a separate
 highest-ranked mode without manufacturing manual preferences. Review
-pages remain bounded to five emails and 48 KiB; oversized evidence stays persisted
+pages contain up to 25 emails, assembled from existing five-email IPC pages
+bounded to 48 KiB each; oversized evidence stays persisted
 and reports the existing display-limit error instead of silently dropping categories.
+
+## Organization freshness and list refresh
+
+Migration 021 scopes index-state revisions to their email. Category definitions,
+prototypes and confirmed examples still revoke dependent assessments through the
+shared account revision; the selected source/index/preference/label generations
+retain per-email ABA fencing. Unrelated index work no longer revokes a reviewed
+message. Semantic organization plans compare versioned evidence and the selected
+score, allowing identical reassessments with a new timestamp. Legacy plans retain
+their original timestamp checks and immutable digests. Real source, label, category,
+model or assessment changes still reject confirmation before Gmail dispatch.
+
+Organization reloads and rechecks selectable rows after Go Back, failed preparation
+and returning to its page. Batch-specific multiple-suggestion choices are cleared
+so changed options cannot remain selected. Uncertain outcomes retain recovery
+controls; returning to selection never authorizes a Gmail write.
+
+Confirmation conflicts now identify whether classification evidence, Gmail source,
+message labels, the target label, expiry or the saved plan changed. Rejected valid
+full reads refresh the shared local cache without inference or Gmail writes; the
+original approval remains unusable for changed evidence. Label creation verifies
+an omitted response owner type using GET of the exact created ID, rather than
+classifying that successful response as malformed. Existing uncertain journal
+evidence, reconciliation, new-preview requirements and undo ownership stay intact.

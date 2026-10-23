@@ -91,6 +91,12 @@ func orgCode(err error) string {
 		return "operation_failed"
 	}
 }
+
+// Conflict details contain only fixed identifiers, never mail or provider errors.
+type organizationConflict string
+
+func (e organizationConflict) Error() string { return "organization preview changed" }
+func (e organizationConflict) Unwrap() error { return repository.ErrConflict }
 func (s *Organization) Handle(ctx context.Context, p OrganizationRequest) OrganizationResponse {
 	fail := func(code string) OrganizationResponse { r := emptyOrganization(); r.Code = code; return r }
 	if !p.Valid() {
@@ -191,6 +197,13 @@ func (s *Organization) Handle(ctx context.Context, p OrganizationRequest) Organi
 		defer s.mu.Unlock()
 		if err != nil {
 			result.Code = orgCode(err)
+			if result.Code == "stale_preview" {
+				var conflict organizationConflict
+				result.ConflictReason = "plan_changed"
+				if errors.As(err, &conflict) {
+					result.ConflictReason = string(conflict)
+				}
+			}
 			if result.State == "idle" {
 				result.State = "error"
 			}
@@ -232,8 +245,11 @@ func (s *Organization) work(ctx context.Context, account domain.AccountID, reque
 		if err != nil {
 			return emptyOrganization(), err
 		}
-		if plan.Digest != request.Digest || plan.Status != domain.ActionPreview || time.Now().UnixMilli() >= plan.ExpiresAt {
-			return organizationDTO(plan), repository.ErrConflict
+		if plan.Digest != request.Digest || plan.Status != domain.ActionPreview {
+			return organizationDTO(plan), organizationConflict("plan_changed")
+		}
+		if time.Now().UnixMilli() >= plan.ExpiresAt {
+			return organizationDTO(plan), organizationConflict("expired")
 		}
 		return s.apply(ctx, plan, p)
 	case "reconcile":

@@ -6,6 +6,7 @@ import {
 
 import { SemanticEvidence } from "./SemanticEvidence";
 import { MailReader } from "../reader/MailReader";
+import { listReviews, reviewPageSize, reviewWirePageSize } from "./listReviews";
 
 const errors = {
   validation: "The review request is invalid. Refresh and try again.",
@@ -51,10 +52,14 @@ export function ClassificationReview() {
       const current = revision.current;
       try {
         if (pending.current) return;
-        const result = await reviewClassifications({
-          operation: "list",
-          offset,
-        });
+        const result = await listReviews(
+          {
+            operation: "list",
+            offset,
+          },
+          () => active && current === revision.current && !pending.current,
+        );
+        if (!result) return;
         if (active && current === revision.current && !pending.current) {
           if (result.code) {
             setError(errors[result.code]);
@@ -96,10 +101,21 @@ export function ClassificationReview() {
     setMessage("");
     setError("");
     try {
-      const result = await reviewClassifications({
+      const request = {
         operation,
         accountId: page?.accountId ?? "",
-        offset,
+        offset: row
+          ? offset +
+            Math.floor(
+              Math.max(
+                0,
+                page?.rows.findIndex(
+                  (item) => item.email_id === row.email_id,
+                ) ?? 0,
+              ) / reviewWirePageSize,
+            ) *
+              reviewWirePageSize
+          : offset,
         ...(row
           ? {
               emailId: row.email_id,
@@ -108,13 +124,35 @@ export function ClassificationReview() {
                 operation === "assigned" ? (choices[row.email_id] ?? "") : "",
             }
           : {}),
-      });
+      };
+      const result =
+        operation === "list" || operation === "run"
+          ? await listReviews({ ...request, operation }, () => mounted.current)
+          : await reviewClassifications(request);
+      if (!result) return;
       if (!mounted.current) return;
       if (result.code) {
         setError(errors[result.code]);
         setPage(null);
       } else {
-        setPage(result);
+        setPage((current) => {
+          if (
+            operation === "list" ||
+            operation === "run" ||
+            !current ||
+            current.accountId !== result.accountId
+          )
+            return result;
+          const updated = new Map(
+            result.rows.map((row) => [row.email_id, row]),
+          );
+          return {
+            ...current,
+            rows: current.rows.map((row) => updated.get(row.email_id) ?? row),
+            processed: result.processed,
+            errors: result.errors,
+          };
+        });
         if (operation === "auto" && row)
           setChoices((current) => ({ ...current, [row.email_id]: "" }));
         if (operation === "run")
@@ -233,7 +271,7 @@ export function ClassificationReview() {
       </h2>
       <p>
         Review local semantic and optional decisive-rule suggestions for cached
-        mail, five emails at a time. Emails with insufficient evidence remain
+        mail, 25 emails at a time. Emails with insufficient evidence remain
         unclassified; closely scoring categories are suggested together.
       </p>
       <p className="help">
@@ -372,7 +410,7 @@ export function ClassificationReview() {
           onClick={() => {
             setPage(null);
             setMessage("");
-            setOffset(Math.max(0, offset - 5));
+            setOffset(Math.max(0, offset - reviewPageSize));
           }}
         >
           Previous review page
@@ -382,7 +420,7 @@ export function ClassificationReview() {
           onClick={() => {
             setPage(null);
             setMessage("");
-            setOffset(offset + 5);
+            setOffset(offset + reviewPageSize);
           }}
         >
           Next review page
