@@ -5,20 +5,20 @@ historical reports and future implementation prompts do not authorize features.
 
 ## Start here
 
-| Read                                    | Purpose                                                                   |
-| --------------------------------------- | ------------------------------------------------------------------------- |
-| [Project README](../README.md)          | Prerequisites, development, desktop builds and the feature overview       |
-| [Gmail setup](GMAIL_SETUP.md)           | User-owned Desktop OAuth client, test-account sign-in and troubleshooting |
-| [Architecture](ARCHITECTURE.md)         | Go/React/Rust ownership, shared local pipeline and trust boundaries       |
-| [Privacy and local storage](PRIVACY.md) | Credential handling, unencrypted cache, external AI and retained data     |
-| [Security policy](../SECURITY.md)       | Threat model, reporting route, platform support and known limits          |
-| [Evaluation](EVALUATION.md)             | Dated synthetic quality/security results and unresolved findings          |
+| Read                                    | Purpose                                                                                |
+| --------------------------------------- | -------------------------------------------------------------------------------------- |
+| [Project README](../README.md)          | Prerequisites, development, desktop builds and the feature overview                    |
+| [Gmail setup](GMAIL_SETUP.md)           | External Desktop JSON, personal macOS builds, test-account sign-in and troubleshooting |
+| [Architecture](ARCHITECTURE.md)         | Go/React/Rust ownership, shared local pipeline and trust boundaries                    |
+| [Privacy and local storage](PRIVACY.md) | Credential handling, unencrypted cache, external AI and retained data                  |
+| [Security policy](../SECURITY.md)       | Threat model, reporting route, platform support and known limits                       |
+| [Evaluation](EVALUATION.md)             | Dated synthetic quality/security results and unresolved findings                       |
 
 External AI is optional. The [AI contract](GENERATIVE_AI.md) describes the existing
 in-app provider/key settings and per-request consent; OpenAI is the only shipped
-functional adapter. No separate OpenAI setup guide, credential-import helper or
-credential-free demo mode is implemented yet. Google setup remains the current
-development workflow. Installed native inference requires no user model download.
+functional adapter. [Gmail setup](GMAIL_SETUP.md) includes the personal credential
+helpers and existing in-app OpenAI settings. A credential-free synthetic demo mode
+is not implemented yet. Installed native inference requires no user model download.
 
 ## Technical references
 
@@ -50,5 +50,4 @@ fixture or report describes them.
 [The portfolio prompt plan](PORTFOLIO_PROMPT_PLAN.md) is an engineering task
 sequence, not an implemented feature inventory. Its later prompts require their
 own explicit execution request. Public distribution verification, encrypted
-storage, cache-removal controls, personal credential packaging and the visual
-README work remain separate from repository cleanup.
+storage, cache-removal controls and the visual README work remain separate.

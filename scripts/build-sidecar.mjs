@@ -6,6 +6,10 @@ import { rustEnvironment } from "./rust-environment.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const env = rustEnvironment();
+const args = process.argv.slice(2);
+if (args.length > 1 || (args.length === 1 && args[0] !== "--personal-google"))
+  throw new Error("Unsupported sidecar build option");
+const personal = args[0] === "--personal-google";
 const rustInfo = execFileSync("rustc", ["-vV"], { encoding: "utf8", env });
 const host = /^host: (.+)$/m.exec(rustInfo)?.[1];
 const target = process.env.TAURI_ENV_TARGET_TRIPLE || host;
@@ -33,6 +37,9 @@ execFileSync(
   "go",
   [
     "build",
+    // Explicitly override inherited GOFLAGS tags: ordinary builds exclude the
+    // personal resource even when an interrupted run left its input on disk.
+    `-tags=${personal ? "personal_google" : ""}`,
     "-trimpath",
     "-ldflags",
     `-s -w -X main.version=${version}`,
@@ -51,4 +58,6 @@ execFileSync(
     },
   },
 );
-console.log(`Built Go sidecar for ${target}`);
+console.log(
+  `Built ${personal ? "personal" : "standard"} Go sidecar for ${target}`,
+);

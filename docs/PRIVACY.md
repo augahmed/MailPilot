@@ -44,6 +44,13 @@ OS credential storage with no file/SQL/environment fallback. Access tokens remai
 in backend memory. Developer desktop OAuth client configuration is separate from
 user credentials.
 
+Personal build helpers read a bounded Desktop OAuth JSON outside the repository
+and temporarily generate an ignored private build input. Only the extractable
+desktop client ID/secret is compiled into Go; standard builds exclude it. The
+personal application and build caches can retain that public-client configuration.
+It never contains user tokens, OpenAI keys or signing credentials. See
+[personal builds and cleanup](GMAIL_SETUP.md#configuration-precedence-and-standard-builds).
+
 Summary and evidence approvals keep a key fingerprint in backend memory, never
 in returned DTOs, logs or SQLite. Key replacement invalidates a pending approval
 and suppresses stale output. The adapter checks the key again immediately before

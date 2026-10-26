@@ -150,6 +150,14 @@ Silicon macOS; existing non-native builds use the unavailable adapter. The Tauri
 resource mapping packages weights, dylib and licenses under the fixed `embedding`
 directory. Native runtime resolution needs no environment library search path.
 
+The [personal Google helpers](GMAIL_SETUP.md) reuse this build/resource pipeline.
+They embed only desktop client configuration in Go before signing; model hashes,
+tokenizer identity and fixed runtime resolution do not change. Development still
+uses the normal `src-tauri/target/debug` layout. A personal `.app` moves intact to
+`.local/personal`, where its sidecar resolves the bundled `Contents/Resources`
+layout. `npm run test:personal:package` qualifies personal and subsequent standard
+bundles with synthetic client canaries, ad-hoc signatures and offline inference.
+
 The core's exact `--embedding-self-test` flag accepts no extra arguments or input.
 It uses only fixed synthetic strings, opens no database/authentication session and
 prints bounded descriptor/timing/memory data. It is not available through WebView

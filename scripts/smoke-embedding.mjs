@@ -10,12 +10,15 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { libraryFingerprint, sha256 } from "./embedding-artifacts.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const app = join(root, "src-tauri/target/release/bundle/macos/MailPilot.app");
+const app = resolve(
+  root,
+  process.argv[2] || "src-tauri/target/release/bundle/macos/MailPilot.app",
+);
 const resources = join(app, "Contents/Resources/embedding");
 const binary = join(app, "Contents/MacOS/mailpilot-core");
 const manifest = JSON.parse(

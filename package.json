@@ -12,6 +12,10 @@
   "scripts": {
     "dev": "node scripts/tauri.mjs dev",
     "build": "node scripts/tauri.mjs build",
+    "dev:personal": "node scripts/personal.mjs dev",
+    "build:personal": "node scripts/personal.mjs build",
+    "test:personal": "node --test scripts/google-client.test.mjs",
+    "test:personal:package": "node scripts/smoke-personal.mjs",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "dev:frontend": "npm run dev --workspace frontend",
     "build:frontend": "npm run build --workspace frontend",

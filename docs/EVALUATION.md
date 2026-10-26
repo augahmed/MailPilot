@@ -374,3 +374,60 @@ verification was run. No artifact was published. The remaining warnings and
 earlier quality/latency findings prevent treating these checks as public-release
 certification. Any unresolved reachable high-risk finding blocks a real-mail
 release recommendation, even when the functional checks pass.
+
+## Personal build qualification 2026-10-26
+
+Portfolio prompt 3 added `dev:personal` and `build:personal` with an explicit
+external Google Desktop JSON file. Node validates a bounded 32 KiB regular file,
+the `installed` shape and required fields; wrong clients, token/key records,
+unknown fields and conflicting endpoint metadata fail with fixed safe errors.
+Only client ID/secret enter a generated, ignored mode-0600 Go build input. Go
+validates the minimal packaged default again. No token store, endpoint, scope,
+PKCE/state, IPC DTO, database schema, dependency or model identity changed.
+
+Standard sidecar builds explicitly pass an empty build-tag selection, overriding
+inherited `GOFLAGS` tags. Personal builds select `personal_google` and move the
+finished macOS bundle intact to `.local/personal/MailPilot.app`. The configuration
+is present before signing. Direct launch permits only atomic environment-pair
+overrides; an explicit empty pair disables OAuth and partial pairs fail closed.
+The keyring namespace remains client-ID/data-directory based.
+
+Six Node tests passed, covering minimal extraction, bad/missing/malformed/
+oversized/wrong-client input, endpoint enforcement, outside-repository paths,
+symlink-to-repository rejection, CLI rejection before any build, cleanup after child
+failure and preservation of another personal run's input. Go tests cover
+packaged/default/environment precedence, malformed packaged input, safe errors,
+redacted diagnostics and loading with no environment. Full Go tests and vet passed;
+race checks passed for changed configuration/startup packages. Frontend
+typecheck/lint/production build and 173 tests passed. Rust fmt, Clippy with warnings
+denied and all 25 tests passed. Native embedding CGO/race and both artifact tests
+passed. The affected-package race run does not replace or claim a new full Go
+race run; the preceding security follow-up records the last full run.
+
+`npm run test:personal:package` passed on Apple Silicon macOS. It built a personal
+app with fixed synthetic canaries, verified the intended client fields in Go and
+their absence from frontend assets/discarded project metadata, and launched with
+both Google environment variables absent. A fresh temporary profile reached the
+configured/disconnected landing page with Connect enabled; every protected
+feature still rejected access. It read only that fresh synthetic profile's
+nonexistent keyring slot, never a real account/token. Both personal and subsequent
+standard apps passed ad-hoc signature verification, real network-denied MiniLM
+inference (including copied debug/release layouts), and WebView/IPC/lifecycle smoke
+checks. The standard rebuild deliberately retained the generated input and an
+inherited personal tag; its executable contained neither client canary and showed
+setup required. Temporary inputs and the synthetic personal bundle were removed.
+
+The first personal desktop smoke failed because its navigation assertion required
+the unconfigured landing page; the app had correctly loaded its default. The
+corrected harness checks the configured/disconnected page and preserves all
+authorization assertions. Initial and final local logs are retained under ignored
+`.cache/security-review/personal-package*.log`. No unresolved check remains.
+
+The real `dev:personal` command also started Vite, the native window and Go/SQLite
+with an external synthetic client and temporary profile. Ctrl+C stopped the core
+and dev server, and the generated input was removed. The shared sidecar was then
+rebuilt in standard mode. No real Google sign-in, live mailbox change, paid AI
+request, public artifact upload, Developer ID signing or notarization occurred.
+Windows/Linux personal packaging remains unqualified. The earlier security and
+quality warnings remain applicable; these helpers provide owner-only builds,
+not Google verification or a new production API key. See [setup](GMAIL_SETUP.md).

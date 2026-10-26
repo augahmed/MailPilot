@@ -24,7 +24,8 @@ type Config struct {
 
 // Load gives explicit flags precedence over environment values and defaults.
 // defaultDir is supplied by the composition root, keeping this function testable.
-func Load(args []string, getenv func(string) string, defaultDir string) (Config, error) {
+func Load(args []string, lookup func(string) (string, bool), defaultDir string) (Config, error) {
+	getenv := func(key string) string { value, _ := lookup(key); return value }
 	high := 60
 	if value := getenv("MAILPILOT_RISK_HIGH_THRESHOLD"); value != "" {
 		var err error
@@ -75,9 +76,9 @@ func Load(args []string, getenv func(string) string, defaultDir string) (Config,
 	if !ok {
 		return Config{}, errors.New("invalid log level")
 	}
-	clientID := strings.TrimSpace(getenv("MAILPILOT_GOOGLE_CLIENT_ID"))
-	if clientID != "" && (!strings.HasSuffix(clientID, ".apps.googleusercontent.com") || strings.ContainsAny(clientID, " /\r\n")) {
-		return Config{}, errors.New("invalid Google client configuration")
+	clientID, clientSecret, err := googleConfiguration(lookup, packagedGoogleJSON())
+	if err != nil {
+		return Config{}, err
 	}
-	return Config{RiskHighThreshold: high, InitialSyncLimit: limit, DataDir: filepath.Clean(dir), LogLevel: parsed, GoogleClientID: clientID, GoogleClientSecret: credentials.NewSecret(getenv("MAILPILOT_GOOGLE_CLIENT_SECRET"))}, nil
+	return Config{RiskHighThreshold: high, InitialSyncLimit: limit, DataDir: filepath.Clean(dir), LogLevel: parsed, GoogleClientID: clientID, GoogleClientSecret: clientSecret}, nil
 }

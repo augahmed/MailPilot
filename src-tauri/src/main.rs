@@ -52,6 +52,7 @@ mod capability_tests {
 
 struct SmokeTest {
     enabled: bool,
+    personal_google: bool,
     completed: AtomicBool,
     auth_completed: AtomicBool,
     mailbox_completed: AtomicBool,
@@ -257,14 +258,24 @@ async fn gmail_status(
     let result = account_command(backend, "auth.status").await?;
     let smoke = app.state::<SmokeTest>();
     if smoke.enabled
-        && result.state == "unconfigured"
+        && result.state
+            == if smoke.personal_google {
+                "disconnected"
+            } else {
+                "unconfigured"
+            }
         && !smoke.auth_completed.swap(true, Ordering::SeqCst)
     {
         eprintln!(
             "{{\"level\":\"INFO\",\"component\":\"desktop\",\"event\":\"frontend_auth_ok\"}}"
         );
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.eval(include_str!("smoke-navigation.js"));
+            let script = format!(
+                "((personalGoogle) => {{ {} }})({});",
+                include_str!("smoke-navigation.js"),
+                smoke.personal_google
+            );
+            let _ = window.eval(&script);
         }
         if smoke.complete() {
             app.exit(0);
@@ -580,7 +591,7 @@ fn main() {
         }))
         .setup(|app| {
             let smoke_test = std::env::args().any(|arg| arg == "--smoke-test");
-            app.manage(SmokeTest { enabled: smoke_test, completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), reader_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false), ai_settings_completed:AtomicBool::new(false),summary_completed:AtomicBool::new(false),index_completed:AtomicBool::new(false),search_completed:AtomicBool::new(false),answer_completed:AtomicBool::new(false) });
+            app.manage(SmokeTest { enabled: smoke_test, personal_google: std::env::args().any(|arg| arg == "--smoke-personal-config"), completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), reader_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false), ai_settings_completed:AtomicBool::new(false),summary_completed:AtomicBool::new(false),index_completed:AtomicBool::new(false),search_completed:AtomicBool::new(false),answer_completed:AtomicBool::new(false) });
             if smoke_test {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {

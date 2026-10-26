@@ -361,7 +361,12 @@ No reply/composition/sending or autonomous action capability was introduced.
 Keep system-browser OAuth with PKCE/state, bounded loopback callback, required-scope
 validation and serialized refresh. Tokens/AI keys are OS-store-only with no fallback.
 Developer desktop OAuth client configuration is distinct from user tokens; see
-[GMAIL_SETUP.md](GMAIL_SETUP.md). Current restore refreshes credentials and checks the
+[GMAIL_SETUP.md](GMAIL_SETUP.md). Personal helpers validate an external Desktop JSON
+and compile a minimal ignored input into Go behind `personal_google`. Standard
+sidecar builds explicitly exclude that tag. Runtime Go validates the default and
+accepts only atomic environment-pair overrides; no endpoint or user credential is
+loaded from the resource. Personal bundles move to `.local/personal` after build,
+with configuration already present before signing. Current restore refreshes credentials and checks the
 Gmail profile before establishing a session. Local cache reads in an existing session
 are network-free; cold-start offline unlock is a separate design/test gap.
 

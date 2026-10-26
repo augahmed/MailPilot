@@ -27,6 +27,10 @@ and key identity. Output and citations can still be factually wrong.
 
 ## Known limits
 
+Personal bundles include extractable Google desktop-client configuration, never
+user tokens or AI keys. Keep them private to their owner; ordinary release builds
+exclude that default. See [personal setup and build isolation](docs/GMAIL_SETUP.md).
+
 - The SQLite cache, original mail, derived data and disk journals are **unencrypted
   by MailPilot**. Private Unix permissions reduce access by other OS users; they
   do not stop the same OS user, an administrator, malware or a compromised device.

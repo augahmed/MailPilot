@@ -1,14 +1,21 @@
-// Only evaluated by the native --smoke-test path with an isolated, unconfigured
-// profile. Production navigation never mounts features before authorization.
+// Only evaluated by --smoke-test with an isolated unconfigured/synthetic personal
+// profile. personalGoogle is a trusted boolean supplied by the native harness.
+// Production navigation never mounts features before authorization.
 // Wait for React to commit the status response before inspecting the landing UI.
 void (async () => {
   for (let attempt = 0; attempt < 50; attempt++) {
     const landing = document.querySelector(".connection-landing");
-    if (landing?.textContent.includes("Gmail setup required")) {
+    if (
+      landing?.textContent.includes(
+        personalGoogle ? "Gmail disconnected" : "Gmail setup required",
+      )
+    ) {
+      const connect = landing.querySelector(".connect-button");
       if (
         document.querySelector(".feature-grid") ||
         document.querySelector(".mailbox") ||
-        !landing.querySelector("button:disabled")
+        !connect ||
+        connect.disabled !== !personalGoogle
       )
         throw new Error("Disconnected navigation gate failed");
       const invoke = window.__TAURI_INTERNALS__.invoke;

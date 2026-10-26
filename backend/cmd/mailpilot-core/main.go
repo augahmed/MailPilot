@@ -55,7 +55,7 @@ func run() int {
 			base = filepath.Join(home, ".local", "share")
 		}
 	}
-	cfg, err := config.Load(os.Args[1:], os.Getenv, filepath.Join(base, "com.mailpilot.desktop"))
+	cfg, err := config.Load(os.Args[1:], os.LookupEnv, filepath.Join(base, "com.mailpilot.desktop"))
 	if err != nil {
 		logger.Error("invalid configuration", "code", "config_invalid")
 		return 1

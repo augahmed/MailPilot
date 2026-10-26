@@ -1,4 +1,4 @@
-# Gmail sign-in for local development
+# Gmail setup and personal macOS builds
 
 MailPilot uses Google’s **Desktop app** authorization-code flow with PKCE and a temporary loopback callback. Sign-in takes place in your system browser. Never enter a Gmail password into MailPilot or paste tokens into configuration.
 
@@ -11,43 +11,108 @@ Connecting verifies authorization and retrieves `users/me/profile` to identify t
 3. Open **Google Auth Platform** (or the OAuth consent-screen section). Configure the app branding, user support email, and developer contact information. Choose an appropriate audience. For personal development, use **External**, keep the app in **Testing**, and add your dedicated Gmail test account under **Test users**. Workspace Internal apps require an eligible organization.
 4. In **Data Access**, add `https://www.googleapis.com/auth/gmail.modify`. This is the narrowest Gmail scope permitting both email-body reads and applying/removing labels on messages. `gmail.labels` only manages label definitions. Google bundles sending and other modifications into `gmail.modify`; MailPilot exposes no sending/deletion operation. Do not add `https://mail.google.com/`, Contacts, Drive, or unrelated scopes.
 5. Under **Clients → Create client**, select **Desktop app**, give it a development name, and create it. Do not choose Web application or configure a public callback. Google’s Desktop client supports an ephemeral `http://127.0.0.1:<port>/oauth/callback`; MailPilot selects the port at runtime.
-6. Copy the client ID and desktop client secret into your local runtime configuration. If downloading the JSON, keep it outside the repository. MailPilot does not automatically load this JSON or `.env` files. The client ID/secret identify your OAuth application; they are not a Gmail password or a user refresh token. A distributed desktop client cannot keep a client secret confidential; PKCE protects the authorization-code exchange.
+6. Download the client JSON and keep it **outside this repository**, for example at `/Users/YOUR_NAME/Private/MailPilot/google-desktop-client.json`. The file must contain an `installed` Desktop app client with `client_id` and `client_secret`. Keep it separate from token files and OpenAI keys. Do not paste its contents into source, a shell command, a screenshot or an issue.
 
 See Google’s [desktop OAuth flow](https://developers.google.com/identity/protocols/oauth2/native-app), [Gmail scope definitions](https://developers.google.com/workspace/gmail/api/auth/scopes), and [Gmail profile endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users/getProfile). Restricted-scope verification and any applicable assessment must be resolved before public distribution. Testing-mode authorizations using Gmail scopes normally expire after seven days; reconnect when prompted. See [Google’s token expiration guidance](https://developers.google.com/identity/protocols/oauth2#expiration).
 
-## Run with local configuration
+## Run development with your downloaded JSON
 
-From the repository root, in a terminal with Go, Node and Rust available:
-
-```sh
-export MAILPILOT_GOOGLE_CLIENT_ID='YOUR_CLIENT_ID.apps.googleusercontent.com'
-# zsh (the macOS default): prompt silently, avoiding the value in shell history.
-read -rs 'MAILPILOT_GOOGLE_CLIENT_SECRET?Google desktop client secret: '
-export MAILPILOT_GOOGLE_CLIENT_SECRET
-npm run dev
-```
-
-In Bash, replace the `read` command with:
+Install the [README prerequisites](../README.md#prerequisites) and run `npm ci` once.
+From the repository root:
 
 ```sh
-read -rsp 'Google desktop client secret: ' MAILPILOT_GOOGLE_CLIENT_SECRET
+npm run dev:personal -- --google-client-json "/Users/YOUR_NAME/Private/MailPilot/google-desktop-client.json"
 ```
 
-The native host passes runtime environment configuration to the Go sidecar. No `VITE_` configuration, client secret, access token, or refresh token belongs in frontend code. Changing configuration requires restarting the app. With no client ID, the local application still works and shows **Gmail setup required**.
+The helper validates the file, compiles the Go sidecar with only the desktop
+client ID/secret, and starts the existing Tauri/Vite development workflow. No two
+manual environment exports are needed. Connect Gmail in the system browser using
+your configured test account. Stop development with Ctrl+C before another build.
+The original downloaded file is never modified. The helper prints neither its
+contents nor client values and does not put them into frontend/VITE variables.
 
-For a packaged macOS app, use the same terminal environment and launch its executable directly:
+The input must be an absolute path outside the repository, a regular UTF-8 JSON
+file no larger than **32 KiB**. Web/service-account credentials, token/API-key
+records, unexpected fields, missing required fields and conflicting endpoint
+metadata are rejected. The helper discards project metadata and downloaded URLs.
+Go still selects its fixed Google endpoints, Gmail scope and runtime loopback
+callback; JSON cannot replace those destinations or PKCE/state behavior.
+
+## Build a personal application for Finder
+
+The packaged personal workflow currently targets **Apple Silicon macOS**. From
+the repository root:
 
 ```sh
-src-tauri/target/release/bundle/macos/MailPilot.app/Contents/MacOS/mailpilot
+npm run build:personal -- --google-client-json "/Users/YOUR_NAME/Private/MailPilot/google-desktop-client.json"
+codesign --force --deep --sign - .local/personal/MailPilot.app
+codesign --verify --deep --strict .local/personal/MailPilot.app
+open .local/personal/MailPilot.app
 ```
 
-Finder launches do not inherit your terminal’s environment. Client configuration is not embedded in the bundle. After development, unset it from the shell:
+The helper uses the existing build pipeline and fixed verified MiniLM resources.
+It moves the completed bundle to **`.local/personal/MailPilot.app`**, outside the
+ordinary release bundle path. The containing personal directory is private and
+ignored by Git. Build one desktop app at a time; a new personal build replaces
+that personal output. You can open it from Finder without a terminal or Google
+environment exports. You may copy the whole app into your own Applications folder;
+installed use needs no Go, Node, Rust or model download. Keep the whole bundle
+intact. Moving the bundle does not change its signature.
+Quit any running MailPilot copy before opening a rebuilt app; the single-instance
+host otherwise focuses the existing process.
 
-```sh
-unset MAILPILOT_GOOGLE_CLIENT_ID MAILPILOT_GOOGLE_CLIENT_SECRET
-```
+The signing commands above create an **ad-hoc local developer signature**.
+Developer ID signing/notarization and public OAuth verification remain unfinished.
+Configuration is compiled before signing; the workflow never injects configuration
+into an already signed app. `--no-sign` is available on `build:personal` for
+synthetic/local checks before applying the ad-hoc signature yourself.
 
-`.env*`, downloaded `client_secret*.json`, `credentials.json`, token files, and OAuth-client JSON patterns are ignored by Git. Inspect staged changes before committing; arbitrary filenames are not automatically safe. Never configure access or refresh tokens through environment variables.
+Desktop OAuth client IDs and desktop `client_secret` values are **extractable
+public-client configuration**, not user credentials. PKCE, browser consent and
+OS-stored user tokens remain essential. The personal app is for its owner; do not
+upload it to GitHub Releases or advertise it as a verified consumer download.
+It is not a verification bypass. Never package access/refresh tokens, a Gmail
+password, an OpenAI key or signing credentials. There is no new production API key
+issued by this helper.
+
+## Configuration precedence and standard builds
+
+- Personal helpers use the explicit JSON for their child processes and remove
+  inherited Google client environment overrides. They generate a temporary,
+  ignored, mode-`0600` `backend/internal/config/personal-google-client.json`
+  containing only the two desktop client fields. The original JSON stays outside
+  the repository. The `personal_google` build tag includes this default in Go;
+  runtime Go validation rejects a malformed packaged default.
+- A directly launched app/core accepts the existing **pair** of
+  `MAILPILOT_GOOGLE_CLIENT_ID` and `MAILPILOT_GOOGLE_CLIENT_SECRET` as an override.
+  A partial pair fails configuration instead of mixing clients. Setting both
+  explicitly empty disables OAuth for isolated smoke checks. With neither set,
+  a personal app uses its compiled default; a standard app shows setup required.
+- `npm run dev`, `npm run build` and `npm run build:sidecar` explicitly exclude the
+  personal tag, even if inherited `GOFLAGS` contains it or a stale generated input
+  remains on disk. Standard bundles contain no personal default. Runtime manual
+  overrides remain available. `.env` files are not automatically loaded.
+- Normal exit, build failure and handled interruption remove the generated input.
+  An abrupt kill can leave it behind. After stopping every personal run, remove
+  only that ignored generated file before retrying. Compiled personal executables
+  and the Go build cache can retain the extractable client configuration; cleanup
+  is not forensic erasure. Check staged files before committing.
+
+The existing keyring namespace still uses the same client ID and data directory;
+changing the JSON file's location or rebuilding with the same client preserves
+that namespace. Changing the client ID or data directory isolates the credential
+slot. Follow the disconnect guidance before intentionally changing either.
+
+## Optional OpenAI setup
+
+Open **Optional AI settings**, select OpenAI and a supported model ID, and submit
+your own OpenAI API key there. MailPilot stores it only in the OS credential store
+and clears the submitted input. No key belongs in Google JSON, environment exports,
+build inputs, source, SQLite or screenshots. Saving settings and launching the
+app make no paid AI validation request. Ordinary local features need no OpenAI
+account/key; Summary and evidence answers each require a separate exact-payload
+approval. See [AI consent and settings](GENERATIVE_AI.md) and
+[privacy/key removal](PRIVACY.md).
 
 ## Connect and disconnect
 
@@ -63,7 +128,7 @@ Changing a Workspace email address currently requires reconnecting; profile emai
 
 ## Troubleshooting
 
-- **Setup required / invalid client:** verify the Desktop client ID, client secret, project, Gmail API enablement, and launch environment. Never print the whole environment or credentials to troubleshoot.
+- **Setup required / invalid client:** verify the Desktop client ID, client secret, project, Gmail API enablement, and downloaded JSON/personal build (or complete runtime override pair). Never print the whole environment or credentials to troubleshoot.
 - **Access blocked:** confirm the account is a test user, inspect project consent configuration, and check Workspace administrator restrictions. Do not bypass Google warnings for an unknown project.
 - **Consent denied:** no connection is created; retry only if you want to grant access.
 - **Permission missing:** reconnect and review Gmail consent. Partial/insufficient grants do not count as connected.
@@ -73,7 +138,18 @@ Changing a Workspace email address currently requires reconnecting; profile emai
 
 ## Verification boundaries
 
-Normal tests use synthetic HTTP responses and in-memory credentials; they never access a personal mailbox, launch Google consent, or touch the real keyring. The packaged desktop smoke test explicitly disables OAuth configuration.
+Normal tests use synthetic HTTP responses and in-memory credentials; they never access a personal mailbox, launch Google consent, or touch the real keyring. The ordinary packaged desktop smoke test explicitly disables OAuth configuration.
+`npm run test:personal` exercises bounded JSON import and safe failures.
+`npm run test:personal:package` builds with synthetic client canaries, checks Go's
+packaged default and clean-environment native launch, verifies signed/offline model
+resources, checks frontend exclusion, then rebuilds a standard app with stale
+personal input and an inherited tag to verify exclusion. Its personal smoke
+accepts only the fixed synthetic client and a fresh temporary profile: it may read
+that nonexistent OS-keyring slot, but never signs into Google or loads a live
+account. It leaves a standard locally signed app and removes its synthetic personal
+bundle. Move any existing personal output aside before this qualification command;
+it deliberately refuses to replace it. Native tests require Apple Silicon macOS
+and local GUI/keyring access.
 
 An optional OS-keyring smoke test writes, reads, and deletes **one synthetic credential** under a unique temporary-profile namespace:
 

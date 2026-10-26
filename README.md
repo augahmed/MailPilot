@@ -99,6 +99,22 @@ This preview correctly reports that the backend is disconnected; only the native
 
 ## Build a desktop application
 
+For a personal Apple Silicon macOS app that opens from Finder with your own
+Google Desktop client configuration, follow [Gmail setup](docs/GMAIL_SETUP.md):
+
+```sh
+npm run dev:personal -- --google-client-json "/absolute/path/outside-repo/client.json"
+# Stop development before building:
+npm run build:personal -- --google-client-json "/absolute/path/outside-repo/client.json"
+codesign --force --deep --sign - .local/personal/MailPilot.app
+open .local/personal/MailPilot.app
+```
+
+Personal builds contain extractable desktop-client configuration and belong only
+to their owner. Tokens and OpenAI keys are never packaged. The following standard
+build omits the personal default and still needs runtime Google configuration for
+sign-in. Neither workflow completes public Google verification or notarization.
+
 On macOS, from the repository root:
 
 ```sh
@@ -113,7 +129,7 @@ The packaged macOS executable is `src-tauri/target/release/bundle/macos/MailPilo
 
 ## Configuration and local storage
 
-The app does not automatically load `.env`; a developer may explicitly source local OAuth client configuration in their shell. OAuth client configuration comes from `MAILPILOT_GOOGLE_CLIENT_ID` and `MAILPILOT_GOOGLE_CLIENT_SECRET` at runtime, never frontend build configuration. User access/refresh tokens are never read from environment variables; refresh tokens use the OS keyring. See [setup instructions](docs/GMAIL_SETUP.md). Defaults come from the OS application data directory; the native host passes that default to Go. Standalone core startup resolves the corresponding platform directory itself.
+The app does not automatically load `.env`. Personal helpers accept an external Google Desktop JSON and embed only the client ID/secret in Go; standard builds exclude that default. A directly launched app accepts a complete runtime `MAILPILOT_GOOGLE_CLIENT_ID` / `MAILPILOT_GOOGLE_CLIENT_SECRET` override pair; partial overrides fail, and two explicit empty values disable OAuth. Configuration never enters the frontend. User access/refresh tokens are never read from environment variables; refresh tokens use the OS keyring. See [setup and precedence](docs/GMAIL_SETUP.md#configuration-precedence-and-standard-builds). Defaults come from the OS application data directory; the native host passes that default to Go. Standalone core startup resolves the corresponding platform directory itself.
 
 | Setting        | Default                                                 | Override                                                                      |
 | -------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -249,8 +265,11 @@ Automated tests use synthetic mail and GET-only local HTTP servers with temporar
 databases. They qualify 500 → 1,000 → 1,250 cached Inbox messages across service
 restarts, a failed message in the middle of a batch, durable retry, cancellation,
 legacy checkpoints, page-token recovery, history replay and verified deletions.
-No live Gmail account is used by these tests. Native smoke tests use no Google
-configuration.
+No live Gmail account is used by these tests. Ordinary native smoke tests disable
+Google configuration. `npm run test:personal` checks JSON import;
+`npm run test:personal:package` qualifies synthetic personal and standard bundles,
+including clean-environment launch and signed/offline resources. See
+[the verification boundaries](docs/GMAIL_SETUP.md#verification-boundaries).
 
 ## User-defined categories
 

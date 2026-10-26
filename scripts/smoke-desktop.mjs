@@ -1,27 +1,50 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { personalFixture } from "./personal-fixture.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const defaultExecutable =
   process.platform === "darwin"
     ? "src-tauri/target/release/bundle/macos/MailPilot.app/Contents/MacOS/mailpilot"
     : `src-tauri/target/release/mailpilot${process.platform === "win32" ? ".exe" : ""}`;
-const executable = resolve(root, process.argv[2] || defaultExecutable);
+const personal = process.argv.includes("--personal");
+const options = process.argv.slice(2).filter((arg) => arg !== "--personal");
+const executable = resolve(root, options[0] || defaultExecutable);
+if (personal) {
+  // Never load a real configured client or credential slot in this smoke mode.
+  const binary = await readFile(join(dirname(executable), "mailpilot-core"));
+  if (
+    !binary.includes(Buffer.from(personalFixture.installed.client_id)) ||
+    !binary.includes(Buffer.from(personalFixture.installed.client_secret))
+  )
+    throw new Error(
+      "Personal smoke requires the synthetic-client fixture build.",
+    );
+}
 const dataDir = await mkdtemp(join(tmpdir(), "mailpilot-smoke-"));
 let diagnostics = "";
 try {
-  const child = spawn(executable, ["--smoke-test"], {
-    env: {
-      ...process.env,
-      MAILPILOT_DATA_DIR: dataDir,
-      MAILPILOT_GOOGLE_CLIENT_ID: "",
-      MAILPILOT_GOOGLE_CLIENT_SECRET: "",
+  const env = {
+    ...process.env,
+    MAILPILOT_DATA_DIR: dataDir,
+    MAILPILOT_GOOGLE_CLIENT_ID: "",
+    MAILPILOT_GOOGLE_CLIENT_SECRET: "",
+  };
+  if (personal) {
+    delete env.MAILPILOT_GOOGLE_CLIENT_ID;
+    delete env.MAILPILOT_GOOGLE_CLIENT_SECRET;
+  }
+  const child = spawn(
+    executable,
+    ["--smoke-test", ...(personal ? ["--smoke-personal-config"] : [])],
+    {
+      env,
+      stdio: ["ignore", "ignore", "pipe"],
     },
-    stdio: ["ignore", "ignore", "pipe"],
-  });
+  );
   const deadline = setTimeout(() => {
     child.kill("SIGTERM");
   }, 30000);
