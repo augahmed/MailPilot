@@ -31,7 +31,7 @@ type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func syntheticRequest() ai.SummaryRequest {
-	return ai.SummaryRequest{EmailID: "selected", Revision: strings.Repeat("a", 64), Email: ai.NewText("Synthetic email context")}
+	return ai.SummaryRequest{EmailID: "selected", Revision: strings.Repeat("a", 64), Email: ai.NewText("Synthetic email context"), KeyFingerprint: ai.KeyFingerprint(credentials.NewSecret("synthetic-key"))}
 }
 
 const complete = `{"status":"completed","output":[{"type":"reasoning"},{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"summary\":\"Synthetic answer\",\"requests\":[],\"deadlines\":[]}"}]}]}`
@@ -134,7 +134,9 @@ func TestCredentialFailuresAndRotation(t *testing.T) {
 	})
 	for _, key := range []string{"synthetic-one", "synthetic-rotated"} {
 		s.key = credentials.NewSecret(key)
-		if _, e := p.SummarizeEmail(context.Background(), syntheticRequest()); e != nil {
+		approved := syntheticRequest()
+		approved.KeyFingerprint = ai.KeyFingerprint(s.key)
+		if _, e := p.SummarizeEmail(context.Background(), approved); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -150,6 +152,23 @@ func TestCredentialFailuresAndRotation(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatal("credential failure sent request")
+	}
+}
+func TestSummaryRejectsKeyChangedAtDispatch(t *testing.T) {
+	p, s := fixture(t)
+	approved := syntheticRequest()
+	s.key = credentials.NewSecret("synthetic-replacement")
+	calls := 0
+	p.client.Transport = roundTrip(func(*http.Request) (*http.Response, error) {
+		calls++
+		return responseBody(200, complete), nil
+	})
+	if _, err := p.SummarizeEmail(context.Background(), approved); err != ai.ErrConsent || calls != 0 {
+		t.Fatal("changed key dispatched an approved payload", err)
+	}
+	approved.KeyFingerprint = [32]byte{}
+	if _, err := p.SummarizeEmail(context.Background(), approved); err != ai.ErrConsent || calls != 0 {
+		t.Fatal("missing key binding dispatched a payload", err)
 	}
 }
 func TestNoRedirectsOrProxyAndSafeTransportError(t *testing.T) {

@@ -1,5 +1,9 @@
 # MailPilot quality and security evaluation
 
+The [2026-10-26 security follow-up](#security-follow-up-2026-10-26) below supersedes
+the dependency dispositions from the original run. Historical quality/performance
+measurements and test counts remain dated evidence, not current release approval.
+
 Evaluated 2026-10-21 against baseline
 `3c839493e440e71c6d654b2fe003837f82aa18b2` and the measured search-allocation changes
 described in [PERFORMANCE.md](PERFORMANCE.md). All mail is synthetic. No live Gmail
@@ -20,6 +24,9 @@ and distribution signing/notarization are outside this run.
 Dependency manifests/checksums were preserved; no replacement dependency was added.
 
 ## Dependency advisory audit
+
+This subsection records the **2026-10-21** results. See the follow-up for current
+versions, new findings and patch verification.
 
 `npm audit --json` reports zero known advisories across its 273-dependency inventory
 on the evaluation date. The official Go `govulncheck` v1.9.0 source/symbol scan
@@ -248,3 +255,122 @@ No functional regression check remains failed or blocked. The Go advisory and
 published quality/latency shortfalls remain open findings, not test passes.
 Paid-model answer quality, live Gmail behavior, non-Apple-Silicon inference and
 release distribution remain unqualified.
+
+## Security follow-up 2026-10-26
+
+Portfolio prompt 2 reviewed the current source and the earlier findings. All mail,
+key stores, provider transports and OAuth flows used for regression testing were
+synthetic/mocked. Public registry/advisory and repository-settings metadata were
+queried; no live Gmail account, real OS credential item or paid AI service was
+used. This follow-up does not repeat the 10,000-message performance evaluation or
+change its published quality/latency shortfalls.
+
+### Application boundary review
+
+The concrete gap was Summary's saved-key binding: settings changes through the
+app already revoked previews, but replacement outside that path could leave an
+old approval usable with a newly loaded OS key. Summary now stores a fingerprint
+with the immutable backend-only request, checks settings/key/source before
+approval and execution, rechecks before result publication and status display,
+and verifies the actual loaded key at the adapter's HTTP dispatch boundary.
+Generic request formatting/JSON are redacted. The existing evidence-answer path
+keeps its separate consent and key checks; no IPC fields or database migrations
+were added. Regression tests reject replacement/missing bindings without a
+transport call, suppress results after replacement during/after execution, and
+allow a new preview to use the replacement key.
+
+Reviewed existing controls remain in place:
+
+- SQLite directory/file permission repair, regular-file/link rejection, live
+  WAL/SHM permissions, per-connection foreign keys, memory temporaries and
+  `secure_delete` are covered by the storage regressions. The format and migrations
+  are unchanged; these are not encryption or forensic-deletion guarantees.
+- OAuth PKCE/state, temporary loopback callbacks, serialized refresh, disconnect
+  invalidation, OS-only credential storage, fail-closed errors and safe diagnostic
+  codes retain their synthetic regression coverage.
+- API-key inputs clear after submission; failed deletion remains retryable while
+  AI is disabled. Provider keys remain separate from the Gmail connection.
+- Mail/model text is escaped; remote images and attachments are not executed or
+  loaded. Typed IPC rejects extra fields and retired commands. Summary and answers
+  require separate exact-request approval. Local features remain available with
+  external AI disabled; no live provider call was used to establish this.
+
+### Dependency dispositions
+
+Only the following patch versions and their lockfile/checksum entries changed:
+
+| Component                      | Before → after  | Finding and disposition                                                                                                                                                                         |
+| ------------------------------ | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Go minimum/build               | 1.27.2 → 1.27.3 | GO-2026-6809, `crypto/x509`: initial source scan emitted the finding; final source and rebuilt packaged executable scans emitted no findings. The binary's build metadata identifies Go 1.27.3. |
+| Zod, production validation     | 4.6.5 → 4.6.6   | GHSA-mrhx-c7xc-m3w5: oversized collection validation can consume excessive memory. Patched before relying on reachability arguments; IPC frame/schema bounds remain defense in depth.           |
+| Undici, dev-only through jsdom | 7.30.0 → 7.30.1 | GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472 and GHSA-xjj6-f33q-929c. Not shipped as a Node runtime in the desktop app; patched for development/test tooling too.                                   |
+| Tokio through Tauri            | 1.53.2 → 1.53.3 | RUSTSEC-2026-0386, unsound `AsyncFd` constructors: present in the Apple Silicon dependency tree; patched rather than assuming the affected call path is unused.                                 |
+
+Patch evidence: [Go's 1.27.3 release history](https://go.dev/doc/devel/release#go1.27.3),
+[Zod advisory/fixed version](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) and
+[upstream fix](https://github.com/colinhacks/zod/commit/a0ebf970f2d752e5f58527cd2942ff48be4f46bd),
+[Undici's upstream advisory](https://github.com/nodejs/undici/security/advisories/GHSA-xjj6-f33q-929c),
+and [RustSec's Tokio advisory](https://rustsec.org/advisories/RUSTSEC-2026-0386.html).
+No new direct dependency, general upgrade, model/tokenizer change or advisory
+ignore rule was introduced. Go module checksums were unchanged.
+
+The final npm scan has zero known advisories across the 273-dependency inventory.
+Go source and packaged-binary scans used govulncheck 1.9.0 and the served database
+timestamp `2026-10-21T00:27:29Z`. Read JSON `finding` messages, not only exit status:
+the initial JSON-mode scan exited zero while reporting GO-2026-6809.
+
+Cargo-audit 0.22.2 against RustSec commit
+`a78282a1414d6c28cc228c4eae3570451affb0dc` (updated 2026-10-26) reports zero
+vulnerability entries **and five retained warnings**: unmaintained
+`proc-macro-error` 1.0.4 (RUSTSEC-2024-0370), `zbus_names` 4.3.4
+(RUSTSEC-2026-0371), `zvariant` 5.15.0 (RUSTSEC-2026-0370), `zvariant_derive`
+5.15.0 (RUSTSEC-2026-0372), and unsound `glib` 0.18.5 (RUSTSEC-2024-0429).
+The GTK/WebKit Linux dependency path still includes glib; the locked
+`aarch64-apple-darwin` tree does not. These are not silently ignored or resolved by
+this Apple Silicon run. Linux remains unqualified; a compatible upstream stack
+review is required before recommending that target. The unmaintained notices
+remain maintenance risks. Scans do not cover all ONNX native code or OS frameworks
+and do not prove absence of vulnerabilities.
+
+### Repository material and reporting
+
+The working tree was clean before this task. All 431 tracked files were inspected
+with credential signatures, artifact-path checks and an address-domain inventory;
+no suspected live credentials, private mail, databases, build/model artifacts or
+screenshots were identified. The only tracked visual was the source SVG icon.
+There were no staged files. This was a current-tree/index review, not a Git-history
+or exhaustive secret-detection audit. No credential was rotated or history changed.
+Machine-readable audit summaries remain in ignored
+`.cache/security-review/2026-10-26/`; they are not application dependencies.
+
+GitHub's read-only repository API confirmed Issues enabled and private vulnerability
+reporting disabled. [SECURITY.md](../SECURITY.md) therefore gives a public
+contact-request-only issue route, warns against posting sensitive details, and
+does not invent a private email address or response promise. Repository settings
+were not changed. [PRIVACY.md](PRIVACY.md) consolidates actual data handling and
+retains unencrypted-cache, same-user/admin, disconnect-retention, separate AI-key,
+backup/snapshot and approved-external-transmission limits.
+
+### Verification and limits
+
+Frontend typecheck/lint and production build passed with **173 tests**. Rust
+formatting, Clippy with warnings denied and **25 tests** passed using the final
+locked dependency graph. The Apple Silicon app was rebuilt with Go 1.27.3 and
+Tokio 1.53.3, locally ad-hoc signed and verified. Real network-denied packaged
+MiniLM inference passed for the signed app and copied debug/release layouts;
+the two artifact-integrity tests, native CGO/race checks and native WebView/
+Tauri/Go/SQLite authorization/lifecycle smoke test passed. The model descriptor,
+tokenizer/preprocessing identity and pinned resource hashes remain unchanged.
+
+The initial sandboxed full Go run stalled in synthetic loopback OAuth tests and
+was interrupted; it was rerun with local-network permission. Final Go vet,
+ordinary tests and the complete serialized race suite passed. Changed-file
+formatting, local documentation paths/anchors and diff whitespace checks passed.
+No required check remains failed or blocked for this prompt's scope.
+
+No live-mailbox/paid-model evaluation, native keyring integration, Windows/Linux
+runtime qualification, Developer ID signing, notarization or public OAuth
+verification was run. No artifact was published. The remaining warnings and
+earlier quality/latency findings prevent treating these checks as public-release
+certification. Any unresolved reachable high-risk finding blocks a real-mail
+release recommendation, even when the functional checks pass.

@@ -62,6 +62,7 @@ type SummaryRequest struct {
     EmailID  domain.EmailID // application identity; not forwarded to OpenAI
     Revision string         // cached content hash; not forwarded to OpenAI
     Email    Text           // exact approved bounded email payload
+    KeyFingerprint [32]byte // backend-only approval identity; never sent to provider/UI
 }
 
 type SummaryResult struct {
@@ -94,8 +95,12 @@ the preview. This is the implemented limit, superseding larger proposed plan lim
 
 The preview shows the exact email payload, fixed versioned policy, destination,
 model and five-minute expiry. Approval binds to that immutable snapshot, account,
-provider/model and one-use token. Go rechecks the source before dispatch and before
-publishing output. Changing selection, cached content, provider/model/key, disabling
+provider/model, saved-key fingerprint and one-use token. Go rechecks settings,
+key identity and source before dispatch and before publishing output; status also
+rejects a stale result. The adapter compares the loaded OS key against the approved
+fingerprint immediately before HTTP dispatch, including out-of-band key replacement.
+Fingerprints are backend-memory-only and generic request diagnostics are redacted.
+Changing selection, cached content, provider/model/key, disabling
 AI, disconnecting, cancelling or leaving the reader revokes consent or hides stale
 results. No external AI request occurs during settings, status, sync or preview.
 

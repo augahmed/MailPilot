@@ -259,7 +259,9 @@ bytes; summary at 4,000; each extraction array at ten verbatim source excerpts o
 500 bytes each. Unknown/unsupported output rejects. Raw provider response/error
 bodies never cross IPC. Responses are capped at 48 KiB after JSON escaping.
 Consent is single use, expires in five minutes and is invalidated by source,
-settings, account or reader-lifecycle changes. Provider calls are bounded background
+settings, saved-key identity, account or reader-lifecycle changes. The key fingerprint
+stays in backend memory; it is not an IPC field. The adapter verifies the loaded
+key immediately before dispatch. Provider calls are bounded background
 jobs; status never uploads mail and cancellation suppresses late output.
 
 ## Approved email questions (additive protocol-v1 extension)

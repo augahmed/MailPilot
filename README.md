@@ -28,6 +28,10 @@ Start with the [documentation index](docs/README.md):
 [privacy and local data](docs/PRIVACY.md), and
 [dated quality/security evaluation](docs/EVALUATION.md). The evaluation records
 unresolved findings; this developer build is not a verified public release.
+See [SECURITY.md](SECURITY.md) for the threat model, reporting route and known
+limits, and the [2026-10-26 security follow-up](docs/EVALUATION.md#security-follow-up-2026-10-26)
+for the targeted dependency patches and remaining platform warnings. The mail
+cache remains unencrypted by MailPilot; use a dedicated test account for demos.
 Engineering scope remains in [AGENTS.md](AGENTS.md) and the
 [product plan](docs/PRODUCT_PLAN.md). [Historical records](docs/archive/README.md)
 preserve migration/recovery evidence without defining current capabilities.
@@ -45,7 +49,7 @@ remain available independently of retired generation workflows.
 
 ## Prerequisites
 
-- Go **1.27.2+** (the patched version required by `backend/go.mod`; Go may download it automatically).
+- Go **1.27.3+** (the security patch required by `backend/go.mod`; Go may download it automatically).
 - Node.js **24.13.1+** and npm (verified with Node 24.13.1 / npm 11.8.0).
 - Rust **1.99+**, Cargo, rustfmt and Clippy (verified with Rust 1.99.0).
 - Native platform prerequisites from [Tauri](https://v2.tauri.app/start/prerequisites/). On macOS, install Xcode Command Line Tools with `xcode-select --install` if missing. Windows requires MSVC build tools and WebView2; Linux requires the documented WebKitGTK and system development packages.

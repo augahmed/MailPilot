@@ -11,6 +11,7 @@ historical reports and future implementation prompts do not authorize features.
 | [Gmail setup](GMAIL_SETUP.md)           | User-owned Desktop OAuth client, test-account sign-in and troubleshooting |
 | [Architecture](ARCHITECTURE.md)         | Go/React/Rust ownership, shared local pipeline and trust boundaries       |
 | [Privacy and local storage](PRIVACY.md) | Credential handling, unencrypted cache, external AI and retained data     |
+| [Security policy](../SECURITY.md)       | Threat model, reporting route, platform support and known limits          |
 | [Evaluation](EVALUATION.md)             | Dated synthetic quality/security results and unresolved findings          |
 
 External AI is optional. The [AI contract](GENERATIVE_AI.md) describes the existing

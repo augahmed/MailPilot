@@ -1,6 +1,6 @@
 module mailpilot.local/core
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/yalue/onnxruntime_go v1.23.0

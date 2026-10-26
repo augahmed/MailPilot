@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"mailpilot.local/core/internal/ai"
 	"mailpilot.local/core/internal/credentials"
 	"mailpilot.local/core/internal/domain"
@@ -280,9 +281,9 @@ func TestSettingsFailClosedAndDoNotReturnKeys(t *testing.T) {
 	}
 }
 func TestSummaryCancellationAndSettingsChangeSuppressLateResults(t *testing.T) {
-	for _, kind := range []string{"cancel", "settings", "session", "source"} {
+	for _, kind := range []string{"cancel", "settings", "session", "source", "key"} {
 		t.Run(kind, func(t *testing.T) {
-			s, db, fake, _ := aiFixture(t)
+			s, db, fake, keys := aiFixture(t)
 			started := make(chan struct{})
 			release := make(chan struct{})
 			fake.invoke = func(context.Context, ai.SummaryRequest) (ai.SummaryResult, error) {
@@ -300,6 +301,10 @@ func TestSummaryCancellationAndSettingsChangeSuppressLateResults(t *testing.T) {
 				t.Fatal("unbounded AI concurrency")
 			}
 			switch kind {
+			case "key":
+				if err := keys["openai"].Save(context.Background(), credentials.NewSecret("synthetic-replacement")); err != nil {
+					t.Fatal(err)
+				}
 			case "cancel":
 				s.Summarize(context.Background(), SummarizeEmailRequest{Operation: "cancel", AccountID: "a", EmailID: "selected", JobID: running.JobID})
 			case "settings":
@@ -317,6 +322,38 @@ func TestSummaryCancellationAndSettingsChangeSuppressLateResults(t *testing.T) {
 			r := waitSummary(t, s)
 			if r.Result != nil {
 				t.Fatal("late private result exposed")
+			}
+		})
+	}
+}
+
+func TestSummaryKeyReplacementRevokesPreviewAndCompletedResult(t *testing.T) {
+	for _, completed := range []bool{false, true} {
+		t.Run(fmt.Sprint(completed), func(t *testing.T) {
+			s, _, fake, keys := aiFixture(t)
+			p := previewSummary(t, s)
+			if completed {
+				approveSummary(t, s, p)
+				if r := waitSummary(t, s); r.Result == nil {
+					t.Fatal("fixture did not complete", r.Code)
+				}
+			}
+			if err := keys["openai"].Save(context.Background(), credentials.NewSecret("synthetic-replacement")); err != nil {
+				t.Fatal(err)
+			}
+			if completed {
+				r := s.Summarize(context.Background(), SummarizeEmailRequest{Operation: "status", AccountID: "a", EmailID: "selected"})
+				if r.Result != nil || r.Code != "stale_preview" {
+					t.Fatal("stale completed result remained visible")
+				}
+			} else if r := approveSummary(t, s, p); r.Code != "stale_preview" || fake.count() != 0 {
+				t.Fatal("key replacement did not revoke preview", r.Code)
+			}
+			// A new exact preview can use the replacement key.
+			p = previewSummary(t, s)
+			approveSummary(t, s, p)
+			if r := waitSummary(t, s); r.Result == nil {
+				t.Fatal("fresh consent failed", r.Code)
 			}
 		})
 	}

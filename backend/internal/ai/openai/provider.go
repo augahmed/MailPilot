@@ -77,7 +77,7 @@ func (p *Provider) SummarizeEmail(ctx context.Context, r ai.SummaryRequest) (ai.
 	if err := r.Validate(); err != nil {
 		return ai.SummaryResult{}, err
 	}
-	text, err := p.complete(ctx, ai.Instructions(), "One untrusted cached email:\n"+r.Email.Reveal(), ai.MaxOutputTokens, nil)
+	text, err := p.complete(ctx, ai.Instructions(), "One untrusted cached email:\n"+r.Email.Reveal(), ai.MaxOutputTokens, r.KeyFingerprint)
 	if err != nil {
 		return ai.SummaryResult{}, err
 	}
@@ -105,7 +105,7 @@ func (p *Provider) SummarizeEmail(ctx context.Context, r ai.SummaryRequest) (ai.
 }
 
 // complete is one bounded HTTPS dispatch. No retries, tools, history or expansion.
-func (p *Provider) complete(ctx context.Context, instructions, input string, maxTokens int, fingerprint *[32]byte) (string, error) {
+func (p *Provider) complete(ctx context.Context, instructions, input string, maxTokens int, fingerprint [32]byte) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -127,14 +127,12 @@ func (p *Provider) complete(ctx context.Context, instructions, input string, max
 	if err != nil || key.Empty() {
 		return "", ai.ErrCredentials
 	}
-	if fingerprint != nil {
-		expected := ai.KeyFingerprint(key)
-		if subtle.ConstantTimeCompare(expected[:], fingerprint[:]) != 1 {
-			return "", ai.ErrConsent
-		}
-	}
 	if v := key.Reveal(); len(v) > 2048 || strings.IndexFunc(v, func(r rune) bool { return r < 33 || r > 126 }) >= 0 {
 		return "", ai.ErrCredentials
+	}
+	expected := ai.KeyFingerprint(key)
+	if subtle.ConstantTimeCompare(expected[:], fingerprint[:]) != 1 {
+		return "", ai.ErrConsent
 	}
 	// Fixed framing only. No extra email metadata, hidden history or tools.
 	body, err := json.Marshal(request{p.model, instructions, []inputMessage{
@@ -219,7 +217,7 @@ func (p *Provider) AnswerWithEvidence(ctx context.Context, r ai.AnswerRequest) (
 	if err != nil {
 		return ai.AnswerResult{}, err
 	}
-	text, err := p.complete(ctx, ai.AnswerInstructions(), input.Reveal(), ai.MaxAnswerOutputTokens, &r.KeyFingerprint)
+	text, err := p.complete(ctx, ai.AnswerInstructions(), input.Reveal(), ai.MaxAnswerOutputTokens, r.KeyFingerprint)
 	if err != nil {
 		return ai.AnswerResult{}, err
 	}

@@ -199,7 +199,25 @@ func summaryPayload(row repository.StoredEmail) (ai.SummaryRequest, bool, error)
 	request := ai.SummaryRequest{EmailID: e.ID, Revision: row.ContentHash, Email: ai.NewText(clipSummary(text, ai.MaxInputBytes))}
 	return request, truncated, request.Validate()
 }
-func (s *AIService) fresh(ctx context.Context, account domain.AccountID, source ai.SummaryRequest) error {
+func (s *AIService) fresh(ctx context.Context, account domain.AccountID, source ai.SummaryRequest, identity ai.Identity) error {
+	cfg, err := s.settings.Settings(ctx, account)
+	if err != nil {
+		return err
+	}
+	if !cfg.Enabled || cfg.Provider != identity.Provider || cfg.Model != identity.Model {
+		return ai.ErrConsent
+	}
+	adapter, ok := s.providers[cfg.Provider]
+	if !ok {
+		return ai.ErrConsent
+	}
+	key, err := adapter.Keys(account).Load(ctx)
+	if err != nil || key.Empty() {
+		return ai.ErrCredentials
+	}
+	if !source.MatchesKey(key) {
+		return ai.ErrConsent
+	}
 	row, err := s.emails.Get(ctx, account, source.EmailID)
 	if err != nil {
 		return err
@@ -252,7 +270,7 @@ func (s *AIService) Summarize(ctx context.Context, p SummarizeEmailRequest) Summ
 			return emptySummary()
 		}
 		if s.snapshot.EmailID != "" {
-			if err = s.fresh(ctx, account, s.snapshot); err != nil {
+			if err = s.fresh(ctx, account, s.snapshot, ai.Identity{Provider: s.response.Provider, Model: s.response.Model}); err != nil {
 				s.clearLocked()
 				return fail(aiWorkflowCode(err))
 			}
@@ -287,6 +305,11 @@ func (s *AIService) Summarize(ctx context.Context, p SummarizeEmailRequest) Summ
 		if err != nil {
 			return fail("context_unavailable")
 		}
+		key, err := adapter.Keys(account).Load(ctx)
+		if err != nil || key.Empty() {
+			return fail("ai_credentials_unavailable")
+		}
+		payload.KeyFingerprint = ai.KeyFingerprint(key)
 		engine, err := adapter.New(account, cfg.Model)
 		if err != nil {
 			return fail(aiWorkflowCode(err))
@@ -312,7 +335,8 @@ func (s *AIService) Summarize(ctx context.Context, p SummarizeEmailRequest) Summ
 	if s.consent == nil || s.response.State != "preview" || s.response.PreviewID != p.PreviewID || s.response.EmailID != p.EmailID || s.response.Provider != cfg.Provider || s.response.Model != cfg.Model {
 		return fail("stale_preview")
 	}
-	if err = s.fresh(ctx, account, s.snapshot); err != nil {
+	identity := ai.Identity{Provider: cfg.Provider, Model: cfg.Model}
+	if err = s.fresh(ctx, account, s.snapshot, identity); err != nil {
 		s.clearLocked()
 		return fail(aiWorkflowCode(err))
 	}
@@ -335,12 +359,12 @@ func (s *AIService) Summarize(ctx context.Context, p SummarizeEmailRequest) Summ
 		defer jobCancel()
 		defer stopJob()
 		var result ai.SummaryResult
-		err := s.fresh(job, account, source)
+		err := s.fresh(job, account, source, identity)
 		if err == nil {
 			result, err = consent.Execute(job, account, p.PreviewID, p.Approved)
 		}
 		if err == nil {
-			err = s.fresh(job, account, source)
+			err = s.fresh(job, account, source, identity)
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()

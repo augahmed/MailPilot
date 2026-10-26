@@ -4,10 +4,12 @@ package ai
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"mailpilot.local/core/internal/credentials"
 	"mailpilot.local/core/internal/domain"
 	"strings"
 	"unicode/utf8"
@@ -46,9 +48,21 @@ func (Text) MarshalJSON() ([]byte, error) { return []byte(`"[AI text redacted]"`
 // SummaryRequest carries exactly one selected cached email snapshot. There is no
 // user prompt, thread expansion, retrieval context, tool list or Gmail authority.
 type SummaryRequest struct {
-	EmailID  domain.EmailID
-	Revision string
-	Email    Text
+	EmailID        domain.EmailID
+	Revision       string
+	Email          Text
+	KeyFingerprint [32]byte
+}
+
+func (SummaryRequest) Format(w fmt.State, _ rune) {
+	_, _ = io.WriteString(w, "[AI summary request redacted]")
+}
+func (SummaryRequest) MarshalJSON() ([]byte, error) {
+	return []byte(`"[AI summary request redacted]"`), nil
+}
+func (r SummaryRequest) MatchesKey(key credentials.Secret) bool {
+	hash := KeyFingerprint(key)
+	return !key.Empty() && subtle.ConstantTimeCompare(hash[:], r.KeyFingerprint[:]) == 1
 }
 
 func (r SummaryRequest) Validate() error {

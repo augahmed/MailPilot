@@ -44,6 +44,13 @@ OS credential storage with no file/SQL/environment fallback. Access tokens remai
 in backend memory. Developer desktop OAuth client configuration is separate from
 user credentials.
 
+Summary and evidence approvals keep a key fingerprint in backend memory, never
+in returned DTOs, logs or SQLite. Key replacement invalidates a pending approval
+and suppresses stale output. The adapter checks the key again immediately before
+dispatch. Settings changes and disconnect clear sensitive in-memory workflow
+state; this does not guarantee physical erasure of process memory or swap.
+Submitted API-key inputs clear immediately, including failed submissions.
+
 Gmail sync and explicitly confirmed label operations contact Google. Selected-mail
 Summary and email questions optionally contact the selected external AI provider
 only after their separate exact-request approval. The shipped functional provider
@@ -51,6 +58,12 @@ is OpenAI. Provider charges and retention policies apply; `store:false` is not a
 zero-retention promise. Cancellation cannot recall already submitted content.
 The app adds no background external AI, default telemetry, or persistent answer
 history. See [AI consent](GENERATIVE_AI.md) and [email questions](EMAIL_QUESTIONS.md).
+
+Application diagnostics use fixed events and safe error codes rather than tokens,
+keys, mail or raw provider responses. This is not control over operating-system
+crash reports, screenshots or logs captured by development tools. Use synthetic
+mail when sharing diagnostics. See [the security policy](../SECURITY.md) for the
+threat model, reporting route and remaining qualification limits.
 
 ## Disconnect and key removal
 
