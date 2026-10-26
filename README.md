@@ -23,21 +23,19 @@ post-install model download. Target English first and about 10,000 cached messag
 AI replies/composition, new Gmail drafts, sending and Chrome integration are outside
 the immediate scope. Existing Summary remains until a later tested transition.
 
-Read [AGENTS.md](AGENTS.md) for engineering rules, the single
-[product plan](docs/PRODUCT_PLAN.md) for implemented scope and limits and
-[architecture](docs/ARCHITECTURE.md) for implemented runtime boundaries.
-[Legacy records](docs/archive/LEGACY_FEATURES.md) preserve migration/recovery history.
+Start with the [documentation index](docs/README.md):
+[Gmail setup](docs/GMAIL_SETUP.md), [architecture](docs/ARCHITECTURE.md),
+[privacy and local data](docs/PRIVACY.md), and
+[dated quality/security evaluation](docs/EVALUATION.md). The evaluation records
+unresolved findings; this developer build is not a verified public release.
+Engineering scope remains in [AGENTS.md](AGENTS.md) and the
+[product plan](docs/PRODUCT_PLAN.md). [Historical records](docs/archive/README.md)
+preserve migration/recovery evidence without defining current capabilities.
 
-This bootstrap opens a native desktop window and checks the real Go backend and SQLite database. A healthy startup displays:
-
-```text
-MailPilot
-Local-first email assistant
-
-Status:
-Backend connected
-Database connected
-```
+The desktop application opens a native window, starts the fixed Go backend and
+checks SQLite. Before Gmail is connected it shows the sign-in screen; a healthy
+storage check appears in the footer as **Local storage ready · v0.1.0**. Connecting
+Gmail opens the system browser. Reading cached mail requires an authorized session.
 
 Gmail OAuth, OS credential storage, bounded initial/incremental sync, cached reading,
 editable categories, deterministic category review, explained phishing risk and
@@ -62,7 +60,11 @@ node --version
 rustc --version
 ```
 
-The native build and smoke test have been verified on Apple Silicon macOS. Windows/Linux targets are planned and need native qualification. Cross-compilation is deliberately rejected by the sidecar build script; build on the target OS/architecture.
+The native build and smoke test target Apple Silicon macOS. Local inference needs
+macOS 13.4+; ordinary features retain the app's macOS 13.0 baseline. Windows/Linux
+and other architectures require native qualification and currently have an
+unavailable embedding adapter. Cross-compilation is deliberately rejected by the
+sidecar build script; build on the target OS/architecture.
 
 Installed users need no Python, native runtime installation or model download.
 The model/runtime are bundled; local inference is optional and explicitly started.
@@ -97,10 +99,11 @@ On macOS, from the repository root:
 
 ```sh
 npm run build -- --bundles app
+codesign --force --deep --sign - src-tauri/target/release/bundle/macos/MailPilot.app
 open src-tauri/target/release/bundle/macos/MailPilot.app
 ```
 
-The build includes frontend type checking, a production Vite build, the Go executable, and native Rust compilation. The resulting application runs without Vite, Node, Go or Cargo installed. `npm run build` without `--bundles app` builds the platform's default installer formats; installer signing/notarization and public distribution are not configured in this bootstrap. The local development bundle is not a signed/notarized production release.
+The build includes frontend type checking, a production Vite build, the Go executable, and native Rust compilation. The resulting application runs without Vite, Node, Go or Cargo installed. The `codesign` step above adds an **ad-hoc signature for local developer testing**; it does not provide Developer ID signing, notarization or public-distribution qualification. `npm run build` without `--bundles app` builds the platform's default installer formats; public distribution signing/notarization is not configured.
 
 The packaged macOS executable is `src-tauri/target/release/bundle/macos/MailPilot.app/Contents/MacOS/mailpilot`. Native binaries and generated assets are ignored by Git; the source SVG, manifests, `package-lock.json`, `backend/go.sum` and `src-tauri/Cargo.lock` are source-controlled.
 
@@ -124,6 +127,15 @@ Default desktop locations:
 SQLite uses WAL, a five-second busy timeout, foreign keys on each connection, FULL synchronization, and one pooled connection. Startup applies transactional numbered SQL migrations with recorded checksums; altered migration history and future schemas are rejected. Current migrations 001–021 retain mail/cache, category/review, label/risk journals, incremental checkpoints, historical vector/draft structures and selected AI-provider settings. Migration 015 adds shared chunk/embedding storage and revision state; 016 adds chunk provenance/context and projected body coverage. Migration 017 adds durable local jobs and model identities without changing historical migrations. Manual sync prepares cached chunks; the explicit local index job generates/persists vectors. Shared exact retrieval is implemented. Migration 018 adds category prototypes and explicit examples through the same local coordinator; 019 adds versioned semantic assessments and manual primary preferences. Migration 020 adds an FTS5 index over the shared passages, maintained by triggers. Migration 021 scopes index-driven classification invalidation to the affected email while retaining shared category/example fences. Historical vector tables are not an active index. See [schema responsibilities](docs/ARCHITECTURE.md#implemented-persistence-and-immutable-history) for the preserved migration groups. SQLite files are not encrypted.
 
 Go emits structured JSON diagnostics to stderr; stdout belongs exclusively to private IPC. Logs omit secrets, message content and filesystem paths. This phase has no persistent log files or telemetry.
+
+SQLite startup also validates and repairs permissions on existing WAL/SHM/rollback
+journals, rejects unsafe linked files, keeps query temporaries in memory, and
+enables ordinary row secure-delete on every connection. These protections do not
+encrypt the cache or guarantee erasure. **Privacy and local data** is available
+before sign-in and in the account menu; see [privacy behavior and limits](docs/PRIVACY.md).
+Disconnect retains local mail/recovery data and does not remove AI provider keys.
+Remove the saved provider key in Optional AI settings before disconnecting; failed
+key removal can be retried while AI is disabled.
 
 ## Verification
 
@@ -238,26 +250,48 @@ configuration.
 
 ## User-defined categories
 
-Connect an account and use **Refresh categories** to manage its local definitions. Six descriptive defaults are created once per account: Jobs (applications and interviews), School, Receipts, Finance, Newsletters and Personal. Edited or referenced legacy definitions are preserved. Create/edit a name and meaningful description, enable or disable a category, or confirm deletion. A category referenced by cached email assignments or stored analysis cannot be deleted; disable it instead. Definition changes persist in SQLite migration 4 and remain local. Changing categories does not run classification or change email assignments. Use **Show representation** to inspect contributing definition text and deliberately confirm example emails. Start or resume **Local Email Index** to build pending prototypes locally. This does not classify messages. See [category vectors](docs/CATEGORY_VECTORS.md). Manual review uses the starter rule engine described below.
+Connect an account and open **Categories & Classification** to manage its local
+definitions. Six descriptive defaults are created once per account: Jobs, School,
+Receipts, Finance, Newsletters and Personal. Edited or referenced legacy definitions
+are preserved. Create/edit names and descriptions, enable/disable categories, or
+confirm deletion of an unreferenced category. Definition changes remain local and
+invalidate dependent representations/assessments; they do not authorize Gmail writes
+or automatically assign mail. **Show representation** explains contributing text
+and explicitly confirmed examples. Start or resume **Local Email Index** to build
+pending prototypes; the shared coordinator then assesses mail after prototype work.
+See [category vectors](docs/CATEGORY_VECTORS.md) and
+[semantic classification](docs/SEMANTIC_CLASSIFICATION.md).
 
 ## Local classification review
 
-After connecting and syncing an account, open **Classification review** and choose **Classify this page**. MailPilot reviews up to five cached emails, saves the results, and shows each email’s predicted category, confidence and reasons. Use the previous/next review-page controls to cover more downloaded messages. **Refresh reviews** loads saved assessments without running the classifier. Reading results uses local SQLite and requires no AI provider/key.
+After connecting and syncing, open **Categories & Classification** and choose
+**Classify this page**. The UI reviews up to 25 cached emails using bounded five-email
+IPC pages. It reuses saved compatible email vectors and category prototypes, with
+decisive rule fallback and abstention. This action does not run embedding inference
+or external AI. **Refresh reviews** loads saved results without reassessment.
 
-Review uses deterministic rules with the existing conservative direct-rule gate
-(0.60). No model is constructed, configured or invoked. Rule strength is a heuristic,
-not a probability. Ambiguous or weak evidence abstains. Older semantic/hybrid
-assessments with a different engine identity/version are stale and need explicit
-re-review before a new organization preview. Category descriptions do not train a
-model; custom categories without a matching rule may remain unsuggested.
+Review distinguishes Suggested, Assigned and Unclassified mail, explains evidence,
+and supports explicit local primary preferences. Cosine similarity and rule strength
+are different heuristics, not calibrated probabilities. Missing/incomplete vectors,
+weak evidence and conflicts can leave mail unclassified. Category descriptions
+are embedded for prototypes rather than training a new model. Changed source,
+category or model identities invalidate dependent results before Gmail preview.
 
 ## Safe Gmail organization
 
-After classifying mail, open **Gmail organization**, refresh the selection table, and select predictions. **Dry Run** is on by default: it reads live Gmail labels and shows each proposed label creation/addition without writing Gmail or the action journal. Choose **Back to selection**, turn Dry Run off, and generate a fresh apply preview. Review the current labels, proposed MailPilot label, confidence and operation list; check the confirmation box and apply. Previews expire after five minutes and changed mail/predictions/categories/labels require a fresh preview. Each batch contains at most five emails.
+Open **Gmail Organization**, refresh the selection table, and select up to 25 eligible
+emails. **Preview Label Changes** refreshes the selected source snapshots and opens
+a separate review screen. Inspect only the selected changes, then choose **Confirm
+Changes** to apply that exact saved plan or **Go Back** to revise the selection.
+Previews expire after five minutes; changed source/category/classification/label
+evidence requires a fresh preview. Successful apply returns to selection with a
+verified confirmation and **Undo**. Uncertain or partial outcomes retain recovery
+controls. The typed read-only `dry_run` operation remains for compatibility, but
+it is not a separate step in the current UI.
 
-Categories map to `MailPilot/<category name>` user labels. Existing exact-name labels are reused; missing ones are created when a preview is confirmed. MailPilot never deletes labels/emails, archives messages or changes system labels. Definition/name changes affect future mappings without renaming old Gmail labels. Completed writes and partial/uncertain outcomes persist under mailbox_actions. **Stop organization** cancels remaining work; a dispatched write can remain uncertain. **Reconcile interrupted batch** reads Gmail and records what can be established without replaying a write.
+Categories map to `MailPilot/<category name>` user labels. Existing exact-name labels are reused; missing ones are created when a preview is confirmed. MailPilot never deletes labels/emails, archives messages or changes system labels. Definition/name changes affect future mappings without renaming old Gmail labels. Completed writes and partial/uncertain outcomes persist in the organization journal. **Stop** cancels remaining work; a dispatched write can remain uncertain. Recovery reads Gmail and records what can be established without replaying a write.
 
-**Preview undo last batch** shows only label memberships MailPilot successfully added and verified. Confirm undo separately. Inbox, pre-existing and unrelated Gmail labels are preserved; created labels stay in Gmail. Ambiguous additions are excluded from undo because ownership cannot be proven. Repeated confirmed undo is rejected, and partial/conflicting outcomes remain visible. Concurrent changes to the same label membership cannot be perfectly attributed. Organization uses synthetic tests; no personal mailbox is modified by the validation suite.
+**Undo** prepares a preview of only label memberships MailPilot successfully added and verified. Confirm undo separately. Inbox, pre-existing and unrelated Gmail labels are preserved; created labels stay in Gmail. Ambiguous additions are excluded from undo because ownership cannot be proven. Repeated confirmed undo is rejected, and partial/conflicting outcomes remain visible. Concurrent changes to the same label membership cannot be perfectly attributed. Organization uses synthetic tests; no personal mailbox is modified by the validation suite.
 
 ## Phishing feature extraction
 
@@ -265,11 +299,15 @@ The Go extractor returns structured address/authentication, URL/link, attachment
 
 ### Review high-risk mail in Gmail organization
 
-Choose **Potential Phishing** in **Review suggestions**. HIGH-risk messages show their score, threshold and ordered reasons. Select messages and run the default **Dry Run** to inspect live labels without Gmail or action-journal writes. To apply, turn off Dry Run, generate a fresh preview, review the explanations and exact operations, then explicitly confirm. Missing `Potential Phishing` user labels are created through the existing label workflow. No message is deleted, archived or moved to Spam.
+Choose **Potential Phishing** in **Review suggestions**. HIGH-risk messages show
+their score, threshold and ordered reasons. Select messages, choose **Preview Label
+Changes**, inspect the exact operations, and explicitly confirm the saved preview.
+Missing `Potential Phishing` user labels are created only through that confirmed
+workflow. No message is deleted, archived or moved to Spam.
 
-Set `MAILPILOT_RISK_HIGH_THRESHOLD=75` before starting the desktop app to change HIGH from its default of 60; the core also accepts `--risk-high-threshold 75`. Supported values are 31–100 (MEDIUM starts at 30). Restart after changing configuration; existing previews with the old scoring version cannot be applied. Scores are heuristics, not proof of phishing or guarantees of safety. Dry Run may refresh local risk assessments.
+Set `MAILPILOT_RISK_HIGH_THRESHOLD=75` before starting the desktop app to change HIGH from its default of 60; the core also accepts `--risk-high-threshold 75`. Supported values are 31–100 (MEDIUM starts at 30). Restart after changing configuration; existing previews with the old scoring version cannot be applied. Scores are heuristics, not proof of phishing or guarantees of safety. Preparing a preview may refresh local risk assessments.
 
-**Preview undo last batch** and its separate confirmation remove only verified additions, preserving pre-existing and unrelated labels. Created labels remain in Gmail. Interrupted or uncertain writes require reconciliation first. Schema migration 7 preserves existing plans and makes category references optional for risk proposals.
+**Undo** and its separate preview/confirmation remove only verified additions, preserving pre-existing and unrelated labels. Created labels remain in Gmail. Interrupted or uncertain writes require reconciliation first. Schema migration 7 preserves existing plans and makes category references optional for risk proposals.
 
 ## Optional AI questions, summaries and historical draft recovery
 
@@ -301,29 +339,15 @@ fetch. Attachment downloads and rich HTML display are not implemented.
 
 ### Documentation and historical compatibility
 
-- [Product plan](docs/PRODUCT_PLAN.md): the sole scope/milestone authority.
-- [Architecture](docs/ARCHITECTURE.md): current implementation, intended shared
-  pipeline, ownership, source/index lifecycle and security boundaries.
-- [IPC contracts](contracts/README.md): implemented methods and synthetic examples;
-  archival fixtures do not reactivate retired Ask/search/draft operations.
-- [Gmail setup](docs/GMAIL_SETUP.md), [AI boundaries](docs/GENERATIVE_AI.md),
-  [risk features](docs/PHISHING_FEATURES.md) and
-  [historical draft recovery](docs/REPLY_DRAFTING.md): focused technical references.
-- [Legacy compatibility records](docs/archive/LEGACY_FEATURES.md): retired-feature
-  compatibility, superseded plans and migration/recovery evidence.
+Use the [documentation index](docs/README.md) for the short getting-started path
+and grouped technical references. The [archive](docs/archive/README.md) keeps
+superseded plans and dated review evidence separate from current contracts.
+Historical fixtures never reactivate retired Ask/search/draft operations.
 
-Installed users perform no model installation; native developers prepare pinned
-artifacts during the build as described in the local embedding contract. Archived plans and old prompt
-numbers are not implementation instructions.
-
-Local inference development, measured model/memory sizes, offline packaging checks
-and macOS 13.4+ limitations: [local embedding provider](docs/LOCAL_EMBEDDING.md).
-
-Resumable indexing behavior, coverage definitions, synthetic measurements and native
-verification: [local email indexing](docs/LOCAL_INDEXING.md).
-
-Reader/chunker artifact cleanup, image descriptions and preprocessing refresh:
-[shared readable email text](docs/CLEAN_TEXT.md).
+Installed users perform no model installation. Developers prepare pinned resources
+during the build; [local embedding](docs/LOCAL_EMBEDDING.md) documents offline
+verification and native limits. Future task prompts are engineering plans, not
+current features or implementation authorization.
 
 ## Semantic classification
 

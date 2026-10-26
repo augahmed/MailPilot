@@ -88,6 +88,43 @@ it("keeps provider disabling functional and clears any unsubmitted key", async (
 
 afterEach(() => vi.useRealTimers());
 
+it("allows retrying key removal after AI was disabled but credential deletion failed", async () => {
+  const disabled = aiSettingsSchema.parse({
+    ...fixture.response,
+    enabled: false,
+  });
+  vi.mocked(manageAISettings)
+    .mockResolvedValueOnce(disabled)
+    .mockResolvedValueOnce(
+      aiSettingsSchema.parse({
+        ...disabled,
+        code: "ai_credentials_unavailable",
+      }),
+    )
+    .mockResolvedValue(disabled);
+  render(<AISettings />);
+  const remove = await screen.findByRole("button", {
+    name: "Disable AI and remove selected provider key",
+  });
+  expect(remove).toBeEnabled();
+  fireEvent.change(screen.getByLabelText("Provider API key"), {
+    target: { value: "unsubmitted-secret" },
+  });
+  fireEvent.click(remove);
+  expect(screen.getByLabelText("Provider API key")).toHaveValue("");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "ai_credentials_unavailable",
+  );
+  await waitFor(() => expect(remove).toBeEnabled());
+  fireEvent.click(remove);
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  expect(manageAISettings).toHaveBeenLastCalledWith({
+    operation: "disable",
+    accountId: "fixture-account",
+  });
+  expect(remove).toBeEnabled();
+});
+
 it("removes a transient settings error after a successful status retry", async () => {
   vi.useFakeTimers();
   vi.mocked(manageAISettings).mockRejectedValueOnce(

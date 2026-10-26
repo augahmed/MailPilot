@@ -43,28 +43,17 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	if err := os.Chmod(dataDir, 0700); err != nil {
 		return nil, err
 	}
+	if err := prepareDatabaseFiles(dataDir); err != nil {
+		return nil, err
+	}
 	path := filepath.Join(dataDir, "mailpilot.db")
-	if info, err := os.Lstat(path); err == nil {
-		if !info.Mode().IsRegular() {
-			return nil, errors.New("database must be a regular file")
-		}
-	} else if !os.IsNotExist(err) {
-		return nil, err
-	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		return nil, err
-	}
-	if err := file.Chmod(0600); err != nil {
-		_ = file.Close()
-		return nil, err
-	}
-	if err := file.Close(); err != nil {
-		return nil, err
-	}
 	uri := url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
 	query := url.Values{}
-	for _, pragma := range []string{"foreign_keys(1)", "busy_timeout(5000)", "journal_mode(WAL)", "synchronous(FULL)"} {
+	// Apply on every connection, including replacements opened by database/sql.
+	// Memory-only temporary tables/sorts reduce plaintext query spills. Secure
+	// delete reduces ordinary deleted-row remnants; neither setting encrypts the
+	// database or guarantees erasure of FTS, WAL, filesystem snapshots or backups.
+	for _, pragma := range []string{"foreign_keys(1)", "busy_timeout(5000)", "temp_store(MEMORY)", "secure_delete(ON)", "journal_mode(WAL)", "synchronous(FULL)"} {
 		query.Add("_pragma", pragma)
 	}
 	uri.RawQuery = query.Encode()

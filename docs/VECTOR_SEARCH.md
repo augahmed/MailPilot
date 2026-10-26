@@ -81,7 +81,7 @@ query/filter/result state and restores keyboard focus to the originating button
 No mailbox read-state change is performed.
 
 See the strict [wire fixture](../contracts/vector-search-v1.json) and
-[IPC contract](../contracts/README.md#local-vector-search-additive-protocol-v1-extension).
+[IPC contract](../contracts/README.md#local-search-additive-protocol-v1-extension).
 The retired `search.semantic` and `ask.manage` operations remain rejected.
 
 ## Synthetic relevance evaluation

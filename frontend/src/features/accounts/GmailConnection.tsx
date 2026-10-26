@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import type { GmailStatus } from "../../lib/ipc/client";
 import type { GmailConnectionState } from "./useGmailConnection";
 
@@ -132,9 +133,14 @@ export function GmailConnection({
         )}
       </div>
       <p className="privacy-note">
-        Your cached email, search, and classification stay on this device.
-        Optional external AI only receives excerpts you explicitly approve.
+        Email is cached on this device. MailPilot does not encrypt the local
+        cache. Optional external AI receives only the content you explicitly
+        approve.
       </p>
+      <details className="connection-details">
+        <summary>Privacy and local data</summary>
+        <PrivacyNotice />
+      </details>
       <details className="connection-details">
         <summary>About Google permissions</summary>
         <p>

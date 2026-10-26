@@ -38,13 +38,15 @@ search and approved-generation jobs have no durable indexing queue of their own.
 
 ## Implemented persistence
 
-The executable schema is migrations **001–020**, unchanged byte-for-byte. There is
+The executable schema is migrations **001–021**, unchanged byte-for-byte. There is
 one SQLite database with one pooled Go connection, foreign keys on every connection,
 WAL, FULL synchronization, busy timeout and checksummed transactional migrations.
 
 Migrations 015/016 own shared chunks/provenance; 017 owns durable job/model identities;
 018 owns category prototypes and confirmed examples; 019 owns semantic assessment
 and primary-preference revisions; 020 owns external-content FTS5 over shared passages.
+Migration 021 scopes index-driven assessment invalidation to the affected email
+while retaining the shared category/example revision fences.
 See [migration responsibilities](ARCHITECTURE.md#implemented-persistence-and-immutable-history).
 Original cached text/HTML, headers, completeness and provider identities remain
 separate from derived text; no migration guesses or reinterprets old vectors.

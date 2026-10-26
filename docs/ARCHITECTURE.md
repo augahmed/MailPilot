@@ -412,6 +412,14 @@ key inputs/sensitive session state. Keep cache-clear, disconnect and Gmail delet
 distinct; disclose retained journal evidence and no forensic-erasure guarantee.
 No user data, model binaries or generated build outputs are committed.
 
+Storage hardening validates the database and existing WAL/SHM/rollback journal
+before SQLite can read/replay them. All must be regular files without symlinks;
+macOS/Linux also reject hardlinks and repair modes to `0600` under the `0700`
+app-data directory. Each connection sets `temp_store=MEMORY` and `secure_delete=ON`.
+Neither protects against same-user processes, encrypts mail, nor erases FTS/WAL,
+snapshots or backups. [Privacy disclosures](PRIVACY.md) are accessible before
+sign-in and from the account menu. AI-key deletion can be retried while disabled.
+
 Verification covers account/source/model isolation, source and
 category invalidation, immutable migration/legacy-plan upgrades, crash/stale-worker
 publication, zero hidden AI disclosure, citation/injection/disabled-AI cases, local

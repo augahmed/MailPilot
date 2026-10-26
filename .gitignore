@@ -13,6 +13,7 @@ src-tauri/icons/*
 backend/mailpilot-core
 backend/mailpilot-core.exe
 .DS_Store
+*.icloud
 *.log
 
 # Private local data and credentials (credentials belong in the OS keyring)

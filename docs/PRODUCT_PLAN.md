@@ -60,6 +60,13 @@ SQLite/WAL/backups contain sensitive unencrypted local data. Disconnect revokes
 access but retains cache and immutable recovery evidence. There is no cache-purge
 UI, encryption claim or forensic-erasure guarantee.
 
+The storage-hardening pass (2026-10-26) validates SQLite sidecars before opening,
+repairs private Unix modes, and enables memory-only query temporaries and ordinary
+row secure-delete on every connection. Privacy disclosures are available before
+sign-in and in the account menu; failed AI-key removal is retryable while disabled.
+These protections do not encrypt the cache or establish release compliance. See
+[current privacy behavior and limits](PRIVACY.md).
+
 ## Qualification and remaining debt
 
 The implementation has synthetic Go/Rust/frontend and native offline checks.

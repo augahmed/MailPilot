@@ -103,6 +103,15 @@ export function AccountDropdown({
           <button
             className="dropdown-action"
             onClick={() => {
+              navigate("privacy");
+              setOpen(false);
+            }}
+          >
+            Privacy and local data
+          </button>
+          <button
+            className="dropdown-action"
+            onClick={() => {
               navigate("recovery");
               setOpen(false);
             }}
@@ -131,7 +140,8 @@ export function AccountDropdown({
         <p>
           This removes this device’s credentials and attempts to revoke Google
           access. Cached mail stays on this device. You will need to reconnect
-          to access it.
+          to access it. Saved AI provider keys remain separate; remove them in
+          Optional AI settings before disconnecting.
         </p>
       </ConfirmDialog>
     </div>

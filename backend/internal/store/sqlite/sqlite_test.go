@@ -22,7 +22,7 @@ func TestInitializeAndReopen(t *testing.T) {
 	if s.SchemaVersion() != 21 {
 		t.Fatal("unexpected schema version")
 	}
-	for pragma, want := range map[string]int{"foreign_keys": 1, "busy_timeout": 5000, "synchronous": 2} {
+	for pragma, want := range map[string]int{"foreign_keys": 1, "busy_timeout": 5000, "synchronous": 2, "temp_store": 2, "secure_delete": 1} {
 		var got int
 		if err := s.db.QueryRowContext(ctx, "PRAGMA "+pragma).Scan(&got); err != nil || got != want {
 			t.Fatalf("%s: %d, %v", pragma, got, err)

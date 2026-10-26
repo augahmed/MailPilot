@@ -400,6 +400,47 @@ it("keeps settings and historical recovery accessible and closes the dropdown wi
   }
 });
 
+it("makes privacy disclosures available before sign-in without starting mail or AI work", async () => {
+  render(<App />);
+  await screen.findByText("Gmail disconnected");
+  fireEvent.click(
+    screen.getByText("Privacy and local data", { selector: "summary" }),
+  );
+  expect(
+    screen.getByText(/MailPilot does not encrypt the local mail cache/),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/Disconnect is not a data-removal operation/),
+  ).toBeVisible();
+  expect(gmailCommand).not.toHaveBeenCalledWith("gmail_connect");
+  expect(syncCommand).not.toHaveBeenCalled();
+  expect(getMailbox).not.toHaveBeenCalled();
+});
+
+it("opens privacy from the account menu and restores the dashboard", async () => {
+  connected();
+  render(<App />);
+  await screen.findByRole("heading", { name: "Your Emails" });
+  fireEvent.click(account());
+  fireEvent.click(
+    screen.getByRole("button", { name: "Privacy and local data" }),
+  );
+  const heading = screen.getByRole("heading", {
+    level: 1,
+    name: "Privacy and local data",
+  });
+  expect(heading).toBeVisible();
+  expect(
+    screen.getByText(/does not remove saved AI provider keys/),
+  ).toBeVisible();
+  await waitFor(() => expect(heading).toHaveFocus());
+  fireEvent.click(screen.getByRole("button", { name: /Back to dashboard/ }));
+  expect(screen.getByRole("heading", { name: "Your Emails" })).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: "What stays on this device" }),
+  ).toBeNull();
+});
+
 it.each([
   "credential_store_unavailable",
   "required_scope_missing",

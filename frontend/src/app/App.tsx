@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LocalEmailIndex } from "../features/indexing/LocalEmailIndex";
 import { AISettings } from "../features/ai/AISettings";
+import { PrivacyNotice } from "../features/privacy/PrivacyNotice";
 import { AIMaintenance } from "../features/replies/AIMaintenance";
 import { MailWorkspace } from "../features/reader/MailWorkspace";
 import { Organization } from "../features/organization/Organization";
@@ -49,7 +50,11 @@ function AuthorizedApp({
   };
   const title =
     features.find((feature) => feature.id === page)?.title ??
-    (page === "settings" ? "Optional AI settings" : "Historical recovery");
+    (page === "settings"
+      ? "Optional AI settings"
+      : page === "privacy"
+        ? "Privacy and local data"
+        : "Historical recovery");
   const backPage = page === "index" ? indexReturn : "dashboard";
   return (
     <>
@@ -129,6 +134,7 @@ function AuthorizedApp({
           </div>
         )}
         <MailWorkspace connectionRevision={0} page={page} visited={visited} />
+        {page === "privacy" && <PrivacyNotice />}
         {visited.has("index") && (
           <div hidden={page !== "index"}>
             {indexReturn === "categories" && (

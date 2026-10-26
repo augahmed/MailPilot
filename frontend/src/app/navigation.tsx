@@ -33,7 +33,11 @@ export const features = [
   },
 ] as const;
 export type Page =
-  "dashboard" | "settings" | "recovery" | (typeof features)[number]["id"];
+  | "dashboard"
+  | "settings"
+  | "privacy"
+  | "recovery"
+  | (typeof features)[number]["id"];
 
 export function Icon({ name }: { name: string }) {
   const paths: Record<string, ReactNode> = {

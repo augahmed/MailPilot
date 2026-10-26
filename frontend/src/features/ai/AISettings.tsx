@@ -188,13 +188,18 @@ export function AISettings() {
           <button
             className="secondary-button"
             type="button"
-            disabled={busy || !view.enabled}
+            disabled={busy || !view.provider}
             onClick={() => {
               void save(true);
             }}
           >
             Disable AI and remove selected provider key
           </button>
+          <p className="help">
+            Key removal applies to the saved provider ({view.provider}). You can
+            retry even when AI is disabled. Disconnecting Gmail does not remove
+            provider keys.
+          </p>
         </form>
       )}
       {error && <p role="alert">{error}</p>}

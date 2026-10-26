@@ -206,6 +206,33 @@ func TestProvidersKeepSeparateKeysAndSwitchingRevokesApproval(t *testing.T) {
 		t.Fatal("saved provider key unavailable", r.Code)
 	}
 }
+func TestDisableAIAllowsCredentialRemovalRetryWithoutReenabling(t *testing.T) {
+	s, _, fake, keys := aiFixture(t)
+	ctx := context.Background()
+	preview := previewSummary(t, s)
+	keys["openai"].err = credentials.ErrUnavailable
+	request := AISettingsRequest{Operation: "disable", AccountID: "a"}
+	if r := s.Settings(ctx, request); r.Code != "ai_credentials_unavailable" {
+		t.Fatal("credential failure was hidden", r.Code)
+	}
+	if r := s.Settings(ctx, AISettingsRequest{Operation: "status"}); r.Code != "" || r.Enabled {
+		t.Fatal("failed key deletion must still leave AI disabled", r.Code)
+	}
+	if keys["openai"].key.Empty() {
+		t.Fatal("fixture failed to retain key after failed deletion")
+	}
+	if r := approveSummary(t, s, preview); r.Code == "" || fake.count() != 0 {
+		t.Fatal("disable did not revoke pending disclosure approval")
+	}
+	keys["openai"].err = nil
+	if r := s.Settings(ctx, request); r.Code != "" || r.Enabled || !keys["openai"].key.Empty() {
+		t.Fatal("could not retry key removal while disabled", r.Code)
+	}
+	if r := s.Settings(ctx, request); r.Code != "" || r.Enabled {
+		t.Fatal("key removal was not idempotent", r.Code)
+	}
+}
+
 func TestSummaryRejectsChangedOrForeignSourcesAndMissingContent(t *testing.T) {
 	s, db, fake, _ := aiFixture(t)
 	p := previewSummary(t, s)

@@ -1,6 +1,6 @@
 # Local IPC, protocol version 1
 
-Status reviewed 2026-10-20. This file documents implemented IPC, not future feature
+Status reconciled with source 2026-10-26. This file documents implemented IPC, not future feature
 authorization. [The architecture](../docs/ARCHITECTURE.md) describes the implemented
 shared local chunk/vector pipeline; [the product plan](../docs/PRODUCT_PLAN.md)
 defines scope/milestones. Local index controls, vector/keyword/hybrid search and
@@ -15,7 +15,9 @@ fixtures and sections below are historical references. `reply.manage` / `reply_m
 accepts only historical status/reconcile/resolve/cancel. Its request contains no
 prompt, body, thread, model, key or creation fields. Old drafting fixtures are archival
 and rejected at the active request boundary. Historical migrations/journals remain.
-AI settings and one selected-email summary are defined below; no keyword endpoint exists.
+AI settings, selected-email Summary and approved evidence questions are defined
+below. Keyword, semantic and hybrid retrieval share `search.local`; there is no
+separate keyword endpoint.
 
 The trusted native host launches the fixed bundled Go executable and owns its private stdin/stdout pipes. UTF-8 JSON-RPC 2.0 objects are newline-delimited, with a 64 KiB frame limit, string request IDs (1–64 characters), and no batches or notifications in this bootstrap. One request executes at a time. The Go request timeout is normally five seconds and the host waits seven seconds; classification.review uses 30 seconds in Go and 32 seconds in the host. A broken or timed-out transport is closed and requires an application restart.
 
@@ -50,12 +52,12 @@ The Tauri `health` command takes no arguments. Rust sends:
     "protocolVersion": 1,
     "backend": "connected",
     "database": "connected",
-    "schemaVersion": 17
+    "schemaVersion": 21
   }
 }
 ```
 
-`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. The current migration set ends at schema version 17 (durable local indexing and model identity); the example reflects that baseline. Migration 2 introduced normalized mail/journal storage, and migration 1 remains the unchanged settings foundation. The wire protocol remains version 1.
+`database` may also be `disconnected`. The application version comes from root `package.json` when building the sidecar and must match the Tauri/Cargo versions. Rust validates the response and the frontend validates it again with Zod. The current migration set ends at schema version 21 (email-scoped index/classification invalidation); the example reflects the current schema. Migration 2 introduced normalized mail/journal storage, and migration 1 remains the unchanged settings foundation. The wire protocol remains version 1. Historical fixtures retain their original versions.
 
 The host may send `shutdown` with empty parameters, receiving `{"stopping":true}`, or close stdin for clean shutdown. The UI cannot invoke initialize, shutdown, SQL, shell commands, filesystem paths, or arbitrary method names. Unknown fields/methods, mismatched protocol versions and malformed requests are rejected. Standard JSON-RPC error codes are used, plus `-32001` for a missing handshake; errors contain no underlying database paths or diagnostics. Logs are structured JSON on stderr.
 
@@ -152,7 +154,7 @@ assembles up to 25 rows from bounded ten-row responses, filters by category or
 unclassified across the cached list, and sorts the displayed page by category,
 unclassified first or newest first. Filtered pagination retains source offsets.
 
-An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `sync_cancel`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; schemaVersion in health now reports 16. Chunk storage adds no public IPC.
+An optional `code` reports local storage failure. Disconnected results have an empty accountId and rows. Go chooses the account from the authenticated session; JavaScript cannot select another account. Rust commands are `sync_start`, `sync_status`, `sync_cancel`, `mailbox_list`. Unknown params fail in Go. Strict Rust/TypeScript result DTOs preserve the protocol-1 boundary; health reports the current migration version documented above. Chunk storage adds no public IPC.
 
 ## Category management (protocol v1 additive extension)
 
