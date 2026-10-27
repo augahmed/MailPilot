@@ -4,16 +4,54 @@ MailPilot uses Google’s **Desktop app** authorization-code flow with PKCE and 
 
 Connecting verifies authorization and retrieves `users/me/profile` to identify the account. Selecting **Sync inbox** then explicitly downloads a bounded Inbox snapshot (default 500 messages; configure `MAILPILOT_SYNC_LIMIT=1..10000`). It does not apply labels, create drafts, or send mail. See the README for cache and synchronization limitations.
 
-## Create a Google OAuth client
+## Personal setup in seven steps
 
-1. Open the [Google Cloud Console](https://console.cloud.google.com/) and select or create a development project.
-2. In **APIs & Services → Library**, find **Gmail API** and enable it for this project.
-3. Open **Google Auth Platform** (or the OAuth consent-screen section). Configure the app branding, user support email, and developer contact information. Choose an appropriate audience. For personal development, use **External**, keep the app in **Testing**, and add your dedicated Gmail test account under **Test users**. Workspace Internal apps require an eligible organization.
-4. In **Data Access**, add `https://www.googleapis.com/auth/gmail.modify`. This is the narrowest Gmail scope permitting both email-body reads and applying/removing labels on messages. `gmail.labels` only manages label definitions. Google bundles sending and other modifications into `gmail.modify`; MailPilot exposes no sending/deletion operation. Do not add `https://mail.google.com/`, Contacts, Drive, or unrelated scopes.
-5. Under **Clients → Create client**, select **Desktop app**, give it a development name, and create it. Do not choose Web application or configure a public callback. Google’s Desktop client supports an ephemeral `http://127.0.0.1:<port>/oauth/callback`; MailPilot selects the port at runtime.
-6. Download the client JSON and keep it **outside this repository**, for example at `/Users/YOUR_NAME/Private/MailPilot/google-desktop-client.json`. The file must contain an `installed` Desktop app client with `client_id` and `client_secret`. Keep it separate from token files and OpenAI keys. Do not paste its contents into source, a shell command, a screenshot or an issue.
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create/select
+   your development project.
+2. Under **APIs & Services → Library**, enable **Gmail API**.
+3. Open **Google Auth Platform**. Complete Branding/support/contact details, choose
+   **External** audience, keep the app in **Testing**, and add your dedicated Gmail
+   account under **Test users**. Workspace Internal apps require an eligible organization.
+4. In **Data Access**, add `https://www.googleapis.com/auth/gmail.modify`.
+   MailPilot needs body reads plus reviewed label additions/removals. `gmail.labels`
+   only manages label definitions. Google's modify scope also grants sending and
+   broader modifications, although MailPilot exposes no such operations. Do not
+   add full-mailbox, Drive, Contacts or unrelated scopes.
+5. Open **Clients → Create client → Desktop app**, give it a name and create it.
+   In the creation dialog, choose **Download JSON** immediately and save it
+   **outside Git**, such as `/absolute/path/outside-repo/client.json`. It must be
+   an `installed` Desktop client with `client_id` and `client_secret`, not a Web
+   client, service account, token file or OpenAI key.
+6. After the [prerequisites](../README.md#prerequisites) and `npm ci`, run the
+   development command below. For a Finder-launchable app, follow the personal
+   build commands instead.
+7. Click **Connect Gmail**. In your system browser, select your configured test
+   account and review the requested consent for your own known project. After
+   success, MailPilot shows **Gmail connected** and the address. Click **Sync inbox**
+   separately to import mail; start local indexing separately if desired.
 
-See Google’s [desktop OAuth flow](https://developers.google.com/identity/protocols/oauth2/native-app), [Gmail scope definitions](https://developers.google.com/workspace/gmail/api/auth/scopes), and [Gmail profile endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users/getProfile). Restricted-scope verification and any applicable assessment must be resolved before public distribution. Testing-mode authorizations using Gmail scopes normally expire after seven days; reconnect when prompted. See [Google’s token expiration guidance](https://developers.google.com/identity/protocols/oauth2#expiration).
+**No domain, hosted website or public callback is needed for this Desktop test
+flow.** MailPilot selects a temporary `http://127.0.0.1:<port>/oauth/callback`.
+The browser confirms receipt; the app reports the final result. Sign-in expires
+in three minutes. Never enter your Google password in MailPilot.
+
+**Cannot find Download JSON?** Google's current client-secret handling makes the
+full secret downloadable at creation only. If you did not retain that JSON,
+create an additional Desktop client and download it immediately, or use Google's
+supported rotation flow. Do not delete a working client just to find a button;
+changing the client ID changes MailPilot's keyring namespace. See
+[Google's client management guidance](https://support.google.com/cloud/answer/15549257?hl=en).
+
+Testing-mode Gmail refresh tokens normally expire after **seven days**; reconnect
+when prompted. Workspace restrictions, denied consent, expired/revoked grants and
+unknown-app warnings need investigation, not blind bypassing. Owner-supplied
+credentials do not waive Google's policies. Public distribution requires resolving
+restricted-scope verification and any applicable assessment; it is unfinished here.
+
+Official references: [Desktop OAuth/loopback](https://developers.google.com/identity/protocols/oauth2/native-app),
+[Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes),
+[token expiration](https://developers.google.com/identity/protocols/oauth2#expiration).
+Console wording can change; guidance checked 2026-10-27.
 
 ## Run development with your downloaded JSON
 
@@ -21,7 +59,7 @@ Install the [README prerequisites](../README.md#prerequisites) and run `npm ci` 
 From the repository root:
 
 ```sh
-npm run dev:personal -- --google-client-json "/Users/YOUR_NAME/Private/MailPilot/google-desktop-client.json"
+npm run dev:personal -- --google-client-json "/absolute/path/outside-repo/client.json"
 ```
 
 The helper validates the file, compiles the Go sidecar with only the desktop
@@ -44,7 +82,7 @@ The packaged personal workflow currently targets **Apple Silicon macOS**. From
 the repository root:
 
 ```sh
-npm run build:personal -- --google-client-json "/Users/YOUR_NAME/Private/MailPilot/google-desktop-client.json"
+npm run build:personal -- --google-client-json "/absolute/path/outside-repo/client.json"
 codesign --force --deep --sign - .local/personal/MailPilot.app
 codesign --verify --deep --strict .local/personal/MailPilot.app
 open .local/personal/MailPilot.app
@@ -105,14 +143,10 @@ slot. Follow the disconnect guidance before intentionally changing either.
 
 ## Optional OpenAI setup
 
-Open **Optional AI settings**, select OpenAI and a supported model ID, and submit
-your own OpenAI API key there. MailPilot stores it only in the OS credential store
-and clears the submitted input. No key belongs in Google JSON, environment exports,
-build inputs, source, SQLite or screenshots. Saving settings and launching the
-app make no paid AI validation request. Ordinary local features need no OpenAI
-account/key; Summary and evidence answers each require a separate exact-payload
-approval. See [AI consent and settings](GENERATIVE_AI.md) and
-[privacy/key removal](PRIVACY.md).
+No AI key is needed for Gmail connection, reading, local indexing, search,
+classification or reviewed label organization. For separately approved Summary
+and evidence answers, follow [OpenAI setup](OPENAI_SETUP.md). Enter keys only in
+**Optional AI settings**, never Google JSON, shell exports or build inputs.
 
 ## Connect and disconnect
 

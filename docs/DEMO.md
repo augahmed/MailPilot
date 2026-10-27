@@ -1,6 +1,6 @@
 # Credential-free synthetic demo
 
-The demo uses 12 fictional messages and MailPilot's existing local database,
+The demo uses 14 fictional messages and MailPilot's existing local database,
 reader, chunking, retrieval and classification services. No Google client JSON,
 Gmail account or OpenAI key is needed. A **Synthetic demo** banner stays visible
 on every page. All senders use reserved `example.test` addresses.
@@ -41,9 +41,19 @@ JavaScript has no mode/profile/path selection command.
 
 ## Walkthrough and reproducible screen states
 
-1. **Your Emails:** scroll below the feature cards and open the application acknowledgment, receipt or forwarded
+1. **Your Emails:** inspect the two **FICTIONAL PHISHING DEMO** messages,
+   “URGENT: account locked” and “Final notice”. Both score **HIGH, 92/100** under
+   the current default engine: misleading URL (+25), IP destination (+15),
+   credential language (+15), suspicious URL structure (+12), HTML form (+10),
+   urgency (+8) and account-security language (+7). Authentication is unverified
+   and contributes zero. Scores are computed from original synthetic plain/HTML
+   mail, never injected. Only reserved documentation IPs/example domains appear;
+   the escaped reader opens no link or form. These heuristics do not prove phishing.
+   New IDs appear automatically after rebuilding/restarting an older demo;
+   existing message edits and journals are preserved. Scroll below the feature
+   cards and open the application acknowledgment, receipt or forwarded
    workshop message. The reader displays escaped text. Fictional tracking-image
-   HTML loads nothing; external AI Summary is explicitly disabled.
+   text loads nothing; external AI Summary is explicitly disabled.
 2. **Email Search:** choose Keyword and search `MP-1042`, `Atlas` or `flight`.
    Results come from the shared SQLite passage index, without model inference.
    Open an excerpt to see the original cached sample.
@@ -66,10 +76,10 @@ JavaScript has no mode/profile/path selection command.
    that external services are disabled; there is no API-key entry or paid call.
 
 For screenshots, use only MailPilot Demo and retain the banner. Capture the app
-window rather than the desktop. Reproduce dashboard/reader, keyword search and
+window rather than the desktop. Reproduce dashboard/reader, keyword or hybrid search and
 privacy states using the steps above; record whether indexing actually finished.
 Do not substitute generated UI, invented scores or real mailbox screenshots.
-The visual README and its committed assets remain the next portfolio prompt.
+See the [committed screenshots and capture instructions](assets/README.md).
 
 ## Isolation and sample restoration
 

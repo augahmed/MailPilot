@@ -504,3 +504,56 @@ preprocessing version or historical journal format changed. No live-mailbox or
 paid-provider request, public upload, Developer ID signing or notarization was
 performed. Previous security/quality limits remain; this is a local synthetic
 portfolio route, not public OAuth verification or release certification.
+
+## Visual documentation and high-risk demo samples 2026-10-27
+
+Portfolio prompt 5 rewrites the README around the credential-free demo, owner-run
+Gmail setup, optional OpenAI setup, actual architecture and dated limitations.
+Editable SVGs summarize runtime/trust boundaries and the shared chunk/vector/FTS
+pipeline. Four genuine native screenshots show only the isolated fictional demo:
+dashboard, phishing reader, hybrid-search evidence and privacy disclosures. See
+[asset provenance and reproduction](assets/README.md). Official Google/OpenAI
+setup references were checked; no live OAuth or paid model request was made.
+
+The separately requested demo enhancement adds two original synthetic messages,
+bringing the fixture count from 12 to **14**. Their plain/HTML bodies use only
+reserved example domains/documentation IPs and explicit fictional warnings.
+The unchanged default extractor/engine computes **HIGH, 92/100** for each from
+misleading links, IP destinations, URL structure, credential/urgency/security
+language and HTML forms. No score, vector or generated answer is injected.
+The normal receipt remains LOW. Existing demo profiles seed the new message IDs
+without overwriting older edits; reset still restores known messages and retains
+category edits and immutable journals. The escaped reader executes no forms or
+remote content. Ordinary Gmail/risk policy and migrations are unchanged.
+
+Verification for this change:
+
+- Go vet and the full ordinary Go suite passed; affected demo/risk/composition
+  packages also passed race checks. Synthetic composition still rejects network,
+  credential-store use, foreign reads and remote actions across restart/reset.
+- Frontend typecheck, lint, production build and **174 tests** passed. Rust fmt,
+  Clippy with warnings denied and **25 tests** passed using the locked graph.
+- The rebuilt, ad-hoc signed demo passed native startup/navigation and its
+  network-denied backend check, including HIGH assessments/reasons, real local
+  MiniLM indexing of all **14 messages**, hybrid flight retrieval, local label
+  preview and rejected writes/AI/foreign reads. Signed/offline model-resource
+  qualification passed for the app and copied debug/release layouts.
+- The real capture profile reported 14/14 keyword and semantic coverage and 34
+  chunks searched after explicit indexing. Screenshots were visually reviewed;
+  local documentation links/anchors, alt text, SVG structure, changed-file
+  formatting and diff whitespace were checked.
+
+The first targeted composition run exposed the old fixed 12-message pagination
+expectation; it was updated to 14 and the final suite passed. The first build
+found a missing installed native Tauri CLI binary; restoring dependencies with
+`npm ci` resolved it without changing manifests/lockfiles. Ignored logs are under
+`.cache/prompt5-*`. Quick Look cropped SVG previews to squares; the final diagrams
+were instead reviewed at their actual aspect ratios in an offline native WebView.
+
+No model/tokenizer/preprocessing identity, dependency lockfile, schema, IPC
+boundary or historical journal format changed. Full all-package race, native
+keyring integration, live-mailbox/paid-provider evaluation, Windows/Linux native
+qualification, Developer ID signing, notarization and public OAuth verification
+were not rerun/performed for this slice. Earlier encryption/removal, classifier
+quality and dense-scan latency limitations remain open. These checks qualify this
+synthetic demo/documentation change, not a public consumer release.

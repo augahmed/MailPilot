@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="870" viewBox="0 0 1200 870" role="img" aria-labelledby="title desc">
+<title id="title">One shared email processing pipeline</title><desc id="desc">Original mail produces readable sections and deterministic source-bound chunks. Passage FTS and explicitly generated local vectors feed shared search and category assessments. External answers require separate exact-payload approval.</desc>
+<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#18283d} .title{font-size:29px;font-weight:700}.sub{font-size:17px;fill:#51647b}.head{font-size:20px;font-weight:650}.body{font-size:16px}.label{font-size:15px;fill:#455d79}.line{fill:none;stroke:#557190;stroke-width:2;marker-end:url(#arrow)}</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#557190"/></marker></defs>
+<rect width="1200" height="870" rx="20" fill="#f7f9fc"/>
+<text x="32" y="48" class="title">One shared mail → retrieval pipeline</text>
+<text x="32" y="78" class="sub">Original sources stay intact · account / revision / model / preprocessing / generation fences</text>
+<rect x="32" y="118" width="314" height="124" rx="14" fill="#ffffff" stroke="#c6d3e3" stroke-width="1.5"/>
+<text x="50" y="150" class="head">1 · Original cached mail</text>
+<text x="50" y="178" class="body">Bounded manual Gmail sync</text>
+<text x="50" y="202" class="body">Atomic source + checkpoint commit</text>
+<text x="50" y="226" class="body">No inference during sync</text>
+<rect x="443" y="118" width="314" height="124" rx="14" fill="#ffffff" stroke="#c6d3e3" stroke-width="1.5"/>
+<text x="461" y="150" class="head">2 · Readable sections</text>
+<text x="461" y="178" class="body">Shared mail.Sections / readable-v4</text>
+<text x="461" y="202" class="body">Reader and chunker reuse cleanup</text>
+<text x="461" y="226" class="body">Quoted / forwarded evidence kept</text>
+<rect x="854" y="118" width="314" height="124" rx="14" fill="#ffffff" stroke="#c6d3e3" stroke-width="1.5"/>
+<text x="872" y="150" class="head">3 · Source-bound chunks</text>
+<text x="872" y="178" class="body">Deterministic text + context</text>
+<text x="872" y="202" class="body">Pinned WordPiece / ModelInput</text>
+<text x="872" y="226" class="body">email_chunks + provenance</text>
+<path class="line" d="M346 180H443"/>
+<path class="line" d="M757 180H854"/>
+<rect x="32" y="315" width="314" height="143" rx="14" fill="#ffffff" stroke="#c6d3e3" stroke-width="1.5"/>
+<text x="50" y="347" class="head">Passage FTS</text>
+<text x="50" y="375" class="body">Keyword index over shared chunks</text>
+<text x="50" y="399" class="body">Available without embeddings</text>
+<text x="50" y="423" class="body">Transactional source invalidation</text>
+<rect x="443" y="315" width="314" height="143" rx="14" fill="#ffffff" stroke="#c6d3e3" stroke-width="1.5"/>
+<text x="461" y="347" class="head">Explicit LocalIndex</text>
+<text x="461" y="375" class="body">Start / Pause / Resume / Cancel</text>
+<text x="461" y="399" class="body">Rebuild + durable coverage</text>
+<text x="461" y="423" class="body">One bounded native CPU provider</text>
+<rect x="854" y="315" width="314" height="143" rx="14" fill="#ffffff" stroke="#c6d3e3" stroke-width="1.5"/>
+<text x="872" y="347" class="head">Shared compatible vectors</text>
+<text x="872" y="375" class="body">MiniLM 384-d float32</text>
+<text x="872" y="399" class="body">chunk_embeddings / index_state</text>
+<text x="872" y="423" class="body">Stale publication rejected</text>
+<path class="line" d="M1010 242V278H189V315"/>
+<path class="line" d="M600 278V315"/>
+<path class="line" d="M757 386H854"/>
+<rect x="32" y="532" width="520" height="131" rx="14" fill="#ffffff" stroke="#c6d3e3" stroke-width="1.5"/>
+<text x="50" y="564" class="head">Shared retrieval</text>
+<text x="50" y="592" class="body">Keyword / exact cosine / hybrid ranking</text>
+<text x="50" y="616" class="body">Account-scoped results with revision-bound excerpts</text>
+<text x="50" y="640" class="body">Local search or bounded evidence selection</text>
+<rect x="648" y="532" width="520" height="131" rx="14" fill="#ffffff" stroke="#c6d3e3" stroke-width="1.5"/>
+<text x="666" y="564" class="head">Shared category assessment</text>
+<text x="666" y="592" class="body">Prototypes + confirmed examples use the same space</text>
+<text x="666" y="616" class="body">Existing mail vectors reused; no re-embedding mail</text>
+<text x="666" y="640" class="body">Reviewable suggestions + independent rule fallback</text>
+<path class="line" d="M189 458V532"/>
+<path class="line" d="M1010 458V493H290V532"/>
+<path class="line" d="M910 493V532"/>
+<rect x="32" y="734" width="520" height="98" rx="14" fill="#fff8eb" stroke="#e2c78c" stroke-width="1.5"/>
+<text x="50" y="766" class="head">Exact request approval</text>
+<text x="50" y="794" class="body">Question + selected excerpts + policy + provider/model</text>
+<text x="50" y="818" class="body">One-use expiring consent; separate from Summary</text>
+<rect x="648" y="734" width="520" height="98" rx="14" fill="#fff8eb" stroke="#e2c78c" stroke-width="1.5"/>
+<text x="666" y="766" class="head">Optional external answer</text>
+<text x="666" y="794" class="body">Bounded provider request → validated source citations</text>
+<text x="666" y="818" class="body">Escaped output; provenance is not factual correctness</text>
+<path class="line" d="M290 663V734"/>
+<path class="line" d="M552 784H648"/>
+<text x="567" y="771" class="label">HTTPS</text>
+</svg>

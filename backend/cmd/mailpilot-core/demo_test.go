@@ -103,7 +103,7 @@ func TestOfflineDemoComposition(t *testing.T) {
 			t.Fatal("missing sample mailbox")
 		}
 		page = call("mail.list", map[string]int{"offset": 10})
-		if len(page["rows"].([]any)) != 2 {
+		if len(page["rows"].([]any)) != 4 {
 			t.Fatal("samples duplicated across restart/reset")
 		}
 		account := string(demo.AccountID)

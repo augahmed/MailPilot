@@ -71,7 +71,17 @@ try {
   assert.ok(!blocked.authorizationUrl);
   const inbox = await call("mail.list", { offset: 0 });
   assert.equal(inbox.rows.length, 10);
-  assert.equal((await call("mail.list", { offset: 10 })).rows.length, 2);
+  const remaining = await call("mail.list", { offset: 10 });
+  assert.equal(remaining.rows.length, 4);
+  for (const id of ["demo-security-reset", "demo-security-invoice"]) {
+    const row = [...inbox.rows, ...remaining.rows].find((row) => row.id === id);
+    assert.ok(row, "Missing fictional high-risk message: " + id);
+    assert.equal(row.phishing?.risk, "HIGH");
+    assert.ok(row.phishing.score >= 60);
+    for (const code of ["misleading_url", "ip_url", "credentials", "form"]) {
+      assert.ok(row.phishing.reasons.some((reason) => reason.code === code));
+    }
+  }
   assert.equal((await call("sync.start")).state, "error");
   assert.equal(
     (
@@ -125,7 +135,7 @@ try {
     "complete",
     "Index failed: " + JSON.stringify(indexed),
   );
-  assert.equal(indexed.indexedMessages, 12);
+  assert.equal(indexed.indexedMessages, 14);
   await call("search.local", {
     operation: "start",
     accountId,

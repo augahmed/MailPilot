@@ -10,6 +10,7 @@ historical reports and future implementation prompts do not authorize features.
 | [Project README](../README.md)          | Prerequisites, development, desktop builds and the feature overview                    |
 | [Synthetic demo](DEMO.md)               | Credential-free source/packaged demo, walkthrough, isolation and sample restoration    |
 | [Gmail setup](GMAIL_SETUP.md)           | External Desktop JSON, personal macOS builds, test-account sign-in and troubleshooting |
+| [OpenAI setup](OPENAI_SETUP.md)         | Optional project/key/model setup, exact-request approval, charges and key removal      |
 | [Architecture](ARCHITECTURE.md)         | Go/React/Rust ownership, shared local pipeline and trust boundaries                    |
 | [Privacy and local storage](PRIVACY.md) | Credential handling, unencrypted cache, external AI and retained data                  |
 | [Security policy](../SECURITY.md)       | Threat model, reporting route, platform support and known limits                       |
@@ -17,9 +18,10 @@ historical reports and future implementation prompts do not authorize features.
 
 External AI is optional. The [AI contract](GENERATIVE_AI.md) describes the existing
 in-app provider/key settings and per-request consent; OpenAI is the only shipped
-functional adapter. [Gmail setup](GMAIL_SETUP.md) includes the personal credential
-helpers and existing in-app OpenAI settings. A credential-free synthetic demo mode
-is available through [the demo guide](DEMO.md). Installed native inference requires no user model download.
+functional adapter. [Gmail setup](GMAIL_SETUP.md) covers personal credential helpers;
+[OpenAI setup](OPENAI_SETUP.md) covers optional in-app AI settings. A credential-free
+synthetic demo mode is available through [the demo guide](DEMO.md). Installed native
+inference requires no user model download.
 
 ## Technical references
 
@@ -51,4 +53,5 @@ fixture or report describes them.
 [The portfolio prompt plan](PORTFOLIO_PROMPT_PLAN.md) is an engineering task
 sequence, not an implemented feature inventory. Its later prompts require their
 own explicit execution request. Public distribution verification, encrypted
-storage, cache-removal controls and the visual README work remain separate.
+storage and cache-removal controls remain separate. The visual README and
+[maintainable diagrams / genuine demo captures](assets/README.md) describe current behavior.

@@ -10,6 +10,8 @@ import (
 )
 
 var samples = []struct{ id, sender, subject, body string }{
+	{"security-reset", "security@account.example.test", "URGENT: account locked — confirm your password", "FICTIONAL PHISHING DEMO — do not follow these instructions. Security alert: your account is locked. Act now and confirm your password within 24 hours at https://192.0.2.44:8443/login%2Fverify. The HTML alternative disguises this documentation-only IP as an account website and contains a form. No link or form is opened by MailPilot."},
+	{"security-invoice", "billing@studio.example.test", "Final notice: verify your account and bank account", "FICTIONAL PHISHING DEMO — no payment is due. Urgent: verify your account immediately. Enter your login credentials and bank account at https://198.51.100.28:8080/payment%2Fconfirm. This reserved documentation IP and the misleading HTML link are synthetic risk signals. Never submit credentials or payment details."},
 	{"application", "hiring@acorn.example.test", "Application received: software engineer", "We received your application for the software engineer position. Our hiring team will review it this week. This is synthetic demonstration mail."},
 	{"interview", "recruiter@acorn.example.test", "Interview invitation: software engineer", "We would like to schedule an interview for the software engineer position. Your interview is on October 28 at 14:00 UTC. Please confirm your availability."},
 	{"receipt", "receipts@shop.example.test", "Your receipt for order MP-1042", "Thank you for your purchase. Order MP-1042: desk lamp, $28.00; delivery, $4.00. Total paid: $32.00. Keep this receipt for your records."},
@@ -22,6 +24,13 @@ var samples = []struct{ id, sender, subject, body string }{
 	{"security", "support@account-review.example.test", "URGENT: verify your account immediately", "Synthetic phishing example. Your account will be suspended in 24 hours! Verify your password immediately at https://account-verification.example.test/login. Never follow this fictional request or submit a password. The app must display it as untrusted text."},
 	{"forwarded", "sam@team.example.test", "Fwd: workshop travel details", "Forwarded message\nFrom: coordinator@events.example.test\nSubject: Workshop venue\nThe workshop is at Harbor Hall, 17 Example Street. Registration opens at 08:30 UTC.\n\nSam: Please keep the original venue information for our travel plan."},
 	{"reader", "demo@welcome.example.test", "Welcome to your synthetic MailPilot workspace", "Every message in this profile is fictional. Try keyword search for MP-1042, flight, or Atlas. Start Local Email Index explicitly for real local semantic/hybrid retrieval. External AI and Gmail operations are disabled. Text such as <img src=\"https://pixel.example.test\"> stays escaped and loads no remote content."},
+}
+
+// Evidence is original synthetic mail content, not a precomputed score. The
+// ordinary extractor/engine must observe these signals and explain the result.
+var phishingAlternatives = map[string]string{
+	"security-reset":   `<p>FICTIONAL PHISHING DEMO. Urgent security alert: account locked. Confirm your password immediately.</p><a href="https://192.0.2.44:8443/login%2Fverify">https://account.example.test</a><form action="https://192.0.2.44:8443/login%2Fverify"><input name="password" type="password"></form>`,
+	"security-invoice": `<p>FICTIONAL PHISHING DEMO. Final notice: verify your account and enter your bank account immediately.</p><a href="https://198.51.100.28:8080/payment%2Fconfirm">https://studio.example.test</a><form action="https://198.51.100.28:8080/payment%2Fconfirm"><input name="verification-code"></form>`,
 }
 
 // Seed uses current repositories and chunk preparation. Restarts preserve edits;
@@ -37,6 +46,9 @@ func Seed(ctx context.Context, accounts repository.AccountRepository, emails rep
 		_, err := emails.GetByProviderID(ctx, AccountID, pid)
 		if errors.Is(err, repository.ErrNotFound) || reset && err == nil {
 			e := domain.Email{ID: domain.EmailID("demo-" + f.id), AccountID: AccountID, ProviderID: pid, ProviderThreadID: domain.ProviderThreadID("thread-" + f.id), Sender: domain.EmailAddress{Address: f.sender}, Recipients: []domain.EmailAddress{{Address: "pilot@example.test"}}, Subject: f.subject, BodyText: f.body, BodyState: "complete", ContentRevision: "synthetic-v1", ReceivedAt: time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Add(-time.Duration(i) * time.Hour), Labels: []domain.EmailLabel{Inbox()}, Headers: []domain.EmailHeader{{Name: "X-MailPilot-Synthetic", Value: "true"}}}
+			if html, ok := phishingAlternatives[f.id]; ok {
+				e.BodyHTML = &html
+			}
 			_, err = emails.Upsert(ctx, e)
 		}
 		if err != nil {

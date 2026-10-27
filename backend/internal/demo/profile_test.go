@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"mailpilot.local/core/internal/app"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/provider"
 	"mailpilot.local/core/internal/repository"
+	"mailpilot.local/core/internal/risk"
 	"mailpilot.local/core/internal/store/sqlite"
 )
 
@@ -49,6 +51,38 @@ func TestProfileFencesAndIdempotentSamples(t *testing.T) {
 		}
 	}
 	seed(false)
+	for _, id := range []domain.EmailID{"demo-security-reset", "demo-security-invoice", "demo-receipt"} {
+		row, err := db.Emails().Get(ctx, AccountID, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		features, err := risk.NewPhishingFeatureExtractor().Extract(ctx, row.Email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		engine := risk.DefaultEngine()
+		result, err := engine.Analyze(ctx, features, "synthetic-fixture-check", time.Time{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id == "demo-receipt" {
+			if engine.Level(result.Score) != "LOW" {
+				t.Fatal("ordinary receipt became a high-risk demonstration")
+			}
+			continue
+		}
+		if engine.Level(result.Score) != "HIGH" || features.HTMLFormCount == 0 {
+			t.Fatalf("%s: synthetic evidence did not produce explained high risk: %d", id, result.Score)
+		}
+		codes := map[string]bool{}
+		for _, finding := range result.Findings {
+			codes[finding.Code] = true
+		}
+		if !codes["misleading_url"] || !codes["ip_url"] || !codes["credentials"] || !codes["form"] {
+			t.Fatalf("%s: missing expected independent risk explanations", id)
+		}
+		t.Logf("%s: %s %d/100", id, engine.Level(result.Score), result.Score)
+	}
 	row, err := db.Emails().Get(ctx, AccountID, "demo-receipt")
 	if err != nil {
 		t.Fatal(err)
