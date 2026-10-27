@@ -8,6 +8,7 @@ historical reports and future implementation prompts do not authorize features.
 | Read                                    | Purpose                                                                                |
 | --------------------------------------- | -------------------------------------------------------------------------------------- |
 | [Project README](../README.md)          | Prerequisites, development, desktop builds and the feature overview                    |
+| [Synthetic demo](DEMO.md)               | Credential-free source/packaged demo, walkthrough, isolation and sample restoration    |
 | [Gmail setup](GMAIL_SETUP.md)           | External Desktop JSON, personal macOS builds, test-account sign-in and troubleshooting |
 | [Architecture](ARCHITECTURE.md)         | Go/React/Rust ownership, shared local pipeline and trust boundaries                    |
 | [Privacy and local storage](PRIVACY.md) | Credential handling, unencrypted cache, external AI and retained data                  |
@@ -18,7 +19,7 @@ External AI is optional. The [AI contract](GENERATIVE_AI.md) describes the exist
 in-app provider/key settings and per-request consent; OpenAI is the only shipped
 functional adapter. [Gmail setup](GMAIL_SETUP.md) includes the personal credential
 helpers and existing in-app OpenAI settings. A credential-free synthetic demo mode
-is not implemented yet. Installed native inference requires no user model download.
+is available through [the demo guide](DEMO.md). Installed native inference requires no user model download.
 
 ## Technical references
 

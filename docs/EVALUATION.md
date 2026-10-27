@@ -431,3 +431,76 @@ request, public artifact upload, Developer ID signing or notarization occurred.
 Windows/Linux personal packaging remains unqualified. The earlier security and
 quality warnings remain applicable; these helpers provide owner-only builds,
 not Google verification or a new production API key. See [setup](GMAIL_SETUP.md).
+
+## Synthetic demo qualification 2026-10-27
+
+Portfolio prompt 4 adds `dev:demo`, `build:demo` and `demo:reset`. The separate
+MailPilot Demo application identifier forces trusted demo startup; an ordinary
+bundle can opt in with `--demo`. Neither IPC nor JavaScript selects a mode or data
+path. Go derives one fixed `.demo-v1` profile, requires its marker, validates
+synthetic-only account metadata and rejects demo data during ordinary startup.
+The demo session has no Gmail-token authority. No credential-store, Gmail/sync,
+external-generation or remote-recovery adapter is constructed in that branch.
+
+Twelve fixed fictional messages reuse the current repositories, original cached
+sources, `mail.Sections`/chunker, pinned WordPiece tokenizer and passage FTS.
+Existing account triggers supply the current starter categories. Repeated startup
+does not duplicate messages or overwrite local edits. Sample restoration only
+reinstates known message content/metadata; category edits, compatible indexes and
+immutable preview/recovery records remain intact. It is not a cache-purge feature.
+
+Local indexing and category/classification work use the existing coordinator and
+native provider. The store admits synthetic indexing only after successful demo
+profile validation and only for the exact fixture account; arbitrary synthetic
+accounts retain the prior rejection. Demo query policy requires a durable explicit
+indexing run before semantic inference can initialize. Before that, Hybrid uses
+the genuine keyword path with an unavailable warning, while Semantic reports
+unavailable. No fixture contains vectors, similarity scores, inference timings or
+generated answers. Normal search policy remains unchanged.
+
+Organization reuses its existing preview/journal logic with a cached-snapshot
+adapter whose write capabilities are false. The demo-only preview policy allows
+local proposals but rejects apply, undo and reconciliation; adapter mutation
+methods independently return unsupported. The additive auth `demo:true` response
+and `demo_mode` rejection code drive the persistent banner and explicit disabled
+external-service presentation. Existing production authentication checks remain.
+
+Validation used synthetic data only. Go composition tests install a failing
+credential-store mock and a transport that panics on network use. They cover three
+starts including restoration, fixed-profile/account fences, foreign reads/search,
+keyword retrieval without model resources, local previews, blocked external
+actions and preservation of the previous immutable preview ID/digest. Additional
+tests prove that unvalidated/unrelated synthetic accounts cannot index, failed
+profile validation revokes admission, and demo queries cannot call the embedding
+fake until explicit indexing. Frontend tests cover the banner and disabled
+controls across navigation. Full Go tests/vet, affected-package race checks,
+frontend typecheck/lint/build with **174 tests**, Rust fmt/Clippy with warnings
+denied and **25 tests**, native CGO/race and both artifact tests were run.
+
+The signed demo package passed actual startup with network access and ordinary
+app-data/keychain paths denied, keyword search, real MiniLM indexing of all 12
+messages, hybrid flight retrieval, local label preview and rejected writes/AI/
+foreign reads. Its native WebView smoke checked the visible synthetic banner,
+offline mailbox, navigation, absent API-key entry and rejected Google sign-in.
+The source sample-restore command started Tauri/Vite/Go with the correct app
+arguments and stopped cleanly with Ctrl+C. The ordinary bundle was also rebuilt
+and its protected native startup and signed/offline model resources checked.
+
+The first offline indexing check exposed the existing Gmail-only admission rule;
+the fix is scoped to the validated demo profile and covered by negative tests.
+The first source launch exposed Tauri's two runner/application argument separators;
+the documented command was corrected and exercised successfully. Initial local
+logs remain under ignored `.cache/demo-*.log`. Final checks are recorded there;
+no required failure is treated as a pass.
+
+After the demo checks passed, a genuine window-only synthetic dashboard capture
+was saved to ignored `.cache/demo-dashboard.png` and visually reviewed. It includes
+the synthetic identity and no real mail, keys or OS account information. The
+walkthrough in [DEMO.md](DEMO.md) records reproducible reader/search/privacy states;
+the professional README and committed visual assets remain prompt 5 work.
+
+No schema/migration, dependency/lockfile, model/runtime hash, tokenizer identity,
+preprocessing version or historical journal format changed. No live-mailbox or
+paid-provider request, public upload, Developer ID signing or notarization was
+performed. Previous security/quality limits remain; this is a local synthetic
+portfolio route, not public OAuth verification or release certification.

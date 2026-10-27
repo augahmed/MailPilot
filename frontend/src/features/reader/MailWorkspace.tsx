@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useDemo } from "../../app/DemoContext";
 import type { Page } from "../../app/navigation";
 import { Mailbox } from "../mailbox/Mailbox";
 import { SemanticSearch } from "../search/SemanticSearch";
@@ -15,6 +16,7 @@ export function MailWorkspace({
   page?: Page;
   visited?: ReadonlySet<Page>;
 }) {
+  const demo = useDemo();
   const [selection, setSelection] = useState<{
     accountId: string;
     emailId: string;
@@ -60,7 +62,7 @@ export function MailWorkspace({
             />
           </div>
         )}
-        {visited.has("ask") && (
+        {!demo && visited.has("ask") && (
           <div hidden={page !== "ask"}>
             <EmailQuestion
               onEvidence={setEvidence}

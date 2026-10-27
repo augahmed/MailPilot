@@ -33,6 +33,9 @@ type questionState struct {
 }
 
 func (a *App) AnswerEmail(ctx context.Context, r AnswerRequest) AnswerResponse {
+	if a.Demo {
+		return emptyAnswer("ai_disabled")
+	}
 	if a.AI == nil {
 		return emptyAnswer("unauthorized")
 	}

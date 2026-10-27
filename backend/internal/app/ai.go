@@ -86,12 +86,20 @@ func (s *AIService) Close() {
 	s.wg.Wait()
 }
 func (a *App) ManageAISettings(ctx context.Context, p AISettingsRequest) AISettingsResponse {
+	if a.Demo {
+		return AISettingsResponse{Providers: []AIProviderOption{}, Code: "ai_disabled"}
+	}
 	if a.AI == nil {
 		return AISettingsResponse{Providers: []AIProviderOption{}, Code: "unauthorized"}
 	}
 	return a.AI.Settings(ctx, p)
 }
 func (a *App) SummarizeEmail(ctx context.Context, p SummarizeEmailRequest) SummarizeEmailResponse {
+	if a.Demo {
+		r := emptySummary()
+		r.Code = "ai_disabled"
+		return r
+	}
 	if a.AI == nil {
 		r := emptySummary()
 		r.Code = "unauthorized"

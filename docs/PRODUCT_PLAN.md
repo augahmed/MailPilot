@@ -1,12 +1,17 @@
 # MailPilot product scope and implemented capabilities
 
-Reviewed 2026-10-21. This file records current product scope and implementation
+Reviewed 2026-10-27. This file records current product scope and implementation
 limits. [ARCHITECTURE.md](ARCHITECTURE.md) defines runtime boundaries;
 [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) records concrete shared
 storage/reuse decisions; [AGENTS.md](../AGENTS.md) governs engineering changes.
 Historical plans are evidence, not additional implementation authorization.
 
 ## Implemented product
+
+The isolated [synthetic demonstration](DEMO.md) is now available from source and
+as a separately identified demo bundle. It reuses the local pipeline, requires
+explicit indexing, and blocks credentials, Gmail access/writes and external AI
+in Go. Its fixed-profile sample restoration preserves journals and real profiles.
 
 MailPilot is a local-first Gmail desktop manager. One Go process owns one SQLite
 database, Gmail access and local/optional external AI policy. React/TypeScript

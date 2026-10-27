@@ -4,6 +4,7 @@ import type { GmailStatus } from "../../lib/ipc/client";
 import type { GmailConnectionState } from "./useGmailConnection";
 
 const messages: Record<NonNullable<GmailStatus["code"]>, string> = {
+  demo_mode: "Synthetic demo: Google sign-in and account changes are disabled.",
   oauth_not_configured:
     "Set up a Google Desktop OAuth client using docs/GMAIL_SETUP.md, then restart MailPilot.",
   credential_store_unavailable:
@@ -47,9 +48,11 @@ export function ConnectionStatus({
       <p role="status" aria-live="polite">
         {error
           ? "Gmail status unavailable"
-          : status
-            ? connectionStates[status.state]
-            : "Restoring your Gmail session…"}
+          : status?.demo
+            ? "Synthetic demo · offline sample mailbox"
+            : status
+              ? connectionStates[status.state]
+              : "Restoring your Gmail session…"}
       </p>
       {error && (
         <p role="alert">

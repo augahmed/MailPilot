@@ -69,14 +69,19 @@ type searchJob struct {
 // LocalSearch owns only one short-lived local query. It shares the indexing
 // provider; it never starts/rebuilds an index or calls an AI/Gmail adapter.
 type LocalSearch struct {
-	root     context.Context
-	session  func() (domain.AccountID, context.Context, error)
-	search   *retrieval.VectorSearch
-	coverage repository.IndexRepository
-	mu       sync.Mutex
-	job      *searchJob
-	closed   bool
+	requireIndexStart bool
+	root              context.Context
+	session           func() (domain.AccountID, context.Context, error)
+	search            *retrieval.VectorSearch
+	coverage          repository.IndexRepository
+	mu                sync.Mutex
+	job               *searchJob
+	closed            bool
 }
+
+// RequireIndexStart is immutable demo startup policy. It prevents a query from
+// initializing inference before a durable explicit indexing run has existed.
+func (s *LocalSearch) RequireIndexStart() { s.requireIndexStart = true }
 
 func NewLocalSearch(root context.Context, session func() (domain.AccountID, context.Context, error), search *retrieval.VectorSearch, coverage repository.IndexRepository) *LocalSearch {
 	return &LocalSearch{root: root, session: session, search: search, coverage: coverage}
@@ -123,6 +128,17 @@ func (s *LocalSearch) Manage(ctx context.Context, r SearchRequest) SearchRespons
 		}
 	}
 	if r.Operation == "start" {
+		mode, keywordOnly := r.Mode, false
+		if s.requireIndexStart && mode != "keyword" {
+			if _, e := s.coverage.Run(ctx, account); errors.Is(e, repository.ErrNotFound) {
+				if mode != "hybrid" {
+					return emptySearch("model_unavailable")
+				}
+				mode, keywordOnly = "keyword", true
+			} else if e != nil {
+				return emptySearch(searchError(e))
+			}
+		}
 		if s.job != nil {
 			select {
 			case <-s.job.done:
@@ -150,7 +166,10 @@ func (s *LocalSearch) Manage(ctx context.Context, r SearchRequest) SearchRespons
 			defer close(j.done)
 			defer jobCancel()
 			defer revoke()
-			result, err := s.search.SearchMode(jobCtx, account, r.Query, r.Limit, r.Filter, r.Mode)
+			result, err := s.search.SearchMode(jobCtx, account, r.Query, r.Limit, r.Filter, mode)
+			if keywordOnly {
+				result.Warning = "semantic_unavailable"
+			}
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			if s.job != j || session.Err() != nil {

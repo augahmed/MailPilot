@@ -319,6 +319,23 @@ form textarea {
   display: flex;
   flex-direction: column;
 }
+.demo-banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  padding: 12px 24px;
+  background: #e9f4ed;
+  color: #173e2c;
+  border-bottom: 1px solid #a8cbb4;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.demo-banner ~ .skip-link:focus {
+  z-index: 101;
+}
+.demo-banner ~ .app-content .organization-selection-actions {
+  position: static;
+}
 .app-header {
   position: relative;
   z-index: 3;

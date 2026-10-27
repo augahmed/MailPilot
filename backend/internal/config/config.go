@@ -14,6 +14,8 @@ import (
 )
 
 type Config struct {
+	Demo               bool
+	ResetDemo          bool
 	RiskHighThreshold  int
 	InitialSyncLimit   int
 	GoogleClientID     string
@@ -51,6 +53,9 @@ func Load(args []string, lookup func(string) (string, bool), defaultDir string) 
 		level = value
 	}
 	flags := flag.NewFlagSet("mailpilot-core", flag.ContinueOnError)
+	var demo, resetDemo bool
+	flags.BoolVar(&demo, "demo", false, "isolated offline synthetic demo")
+	flags.BoolVar(&resetDemo, "reset-demo", false, "restore bundled demo samples (requires --demo)")
 	flags.SetOutput(io.Discard)
 	flags.IntVar(&high, "risk-high-threshold", high, "HIGH phishing-risk threshold (31-100)")
 	flags.IntVar(&limit, "sync-limit", limit, "maximum messages per Inbox sync (1-10000)")
@@ -68,6 +73,23 @@ func Load(args []string, lookup func(string) (string, bool), defaultDir string) 
 	if flags.NArg() != 0 {
 		return Config{}, errors.New("unexpected positional arguments")
 	}
+	if resetDemo && !demo {
+		return Config{}, errors.New("demo reset requires demo mode")
+	}
+	explicitDir := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "data-dir" {
+			explicitDir = true
+		}
+	})
+	if demo {
+		if explicitDir {
+			return Config{}, errors.New("demo profile cannot be selected by a data path")
+		}
+		dir = defaultDir + ".demo-v1"
+	} else if filepath.Clean(dir) == filepath.Clean(defaultDir+".demo-v1") {
+		return Config{}, errors.New("demo profile requires demo mode")
+	}
 	if strings.TrimSpace(dir) == "" || !filepath.IsAbs(dir) || filepath.Clean(dir) == string(filepath.Separator) {
 		return Config{}, errors.New("data directory must be an absolute non-root path")
 	}
@@ -76,9 +98,14 @@ func Load(args []string, lookup func(string) (string, bool), defaultDir string) 
 	if !ok {
 		return Config{}, errors.New("invalid log level")
 	}
-	clientID, clientSecret, err := googleConfiguration(lookup, packagedGoogleJSON())
+	var clientID string
+	var clientSecret credentials.Secret
+	var err error
+	if !demo {
+		clientID, clientSecret, err = googleConfiguration(lookup, packagedGoogleJSON())
+	}
 	if err != nil {
 		return Config{}, err
 	}
-	return Config{RiskHighThreshold: high, InitialSyncLimit: limit, DataDir: filepath.Clean(dir), LogLevel: parsed, GoogleClientID: clientID, GoogleClientSecret: clientSecret}, nil
+	return Config{Demo: demo, ResetDemo: resetDemo, RiskHighThreshold: high, InitialSyncLimit: limit, DataDir: filepath.Clean(dir), LogLevel: parsed, GoogleClientID: clientID, GoogleClientSecret: clientSecret}, nil
 }

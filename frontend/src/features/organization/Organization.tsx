@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useDemo } from "../../app/DemoContext";
 import {
   organize,
   manageCategories,
@@ -88,6 +89,7 @@ function completion(result: OrganizationResponse) {
     : "The selected emails already have the reviewed Gmail labels. No additions were needed.";
 }
 export function Organization({ active: visible = true }: { active?: boolean }) {
+  const demo = useDemo();
   const [view, setView] = useState<View>("select");
   const [suggestionMode, setSuggestionMode] = useState<"choose" | "highest">(
     "choose",
@@ -551,8 +553,9 @@ export function Organization({ active: visible = true }: { active?: boolean }) {
     >
       <h2 id="organization-heading">Organize Gmail labels</h2>
       <p>
-        Select emails, review their label changes, then confirm to update Gmail.
-        Emails remain in the Inbox; nothing is deleted or archived.
+        {demo
+          ? "Preview label proposals using only the synthetic cached messages. Applying changes and remote recovery are disabled."
+          : "Select emails, review their label changes, then confirm to update Gmail. Emails remain in the Inbox; nothing is deleted or archived."}
       </p>
       <ol className="workflow-steps" aria-label="Organization progress">
         {["Select emails", "Review changes", "Update Gmail"].map(
@@ -865,7 +868,9 @@ export function Organization({ active: visible = true }: { active?: boolean }) {
           )}
           <p className="help">
             Preview valid until {new Date(batch.expiresAt).toLocaleTimeString()}
-            . Confirming authorizes exactly these changes.
+            {demo
+              ? ". Local preview only; no Gmail changes can be authorized."
+              : ". Confirming authorizes exactly these changes."}
           </p>
           <div className="organization-confirm-actions">
             <button
@@ -875,8 +880,13 @@ export function Organization({ active: visible = true }: { active?: boolean }) {
             >
               Go Back
             </button>
-            <button disabled={!canConfirm} onClick={() => void act("apply")}>
-              Confirm Changes
+            <button
+              disabled={demo || !canConfirm}
+              onClick={() => void act("apply")}
+            >
+              {demo
+                ? "Preview only — demo cannot change Gmail"
+                : "Confirm Changes"}
             </button>
           </div>
         </>

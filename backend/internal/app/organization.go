@@ -24,6 +24,7 @@ type OrganizationProvider interface {
 // Organization runs a single bounded job per desktop session. No remote write
 // is reachable from list, preview, dry run, status or reconciliation.
 type Organization struct {
+	previewOnly   bool
 	prepareChunks func(context.Context, domain.AccountID, domain.ProviderMessageID) error
 	riskEngine    *risk.Engine
 	mu            sync.Mutex
@@ -41,6 +42,10 @@ type Organization struct {
 	busy          bool
 	wg            sync.WaitGroup
 }
+
+// SetPreviewOnly is trusted startup policy for the isolated synthetic profile.
+// It permits cached-source previews with an adapter that has no write capability.
+func (s *Organization) SetPreviewOnly() { s.previewOnly = true }
 
 func NewOrganization(root context.Context, session func() (domain.AccountID, context.Context, error), factory func(domain.AccountID) OrganizationProvider, emails repository.EmailRepository, categories repository.CategoryRepository, results repository.ClassificationRepository, journal repository.OrganizationRepository, engine classification.ClassificationEngine) *Organization {
 	return &Organization{riskEngine: risk.DefaultEngine(), root: root, session: session, factory: factory, emails: emails, categories: categories, results: results, journal: journal, engine: engine, response: emptyOrganization()}
@@ -101,6 +106,13 @@ func (s *Organization) Handle(ctx context.Context, p OrganizationRequest) Organi
 	fail := func(code string) OrganizationResponse { r := emptyOrganization(); r.Code = code; return r }
 	if !p.Valid() {
 		return fail("validation")
+	}
+	if s.previewOnly {
+		switch p.Operation {
+		case "list", "suggestions", "preview", "dry_run", "status", "cancel":
+		default:
+			return fail("unsupported")
+		}
 	}
 	account, session, err := s.session()
 	if err != nil || account == "" || session == nil || session.Err() != nil || p.AccountID != "" && p.AccountID != string(account) {
@@ -220,7 +232,7 @@ func (s *Organization) Handle(ctx context.Context, p OrganizationRequest) Organi
 func (s *Organization) work(ctx context.Context, account domain.AccountID, request OrganizationRequest) (OrganizationResponse, error) {
 	p := s.factory(account)
 	caps := p.Capabilities()
-	if !caps.ModifyLabels || !caps.CreateLabels {
+	if !s.previewOnly && (!caps.ModifyLabels || !caps.CreateLabels) {
 		return emptyOrganization(), provider.ErrUnsupported
 	}
 	latest, err := s.journal.Latest(ctx, account, false)

@@ -32,6 +32,7 @@ type Provider interface {
 
 // Status is the only authentication information exposed to the UI.
 type Status struct {
+	Demo      bool             `json:"demo,omitempty"`
 	AccountID domain.AccountID `json:"-"`
 	State     string           `json:"state"`
 	Email     string           `json:"email,omitempty"`

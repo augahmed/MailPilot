@@ -1,5 +1,14 @@
 # Local IPC, protocol version 1
 
+The additive synthetic-demo response field is `auth.status`/`AuthStatus.demo:true`
+(also present on blocked authentication-operation responses). It is omitted for
+ordinary accounts. `demo_mode` is a safe auth code for rejected demo account
+actions. Go supplies this identity from trusted startup; no request accepts a
+demo flag, profile path or account override. Demo sessions authorize only the
+fixture account. All existing account checks remain active. Sync, external AI,
+remote recovery and label dispatch are unavailable; local label previews use
+cached synthetic snapshots. See [demo startup/isolation](../docs/DEMO.md).
+
 Status reconciled with source 2026-10-26. This file documents implemented IPC, not future feature
 authorization. [The architecture](../docs/ARCHITECTURE.md) describes the implemented
 shared local chunk/vector pipeline; [the product plan](../docs/PRODUCT_PLAN.md)

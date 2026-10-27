@@ -22,6 +22,8 @@ import (
 var migrations embed.FS
 
 type Store struct {
+	// Set only by successful trusted startup validation, before services run.
+	demo    bool
 	db      *sql.DB
 	version int
 }

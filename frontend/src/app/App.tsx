@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { DemoContext, useDemo } from "./DemoContext";
 import { LocalEmailIndex } from "../features/indexing/LocalEmailIndex";
 import { AISettings } from "../features/ai/AISettings";
 import { PrivacyNotice } from "../features/privacy/PrivacyNotice";
@@ -17,6 +18,7 @@ function AuthorizedApp({
 }: {
   connection: ReturnType<typeof useGmailConnection>;
 }) {
+  const demo = useDemo();
   const [page, setPage] = useState<Page>("dashboard");
   const [indexReturn, setIndexReturn] = useState<"dashboard" | "categories">(
     "dashboard",
@@ -121,19 +123,33 @@ function AuthorizedApp({
                 <Icon name={feature.icon} />
               </span>
               <span className="feature-title">{feature.title}</span>
-              <span className="feature-description">{feature.description}</span>
+              <span className="feature-description">
+                {demo && feature.id === "organization"
+                  ? "Preview local label proposals"
+                  : feature.description}
+              </span>
               <span className="feature-arrow" aria-hidden="true">
                 ↗
               </span>
             </button>
           ))}
         </nav>
-        {(visited.has("ask") || visited.has("settings")) && (
+        {!demo && (visited.has("ask") || visited.has("settings")) && (
           <div hidden={page !== "ask" && page !== "settings"}>
             <AISettings />
           </div>
         )}
         <MailWorkspace connectionRevision={0} page={page} visited={visited} />
+        {demo && ["settings", "ask", "recovery"].includes(page) && (
+          <aside className="attention-panel">
+            <h2>External services are disabled in this demo</h2>
+            <p>
+              No Google connection, credentials or paid AI calls are available.
+              Use Email search to retrieve real local excerpts, or Start
+              indexing for local semantic features.
+            </p>
+          </aside>
+        )}
         {page === "privacy" && <PrivacyNotice />}
         {visited.has("index") && (
           <div hidden={page !== "index"}>
@@ -167,7 +183,7 @@ function AuthorizedApp({
             <Organization active={page === "organization"} />
           </div>
         )}
-        {visited.has("recovery") && (
+        {!demo && visited.has("recovery") && (
           <div hidden={page !== "recovery"}>
             <AIMaintenance />
           </div>
@@ -210,35 +226,43 @@ export function App() {
     };
   }, []);
   return (
-    <div className="app-shell">
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      {connection.email !== null ? (
-        <AuthorizedApp key={connection.email} connection={connection} />
-      ) : (
-        <>
-          <header className="app-header landing-header">
-            <Brand />
-            <span className="header-note">Local-first email assistant</span>
-          </header>
-          <main id="main-content" className="landing-content" tabIndex={-1}>
-            <GmailConnection connection={connection} />
-          </main>
-        </>
-      )}
-      <footer className="app-footer">
-        <span>MailPilot · Your mail. Your device.</span>
-        <span role="status">
-          {health
-            ? health.database === "connected"
-              ? `Local storage ready · v${health.version}`
-              : "Database unavailable"
-            : failed
-              ? "Desktop backend unavailable. Open or restart the desktop app."
-              : "Connecting to desktop…"}
-        </span>
-      </footer>
-    </div>
+    <DemoContext.Provider value={connection.status?.demo === true}>
+      <div className="app-shell">
+        {connection.status?.demo && (
+          <aside className="demo-banner" role="note">
+            <strong>Synthetic demo</strong> · Fictional mail in a separate local
+            profile. Gmail writes and external AI are disabled.
+          </aside>
+        )}
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
+        {connection.email !== null ? (
+          <AuthorizedApp key={connection.email} connection={connection} />
+        ) : (
+          <>
+            <header className="app-header landing-header">
+              <Brand />
+              <span className="header-note">Local-first email assistant</span>
+            </header>
+            <main id="main-content" className="landing-content" tabIndex={-1}>
+              <GmailConnection connection={connection} />
+            </main>
+          </>
+        )}
+        <footer className="app-footer">
+          <span>MailPilot · Your mail. Your device.</span>
+          <span role="status">
+            {health
+              ? health.database === "connected"
+                ? `Local storage ready · v${health.version}`
+                : "Database unavailable"
+              : failed
+                ? "Desktop backend unavailable. Open or restart the desktop app."
+                : "Connecting to desktop…"}
+          </span>
+        </footer>
+      </div>
+    </DemoContext.Provider>
   );
 }

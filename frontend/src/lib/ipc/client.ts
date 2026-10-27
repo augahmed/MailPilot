@@ -22,6 +22,7 @@ export async function getHealth(): Promise<Health> {
 
 export const gmailStatusSchema = z
   .object({
+    demo: z.boolean().optional(),
     state: z.enum([
       "unconfigured",
       "disconnected",
@@ -46,6 +47,7 @@ export const gmailStatusSchema = z
         "account_storage_failed",
         "account_cleanup_failed",
         "revocation_failed",
+        "demo_mode",
       ])
       .optional(),
   })

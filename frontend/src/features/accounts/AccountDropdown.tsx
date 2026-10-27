@@ -11,6 +11,7 @@ export function AccountDropdown({
   connection: GmailConnectionState;
   navigate: (page: Page) => void;
 }) {
+  const demo = connection.status?.demo === true;
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -79,12 +80,14 @@ export function AccountDropdown({
       </button>
       {open && (
         <div id="account-panel" className="account-panel">
-          <p className="account-label">GMAIL ACCOUNT</p>
+          <p className="account-label">
+            {demo ? "SYNTHETIC DEMO" : "GMAIL ACCOUNT"}
+          </p>
           <strong className="account-email">{connection.email}</strong>
           <ConnectionStatus connection={connection} />
           <button
             className="dropdown-action"
-            disabled={working}
+            disabled={working || demo}
             onClick={() => {
               void connection.act("gmail_check");
             }}
@@ -121,7 +124,7 @@ export function AccountDropdown({
           <button
             className="dropdown-action danger-text"
             ref={disconnect}
-            disabled={connection.busy}
+            disabled={connection.busy || demo}
             onClick={() => setConfirming(true)}
           >
             Disconnect

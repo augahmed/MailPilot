@@ -153,6 +153,30 @@ const connected = () =>
     .mockResolvedValue({ state: "connected", email: "reader@example.test" });
 const account = () => screen.getByRole("button", { name: /Gmail account/ });
 
+it("keeps the synthetic identity visible and gates external services across navigation", async () => {
+  vi.mocked(gmailCommand).mockResolvedValue({
+    state: "connected",
+    demo: true,
+    email: "pilot@example.test",
+  });
+  render(<App />);
+  await screen.findByRole("heading", { name: "Your Emails" });
+  expect(screen.getByRole("note")).toHaveTextContent("Synthetic demo");
+  expect(screen.getByRole("button", { name: "Offline demo" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: /Ask About Email/ }));
+  expect(
+    screen.getByText("External services are disabled in this demo"),
+  ).toBeVisible();
+  expect(screen.queryByText("Existing AI settings")).toBeNull();
+  expect(screen.queryByText("Existing evidence questions")).toBeNull();
+  fireEvent.click(account());
+  expect(
+    screen.getByRole("button", { name: "Check Connection" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Disconnect" })).toBeDisabled();
+  expect(screen.getByRole("note")).toHaveTextContent("Synthetic demo");
+});
+
 describe("authentication and dashboard", () => {
   it("gates the dashboard and all feature requests during disconnected launch", async () => {
     render(<App />);

@@ -10,6 +10,11 @@ release recommendation.
 
 ## Threat model and boundaries
 
+The [synthetic demo](docs/DEMO.md) has a fixed isolated profile and fixture session.
+Its backend constructs no credential/network adapters and rejects external actions
+independently of presentation controls. Sample restoration preserves journals and
+never accepts a caller-selected path. Ordinary startup refuses demo profiles.
+
 Email, headers, HTML and model output are untrusted. MailPilot renders escaped
 text, blocks remote mail content and does not execute attachments. React has only
 typed, bounded desktop commands; Go owns account authorization, credentials,

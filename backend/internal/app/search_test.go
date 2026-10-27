@@ -21,6 +21,41 @@ func (f *indexFake) EmbedQuery(ctx context.Context, q string) ([]float32, error)
 	return v[0], nil
 }
 func searchRequest(op string) SearchRequest { return SearchRequest{Operation: op, AccountID: "a"} }
+
+func TestDemoQueryDoesNotInitializeInferenceBeforeIndexStart(t *testing.T) {
+	idx, db, f, emails, _ := indexFixture(t, 2)
+	ctx := context.Background()
+	chunker, err := NewCachedChunker(db.Emails(), db.Chunks())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, email := range emails {
+		if err = chunker.Prepare(ctx, "a", email.ProviderID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := NewLocalSearch(ctx, idx.session, retrieval.New(db.Vectors(), f), db.Indexing())
+	s.RequireIndexStart()
+	defer s.Close(ctx)
+	s.Manage(ctx, SearchRequest{Operation: "start", AccountID: "a", Query: "project", Limit: 10, Mode: "hybrid"})
+	r := waitSearch(t, s)
+	if r.Status != "complete" || r.Mode != "keyword" || r.Warning != "semantic_unavailable" || len(r.Emails) == 0 || f.count() != 0 {
+		t.Fatal("demo query inferred before explicit indexing", r.Status, r.Code)
+	}
+	if r = s.Manage(ctx, SearchRequest{Operation: "start", AccountID: "a", Query: "project", Limit: 10, Mode: "semantic"}); r.Code != "model_unavailable" || f.count() != 0 {
+		t.Fatal("semantic request bypassed demo enablement")
+	}
+	indexCommand(idx, "start")
+	if r := waitIndex(t, idx); r.Status != "complete" {
+		t.Fatal(r.Code)
+	}
+	count := f.count()
+	s.Manage(ctx, SearchRequest{Operation: "start", AccountID: "a", Query: "project", Limit: 10, Mode: "hybrid"})
+	r = waitSearch(t, s)
+	if r.Status != "complete" || r.Mode != "hybrid" || f.count() <= count {
+		t.Fatal("explicitly enabled demo query did not reuse local model", r.Code)
+	}
+}
 func waitSearch(t *testing.T, s *LocalSearch) SearchResponse {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)

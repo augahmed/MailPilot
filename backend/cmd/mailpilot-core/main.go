@@ -16,6 +16,7 @@ import (
 	"mailpilot.local/core/internal/classification"
 	"mailpilot.local/core/internal/config"
 	"mailpilot.local/core/internal/credentials"
+	"mailpilot.local/core/internal/demo"
 	"mailpilot.local/core/internal/domain"
 	"mailpilot.local/core/internal/embedding"
 	"mailpilot.local/core/internal/ipc"
@@ -60,7 +61,13 @@ func run() int {
 		logger.Error("invalid configuration", "code", "config_invalid")
 		return 1
 	}
-	logger = logging.New(os.Stderr, cfg.LogLevel)
+	return runConfigured(cfg)
+}
+
+// Configuration is resolved only by trusted startup; tests can supply a private
+// synthetic OS-default root without changing the user's HOME or profile.
+func runConfigured(cfg config.Config) int {
+	logger := logging.New(os.Stderr, cfg.LogLevel)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	go func() { <-ctx.Done(); _ = os.Stdin.Close() }()
@@ -108,18 +115,34 @@ func run() int {
 	}()
 	logger.Info("core started", "version", version)
 	ctxRoot := ctx
-	err = ipc.Serve(ctx, os.Stdin, os.Stdout, func(ctx context.Context) (ipc.HealthService, error) {
+	err := ipc.Serve(ctx, os.Stdin, os.Stdout, func(ctx context.Context) (ipc.HealthService, error) {
 		var err error
+		if err = demo.PrepareProfile(cfg.DataDir, cfg.Demo); err != nil {
+			return nil, err
+		}
 		store, err = sqlite.Open(ctx, cfg.DataDir)
 		if err != nil {
 			logger.Error("database initialization failed", "code", "database_init")
 			return nil, err
 		}
 		logger.Info("database initialized", "schema_version", store.SchemaVersion())
-		tokenStore := credentials.NewKeyring(cfg.DataDir, cfg.GoogleClientID)
-		authentication = auth.NewManager(ctxRoot, gmail.NewOAuth(cfg.GoogleClientID, cfg.GoogleClientSecret), tokenStore, store.Accounts(), tokenStore.Reference())
-		authentication.Check()
+		if err = store.VerifyProfile(ctx, cfg.Demo); err != nil {
+			return nil, err
+		}
 		application := app.New(store, version)
+		application.Demo = cfg.Demo
+		var session func() (domain.AccountID, context.Context, error)
+		if cfg.Demo {
+			synthetic := &demo.Session{Context: ctxRoot}
+			application.Auth = synthetic
+			session = synthetic.Session
+		} else {
+			tokenStore := credentials.NewKeyring(cfg.DataDir, cfg.GoogleClientID)
+			authentication = auth.NewManager(ctxRoot, gmail.NewOAuth(cfg.GoogleClientID, cfg.GoogleClientSecret), tokenStore, store.Accounts(), tokenStore.Reference())
+			authentication.Check()
+			application.Auth = authentication
+			session = authentication.Session
+		}
 		riskConfig := risk.DefaultConfig()
 		riskConfig.High = cfg.RiskHighThreshold
 		riskEngine, err := risk.NewEngine(riskConfig)
@@ -127,20 +150,27 @@ func run() int {
 			return nil, err
 		}
 		application.RiskEngine = riskEngine
-		application.Auth = authentication
-		synchronization = mailsync.New(ctxRoot, authentication.Session, func(account domain.AccountID) mailsync.Reader { return gmail.NewProvider(account, authentication) }, store.Emails(), cfg.InitialSyncLimit)
-		application.Sync = synchronization
+		if !cfg.Demo {
+			synchronization = mailsync.New(ctxRoot, session, func(account domain.AccountID) mailsync.Reader { return gmail.NewProvider(account, authentication) }, store.Emails(), cfg.InitialSyncLimit)
+		}
 		chunking, err := app.NewCachedChunker(store.Emails(), store.Chunks())
 		if err != nil {
 			return nil, err
 		}
-		synchronization.SetChunkProcessor(chunking.Prepare)
-		synchronization.SetCachedChunkProcessor(chunking.PrepareCached)
+		if synchronization != nil {
+			synchronization.SetChunkProcessor(chunking.Prepare)
+			synchronization.SetCachedChunkProcessor(chunking.PrepareCached)
+		}
+		if cfg.Demo {
+			if err = demo.Seed(ctx, store.Accounts(), store.Emails(), chunking.Prepare, cfg.ResetDemo); err != nil {
+				return nil, err
+			}
+		}
 		localProvider, err := embedding.New()
 		if err != nil {
 			return nil, err
 		}
-		indexing, err = app.NewLocalIndex(ctxRoot, authentication.Session, store.Emails(), store.Chunks(), store.Indexing(), localProvider)
+		indexing, err = app.NewLocalIndex(ctxRoot, session, store.Emails(), store.Chunks(), store.Indexing(), localProvider)
 		if err != nil {
 			_ = localProvider.Close(ctx)
 			return nil, err
@@ -148,7 +178,10 @@ func run() int {
 		indexing.EnableCategoryVectors(store.CategoryVectors())
 		application.Index = indexing
 		retriever := retrieval.New(store.Vectors(), localProvider)
-		searching = app.NewLocalSearch(ctxRoot, authentication.Session, retriever, store.Indexing())
+		searching = app.NewLocalSearch(ctxRoot, session, retriever, store.Indexing())
+		if cfg.Demo {
+			searching.RequireIndexStart()
+		}
 		application.Search = searching
 		application.Emails = store.Emails()
 		application.Categories = store.Categories()
@@ -161,31 +194,42 @@ func run() int {
 			return nil, err
 		}
 		indexing.EnableClassification(store.Semantic(), engine)
-		organization = app.NewOrganization(ctxRoot, authentication.Session, func(account domain.AccountID) app.OrganizationProvider {
+		organization = app.NewOrganization(ctxRoot, session, func(account domain.AccountID) app.OrganizationProvider {
+			if cfg.Demo {
+				return &demo.Mailbox{Account: account, Emails: store.Emails()}
+			}
 			return gmail.NewProvider(account, authentication)
 		}, store.Emails(), store.Categories(), store.Classifications(), store.Organization(), engine)
 		organization.SetChunkProcessor(chunking.Prepare)
-		gate := make(chan struct{}, 1)
-		keys := func(account domain.AccountID) credentials.SecretStore {
-			return credentials.NewAPIKeyStore(cfg.DataDir+"\x00"+string(account), "openai")
+		if cfg.Demo {
+			organization.SetPreviewOnly()
 		}
-		intelligence = app.NewAIService(ctxRoot, authentication.Session, store.Emails(), store.AISettings(), map[string]app.ProviderAdapter{
-			"openai": {External: true, Keys: keys, New: func(account domain.AccountID, model string) (ai.AIProvider, error) {
-				return openai.New(keys(account), model)
-			}},
-		})
-		intelligence.EnableAnswers(retriever, store.Indexing())
-		application.AI = intelligence
-		replies = app.NewReplyMaintenance(ctxRoot, authentication.Session, store.Replies(), func(account domain.AccountID) provider.DraftFinder { return gmail.NewProvider(account, authentication) })
-		application.Replies = replies
+		gate := make(chan struct{}, 1)
+		if !cfg.Demo {
+			keys := func(account domain.AccountID) credentials.SecretStore {
+				return credentials.NewAPIKeyStore(cfg.DataDir+"\x00"+string(account), "openai")
+			}
+			intelligence = app.NewAIService(ctxRoot, session, store.Emails(), store.AISettings(), map[string]app.ProviderAdapter{
+				"openai": {External: true, Keys: keys, New: func(account domain.AccountID, model string) (ai.AIProvider, error) {
+					return openai.New(keys(account), model)
+				}},
+			})
+			intelligence.EnableAnswers(retriever, store.Indexing())
+			application.AI = intelligence
+			replies = app.NewReplyMaintenance(ctxRoot, session, store.Replies(), func(account domain.AccountID) provider.DraftFinder { return gmail.NewProvider(account, authentication) })
+			application.Replies = replies
+		}
+
 		organization.SetRiskEngine(riskEngine)
 		organization.SetOperationGate(gate)
-		synchronization.SetOperationGate(gate)
-		synchronization.SetCheckpoints(store.SyncCheckpoints())
+		if synchronization != nil {
+			synchronization.SetOperationGate(gate)
+			synchronization.SetCheckpoints(store.SyncCheckpoints())
+		}
 		application.Organization = organization
-		application.Classification = app.NewClassificationReview(authentication.Session, engine, store.Emails(), store.Categories(), store.Classifications())
+		application.Classification = app.NewClassificationReview(session, engine, store.Emails(), store.Categories(), store.Classifications())
 		application.Classification.EnableSemantic(store.Semantic(), store.Chunks())
-		application.Reader = app.NewCachedReader(authentication.Session, store.Emails(), application.Classification, riskEngine)
+		application.Reader = app.NewCachedReader(session, store.Emails(), application.Classification, riskEngine)
 		return application, nil
 	})
 	if err != nil && ctx.Err() == nil {

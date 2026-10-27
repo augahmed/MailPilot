@@ -52,6 +52,8 @@ mod capability_tests {
 
 struct SmokeTest {
     enabled: bool,
+    demo: bool,
+    demo_started: AtomicBool,
     personal_google: bool,
     completed: AtomicBool,
     auth_completed: AtomicBool,
@@ -257,6 +259,11 @@ async fn gmail_status(
 ) -> Result<AuthStatus, String> {
     let result = account_command(backend, "auth.status").await?;
     let smoke = app.state::<SmokeTest>();
+    if smoke.demo && result.demo == Some(true) && !smoke.demo_started.swap(true, Ordering::SeqCst) {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.eval(include_str!("smoke-demo.js"));
+        }
+    }
     if smoke.enabled
         && result.state
             == if smoke.personal_google {
@@ -289,8 +296,19 @@ async fn gmail_connect(backend: tauri::State<'_, Backend>) -> Result<AuthStatus,
     account_command(backend, "auth.begin").await
 }
 #[tauri::command]
-async fn gmail_check(backend: tauri::State<'_, Backend>) -> Result<AuthStatus, String> {
-    account_command(backend, "auth.check").await
+async fn gmail_check(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, Backend>,
+) -> Result<AuthStatus, String> {
+    let result = account_command(backend, "auth.check").await?;
+    if app.state::<SmokeTest>().demo && result.demo == Some(true) {
+        app.state::<SmokeTest>()
+            .completed
+            .store(true, Ordering::SeqCst);
+        eprintln!("{{\"event\":\"frontend_demo_ok\"}}");
+        app.exit(0);
+    }
+    Ok(result)
 }
 #[tauri::command]
 async fn gmail_disconnect(backend: tauri::State<'_, Backend>) -> Result<AuthStatus, String> {
@@ -591,19 +609,42 @@ fn main() {
         }))
         .setup(|app| {
             let smoke_test = std::env::args().any(|arg| arg == "--smoke-test");
-            app.manage(SmokeTest { enabled: smoke_test, personal_google: std::env::args().any(|arg| arg == "--smoke-personal-config"), completed: AtomicBool::new(false), auth_completed: AtomicBool::new(false), mailbox_completed: AtomicBool::new(false), reader_completed: AtomicBool::new(false), categories_completed: AtomicBool::new(false), classification_completed: AtomicBool::new(false), organization_completed:AtomicBool::new(false), reply_completed:AtomicBool::new(false), ai_settings_completed:AtomicBool::new(false),summary_completed:AtomicBool::new(false),index_completed:AtomicBool::new(false),search_completed:AtomicBool::new(false),answer_completed:AtomicBool::new(false) });
-            if smoke_test {
+            let demo_smoke = std::env::args().any(|arg| arg == "--smoke-demo");
+            app.manage(SmokeTest {
+                enabled: smoke_test,
+                demo: demo_smoke,
+                demo_started: AtomicBool::new(false),
+                personal_google: std::env::args().any(|arg| arg == "--smoke-personal-config"),
+                completed: AtomicBool::new(false),
+                auth_completed: AtomicBool::new(false),
+                mailbox_completed: AtomicBool::new(false),
+                reader_completed: AtomicBool::new(false),
+                categories_completed: AtomicBool::new(false),
+                classification_completed: AtomicBool::new(false),
+                organization_completed:AtomicBool::new(false),
+                reply_completed:AtomicBool::new(false),
+                ai_settings_completed:AtomicBool::new(false),
+                summary_completed:AtomicBool::new(false),
+                index_completed:AtomicBool::new(false),
+                search_completed:AtomicBool::new(false),
+                answer_completed:AtomicBool::new(false),
+            });
+            if smoke_test || demo_smoke {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(20));
-                    if !handle.state::<SmokeTest>().complete() {
+                    if if demo_smoke { !handle.state::<SmokeTest>().completed.load(Ordering::SeqCst) } else { !handle.state::<SmokeTest>().complete() } {
                         eprintln!("{{\"level\":\"ERROR\",\"component\":\"desktop\",\"code\":\"smoke_timeout\"}}");
                         handle.exit(1);
                     }
                 });
             }
             let data_dir = app.path().app_data_dir()?;
-            let backend = Bridge::start(&data_dir);
+            let demo = app.config().identifier == "com.mailpilot.desktop.demo"
+                || std::env::args().any(|arg| arg == "--demo");
+            let reset_demo = std::env::args().any(|arg| arg == "--reset-demo");
+            if demo_smoke && !demo { return Err(std::io::Error::other("Demo smoke requires the synthetic profile").into()); }
+            let backend = Bridge::start(&data_dir, demo, reset_demo);
             if backend.is_err() {
                 eprintln!("{{\"level\":\"ERROR\",\"component\":\"desktop\",\"code\":\"backend_start\"}}");
             }

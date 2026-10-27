@@ -12,9 +12,27 @@ import (
 	mailsync "mailpilot.local/core/internal/sync"
 )
 
-func (a *App) SyncCancel() mailsync.Progress { return a.Sync.Cancel() }
-func (a *App) SyncStart() mailsync.Progress  { return a.Sync.Start() }
-func (a *App) SyncStatus() mailsync.Progress { return a.Sync.Status() }
+func (a *App) SyncCancel() mailsync.Progress {
+	if a.Demo {
+		return demoSync()
+	}
+	return a.Sync.Cancel()
+}
+func (a *App) SyncStart() mailsync.Progress {
+	if a.Demo {
+		return demoSync()
+	}
+	return a.Sync.Start()
+}
+func (a *App) SyncStatus() mailsync.Progress {
+	if a.Demo {
+		return mailsync.Progress{State: "idle", Limit: 500}
+	}
+	return a.Sync.Status()
+}
+func demoSync() mailsync.Progress {
+	return mailsync.Progress{State: "error", Code: "provider_error", Limit: 500}
+}
 
 type MailboxRow struct {
 	Classification *MailboxClassification `json:"classification,omitempty"`

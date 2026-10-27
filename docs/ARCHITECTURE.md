@@ -1,6 +1,6 @@
 # MailPilot architecture
 
-Reviewed 2026-10-22 against executable composition and call sites. This document
+Reviewed 2026-10-27 against executable composition and call sites. This document
 describes implemented runtime/trust boundaries; [PRODUCT_PLAN.md](PRODUCT_PLAN.md)
 records product scope and limits. [AGENTS.md](../AGENTS.md) is the engineering
 contract, and [VECTOR_ARCHITECTURE_PLAN.md](VECTOR_ARCHITECTURE_PLAN.md) records the
@@ -31,6 +31,18 @@ Old `ask.manage`/`search.semantic` operations remain rejected. Do not reactivate
 an archived command or trust an old vector merely because a schema/fixture exists.
 
 ## 2. Runtime and package ownership
+
+Trusted native startup selects an explicit `--demo` flag or the separately built
+`com.mailpilot.desktop.demo` application identifier. Go forces a fixed marked
+synthetic profile, validates account metadata, seeds samples idempotently through
+existing repositories/chunking, and supplies a fixture session. No Gmail, keyring,
+sync, external generation or remote-recovery adapters are constructed in that
+branch. Ordinary startup rejects demo markers/account metadata. The existing
+organization service permits local cached-source previews with no write-capable
+adapter; dispatch/reconciliation are rejected. React consumes the additive auth
+demo identity for a persistent banner and presentation restrictions. There is no
+frontend mode/path selector, alternate database owner or alternate vector store.
+See [the demo contract and walkthrough](DEMO.md).
 
 The installed runtime remains one desktop product. Rust owns windows, packaged
 process lifecycle, app-data paths and narrow typed commands. It starts a fixed Go

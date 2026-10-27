@@ -34,7 +34,7 @@ func (r *indexRepository) Begin(ctx context.Context, a domain.AccountID, p repos
 		return repository.IndexRun{}, repository.ErrInvalid
 	}
 	err := r.store.transaction(ctx, func(tx *sql.Tx) error {
-		if err := exists(ctx, tx, `SELECT 1 FROM accounts WHERE id=? AND provider='gmail'`, a); err != nil {
+		if err := exists(ctx, tx, `SELECT 1 FROM accounts WHERE id=? AND (provider='gmail' OR (?=1 AND provider='synthetic' AND id='mailpilot-synthetic-demo-v1'))`, a, r.store.demo); err != nil {
 			return err
 		}
 		var previousFingerprint string

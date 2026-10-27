@@ -471,6 +471,8 @@ pub struct Health {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AuthStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub demo: Option<bool>,
     pub state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
@@ -730,7 +732,7 @@ fn read_frame(reader: &mut impl BufRead) -> std::io::Result<Option<Vec<u8>>> {
 }
 
 impl Bridge {
-    pub fn start(data_dir: &Path) -> Result<Self, String> {
+    pub fn start(data_dir: &Path, demo: bool, reset_demo: bool) -> Result<Self, String> {
         let host = std::env::current_exe().map_err(|_| "Cannot locate desktop executable")?;
         let directory = host.parent().ok_or("Cannot locate application directory")?;
         let filename = if cfg!(windows) {
@@ -739,9 +741,18 @@ impl Bridge {
             "mailpilot-core"
         };
         let mut command = Command::new(directory.join(filename));
+        if reset_demo && !demo {
+            return Err("Demo reset requires demo mode".into());
+        }
+        if demo {
+            command.arg("--demo");
+            if reset_demo {
+                command.arg("--reset-demo");
+            }
+        }
         // The host supplies the native default. A user's explicit non-secret override
         // remains available to the core for isolated development/smoke-test profiles.
-        if std::env::var_os("MAILPILOT_DATA_DIR").is_none() {
+        if !demo && std::env::var_os("MAILPILOT_DATA_DIR").is_none() {
             command.arg("--data-dir").arg(data_dir);
         }
         let mut child = command

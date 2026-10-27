@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useDemo } from "../../app/DemoContext";
 import { EmailSummary } from "../ai/EmailSummary";
 import { readCachedMail, type ReadMailResponse } from "../../lib/ipc/reader";
 
@@ -15,6 +16,7 @@ export function MailReader({
   onBack: () => void;
   evidence?: { text: string; revision: string };
 }) {
+  const demo = useDemo();
   const [page, setPage] = useState<ReadMailResponse | null>(null);
   const [body, setBody] = useState("");
   const [error, setError] = useState("");
@@ -273,11 +275,17 @@ export function MailReader({
               </button>
             </>
           )}
-          <EmailSummary
-            key={`${accountId}/${emailId}/${page?.revision}`}
-            accountId={accountId}
-            emailId={emailId}
-          />
+          {demo ? (
+            <p className="help">
+              External AI summaries are disabled in the synthetic demo.
+            </p>
+          ) : (
+            <EmailSummary
+              key={`${accountId}/${emailId}/${page?.revision}`}
+              accountId={accountId}
+              emailId={emailId}
+            />
+          )}
           <h3>Attachments</h3>
           <p className="help">
             Metadata only; files are not downloaded or opened.

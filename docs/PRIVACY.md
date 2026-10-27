@@ -1,6 +1,6 @@
 # Current privacy and local storage
 
-Reviewed 2026-10-26. This describes implemented behavior and its limits; it is
+Reviewed 2026-10-27. This describes implemented behavior and its limits; it is
 not a claim of Google verification, database encryption or forensic erasure.
 The application exposes the same disclosures before Google sign-in under
 **Privacy and local data**, and in the signed-in account menu.
@@ -73,6 +73,12 @@ mail when sharing diagnostics. See [the security policy](../SECURITY.md) for the
 threat model, reporting route and remaining qualification limits.
 
 ## Disconnect and key removal
+
+The separate [synthetic demo](DEMO.md) uses fictional data in its own fixed profile.
+It loads no Google credentials or AI keys, contacts no external provider and
+authorizes no Gmail writes. Its sample-restore command never targets real data,
+removes keys or deletes immutable journals. Ordinary storage/privacy limits still
+apply to its unencrypted local files.
 
 Disconnect removes the Gmail connection's OS-stored credential, clears session
 access and attempts Google revocation. Failures remain visible. It retains cached

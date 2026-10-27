@@ -5,6 +5,13 @@ Tauri 2 and SQLite. The core uses one shared local preprocessing, chunking,
 embedding and vector-retrieval pipeline supporting semantic search, category
 suggestions and optional answers grounded in approved email evidence.
 
+For a demonstration with no Google or OpenAI setup, run **`npm run dev:demo`**.
+The isolated synthetic mailbox supports the real reader, keyword search,
+classification and label previews. Explicit local indexing enables semantic and
+hybrid retrieval; Gmail writes and external AI are disabled. **`npm run build:demo`**
+creates a separate MailPilot Demo application. See the [demo guide](docs/DEMO.md)
+for prerequisites, signing, sample restoration and a walkthrough.
+
 **Current status:** Gmail OAuth/keyring, bounded initial/incremental sync, cached
 cleaned plain-text reading, category management, deterministic review/risk explanations,
 confirmed label organization, selected-email Summary and historical draft recovery

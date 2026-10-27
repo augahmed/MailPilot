@@ -15,14 +15,26 @@ type Database interface {
 	SchemaVersion() int
 }
 
+// Authentication supplies session authorization; Gmail token authority remains
+// on auth.Manager and is never part of the synthetic implementation.
+type Authentication interface {
+	Status() auth.Status
+	Begin() auth.BeginResult
+	Check() auth.Status
+	Disconnect() auth.Status
+	Cancel() auth.Status
+	Session() (domain.AccountID, context.Context, error)
+}
+
 type App struct {
+	Demo           bool
 	Search         *LocalSearch
 	Index          *LocalIndex
 	AI             *AIService
 	Reader         *CachedReader
 	Replies        *ReplyService
 	RiskEngine     *risk.Engine
-	Auth           *auth.Manager
+	Auth           Authentication
 	Sync           *mailsync.Service
 	Emails         repository.EmailRepository
 	Categories     repository.CategoryRepository

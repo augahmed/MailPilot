@@ -1,4 +1,5 @@
 import type { OpenMail } from "../../lib/ipc/reader";
+import { useDemo } from "../../app/DemoContext";
 import { useEffect, useRef, useState } from "react";
 import {
   manageCategories,
@@ -21,6 +22,7 @@ export function Mailbox({
   onOpen?: OpenMail;
   active?: boolean;
 }) {
+  const demo = useDemo();
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [page, setPage] = useState<MailboxViewPage | null>(null);
   const [offset, setOffset] = useState(0);
@@ -149,13 +151,18 @@ export function Mailbox({
     <section className="status-card mailbox" aria-labelledby="sync-heading">
       <div className="mailbox-header">
         <div>
-          <p className="eyebrow">CACHED GMAIL</p>
+          <p className="eyebrow">
+            {demo ? "SYNTHETIC SAMPLES" : "CACHED GMAIL"}
+          </p>
           <h2 id="sync-heading">Your Emails</h2>
         </div>
         <div className="account-actions sync-actions">
           <button
             disabled={
-              starting || progress?.state === "running" || !page?.accountId
+              demo ||
+              starting ||
+              progress?.state === "running" ||
+              !page?.accountId
             }
             onClick={() => {
               void start();
@@ -163,7 +170,9 @@ export function Mailbox({
           >
             {starting || progress?.state === "running"
               ? "Syncing Gmail…"
-              : "Sync Gmail"}
+              : demo
+                ? "Offline demo"
+                : "Sync Gmail"}
           </button>
           {progress?.state === "running" && (
             <button
